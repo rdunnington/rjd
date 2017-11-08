@@ -1,7 +1,8 @@
 #pragma once
 
-#include <stddef.h>
-#include <stdlib.h>
+// DEPENDENCIES: 
+// stdlib.h (malloc/free)
+// rjd_debug.h
 
 // TODO realloc
 typedef void* (*rjd_func_alloc)(size_t size);
@@ -36,10 +37,15 @@ void* rjd_malloc(size_t size, struct rjd_alloc_context* context);
 void rjd_free(void* mem, struct rjd_alloc_context* context);
 
 struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size);
+
 void* rjd_linearheap_malloc(size_t size, void* heap);
 void rjd_free_scoped_noop(void* mem, void* heap);
 
-#ifdef RJD_DEFINE
+#if RJD_ENABLE_SHORTNAMES
+	// ????
+#endif
+
+#ifdef RJD_IMPL
 
 struct rjd_alloc_context rjd_alloc_initglobal(rjd_func_alloc a, rjd_func_free f)
 {
@@ -58,6 +64,11 @@ struct rjd_alloc_context rjd_alloc_initscoped(rjd_func_alloc_scoped a, rjd_func_
 	context.scope = heap;
 
 	return context;
+}
+
+struct rjd_alloc_context rjd_alloc_initdefault()
+{
+	return rjd_alloc_initglobal(malloc, free);
 }
 
 struct rjd_alloc_context rjd_alloc_initlinearheap(size_t heapsize)
@@ -114,8 +125,9 @@ void* rjd_linearheap_malloc(size_t size, void* userheap)
 
 void rjd_free_scoped_noop(void* mem, void* heap)
 {
-	// noop
+	RJD_UNUSED_PARAM(mem);
+	RJD_UNUSED_PARAM(heap);
 }
 
-#endif
+#endif // RJD_IMPL
 
