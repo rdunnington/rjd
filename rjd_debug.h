@@ -30,7 +30,7 @@ struct rjd_logchannel
 #endif
 
 #if RJD_ENABLE_ASSERT
-	#define RJD_FORCECRASH() ((*(int*)0) = 0xDEADDEAD)
+	#define RJD_FORCECRASH() ((*(volatile int*)0) = 0xDEADDEAD)
 	#define RJD_ASSERT(condition) RJD_ASSERTMSG(condition, #condition)
 	#define RJD_ASSERTMSG(condition, ...) if (!(condition)) { RJD_LOG(__VA_ARGS__); RJD_FORCECRASH(); }
 	#define RJD_ASSERTFAIL(...) { RJD_LOG(__VA_ARGS__); RJD_FORCECRASH(); }

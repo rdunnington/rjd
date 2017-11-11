@@ -119,7 +119,7 @@ static void* rjd_linearheap_malloc(size_t size, void* userheap)
 {
 	size_t align_diff = size % 8;
 	if (align_diff != 0) {
-		size =+ align_diff;
+		size += align_diff;
 	}
 
 	struct rjd_linearheap* heap = (struct rjd_linearheap*)userheap;
