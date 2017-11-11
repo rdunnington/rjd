@@ -48,7 +48,7 @@ void* rjd_array_grow_impl(void* buffer, size_t sizeofType);
 void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_alloc_context* context, size_t sizeofType)
 {
 	size_t rawsize = sizeof(struct rjd_alloc_context) + (sizeof(uint32_t) * 2) + (sizeofType * capacity);
-	char* raw = (char*)rjd_malloc(rawsize, context);
+	char* raw = (char*)rjd_malloc_impl(rawsize, context);
 
 	struct rjd_alloc_context** contextCache = (struct rjd_alloc_context**)raw;
 	*contextCache = context;

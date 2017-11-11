@@ -43,6 +43,9 @@ struct rjd_logchannel
 
 #define RJD_UNUSED_PARAM(param) ((void)param)
 
+void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* channel, enum rjd_log_verbosity verbosity, const char* format, ...);
+void rjd_log_resetglobal();
+
 #if RJD_ENABLE_SHORTNAMES
 	#define ASSERT RJD_ASSERT
 	#define ASSERTMSG RJD_ASSERTMSG
@@ -50,12 +53,10 @@ struct rjd_logchannel
 
 	#define LOG_CHANNEL RJD_LOG_CHANNEL
 	#define LOG RJD_LOG
+	#define log_resetglobal rjd_log_resetglobal
 
 	#define UNUSED_PARAM RJD_UNUSED_PARAM
 #endif
-
-void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* channel, enum rjd_log_verbosity verbosity, const char* format, ...);
-void rjd_log_resetglobal();
 
 extern const struct rjd_logchannel* g_rjd_global_logchannel;
 

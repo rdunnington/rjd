@@ -28,24 +28,32 @@ struct rjd_linearheap
 	size_t size;
 };
 
+struct rjd_alloc_context rjd_alloc_initdefault();
 struct rjd_alloc_context rjd_alloc_initglobal(rjd_func_alloc a, rjd_func_free f);
 struct rjd_alloc_context rjd_alloc_initscoped(rjd_func_alloc_scoped a, rjd_func_free_scoped f, void* allocator);
-struct rjd_alloc_context rjd_alloc_initdefault();
-struct rjd_alloc_context rjd_alloc_initlinearheap(size_t heapsize);
-
-void* rjd_malloc(size_t size, struct rjd_alloc_context* context);
+struct rjd_alloc_context rjd_alloc_initlinearheap(void* mem, size_t heapsize);
+void* rjd_malloc_impl(size_t size, struct rjd_alloc_context* context);
 void rjd_free(void* mem, struct rjd_alloc_context* context);
 
-struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size);
-
-void* rjd_linearheap_malloc(size_t size, void* heap);
-void rjd_free_scoped_noop(void* mem, void* heap);
+#define rjd_malloc(type, context) ((type*)rjd_malloc_impl(sizeof(type), context))
+#define rjd_malloc_array(type, count, context) ((type*)rjd_malloc_impl(sizeof(type) * count, context))
 
 #if RJD_ENABLE_SHORTNAMES
-	// ????
+	#define alloc_initdefault    rjd_alloc_initdefault
+	#define alloc_initglobal     rjd_alloc_initglobal
+	#define alloc_initscoped     rjd_alloc_initscoped
+	#define alloc_initlinearheap rjd_alloc_initlinearheap
+	#define rmalloc rjd_malloc_impl
+	#define rmalloc_array rjd_malloc_array
+	#define rfree rjd_free
 #endif
 
 #ifdef RJD_IMPL
+
+// detail functions
+static struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size);
+static void* rjd_linearheap_malloc(size_t size, void* heap);
+static void rjd_free_scoped_noop(void* mem, void* heap);
 
 struct rjd_alloc_context rjd_alloc_initglobal(rjd_func_alloc a, rjd_func_free f)
 {
@@ -71,18 +79,17 @@ struct rjd_alloc_context rjd_alloc_initdefault()
 	return rjd_alloc_initglobal(malloc, free);
 }
 
-struct rjd_alloc_context rjd_alloc_initlinearheap(size_t heapsize)
+struct rjd_alloc_context rjd_alloc_initlinearheap(void* mem, size_t heapsize)
 {
-	void* mem = malloc(heapsize);
-
+	char* bytes = (char*)mem;
 	const size_t structsize = sizeof(struct rjd_linearheap);
-	struct rjd_linearheap* heap = (struct rjd_linearheap*)mem + heapsize - structsize;
+	struct rjd_linearheap* heap = (struct rjd_linearheap*)bytes + heapsize - structsize;
 	*heap = rjd_linearheap_init(mem, heapsize - structsize);
 
 	return rjd_alloc_initscoped(rjd_linearheap_malloc, rjd_free_scoped_noop, heap);
 }
 
-void* rjd_malloc(size_t size, struct rjd_alloc_context* context)
+void* rjd_malloc_impl(size_t size, struct rjd_alloc_context* context)
 {
 	if (context->alloc_global) {
 		return context->alloc_global(size);
@@ -99,7 +106,7 @@ void rjd_free(void* mem, struct rjd_alloc_context* context)
 	}
 }
 
-struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size)
+static struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size)
 {
 	struct rjd_linearheap heap = {0};
 	heap.base = mem;
@@ -108,8 +115,13 @@ struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size)
 	return heap;
 }
 
-void* rjd_linearheap_malloc(size_t size, void* userheap)
+static void* rjd_linearheap_malloc(size_t size, void* userheap)
 {
+	size_t align_diff = size % 8;
+	if (align_diff != 0) {
+		size =+ align_diff;
+	}
+
 	struct rjd_linearheap* heap = (struct rjd_linearheap*)userheap;
 	
 	if ((char*)heap->next + size <= (char*)heap->base + heap->size) 
@@ -123,7 +135,7 @@ void* rjd_linearheap_malloc(size_t size, void* userheap)
 	return NULL;
 }
 
-void rjd_free_scoped_noop(void* mem, void* heap)
+static void rjd_free_scoped_noop(void* mem, void* heap)
 {
 	RJD_UNUSED_PARAM(mem);
 	RJD_UNUSED_PARAM(heap);

@@ -96,12 +96,21 @@ void test_logging()
 
 void test_alloc()
 {
-	// 
+	// default allocator
+	{
+		//struct rjd_alloc_context ctx = alloc_initdefault();
+		//char* p1 = (char*)rmalloc(
+	}
+
+	// linear allocator
+	{
+		//char stackmem[1024 * 1024];
+	}
 }
 
 void test_array()
 {
-//	char* stackmem[1024 * 128];
+//	char stackmem[1024 * 128];
 //	memHeap heap = memInitHeap(stackmem, sizeof(stackmem));
 //
 //	int32* a = rjd_alloc(int32, 8, &heap);
