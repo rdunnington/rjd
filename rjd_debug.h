@@ -8,8 +8,8 @@
 
 enum rjd_log_verbosity
 {
-	RJD_LOG_VERBOSITY_DEFAULT,
 	RJD_LOG_VERBOSITY_LOW,
+	RJD_LOG_VERBOSITY_MED,
 	RJD_LOG_VERBOSITY_HIGH,
 };
 
@@ -22,23 +22,23 @@ struct rjd_logchannel
 };
 
 #if RJD_ENABLE_LOGGING
-	#define RJD_LOG_CHANNEL(channel, verbosity, msg, ...) rjd_log_impl(__FILE__, __LINE__, channel, verbosity, msg, __VA_ARGS__)
-	#define RJD_LOG(msg, ...) RJD_LOG_CHANNEL(&rjd_global_logchannel, RJD_LOG_VERBOSITY_DEFAULT, msg, __VA_ARGS__)
+	#define RJD_LOG_CHANNEL(channel, verbosity, ...) rjd_log_impl(__FILE__, __LINE__, channel, verbosity, __VA_ARGS__)
+	#define RJD_LOG(...) RJD_LOG_CHANNEL(g_rjd_global_logchannel, RJD_LOG_VERBOSITY_MED, __VA_ARGS__)
 #else
-	#define RJD_LOG_CHANNEL(channel, msg, ...)
-	#define RJD_LOG(msg, ...)
+	#define RJD_LOG_CHANNEL(channel, ...)
+	#define RJD_LOG(...)
 #endif
 
 #if RJD_ENABLE_ASSERT
 	#define RJD_FORCECRASH() ((*(int*)0) = 0xDEADDEAD)
 	#define RJD_ASSERT(condition) RJD_ASSERTMSG(condition, #condition)
-	#define RJD_ASSERTMSG(condition, msg, ...) if (!(condition)) { RJD_LOG(msg, __VA_ARGS__); RJD_FORCECRASH(); }
-	#define RJD_ASSERTFAIL(msg, ...) RJD_ASSERTMSG(false, msg, __VA_ARGS__)
+	#define RJD_ASSERTMSG(condition, ...) if (!(condition)) { RJD_LOG(__VA_ARGS__); RJD_FORCECRASH(); }
+	#define RJD_ASSERTFAIL(...) { RJD_LOG(__VA_ARGS__); RJD_FORCECRASH(); }
 #else
 	#define RJD_FORCECRASH() ((*(int*)0) = 0xDEADDEAD)
-	#define RJD_ASSERT(condition, msg, ...) 
-	#define RJD_ASSERTMSG(condition, msg, ...) 
-	#define RJD_ASSERTFAIL(msg, ...)
+	#define RJD_ASSERT(condition, ...) 
+	#define RJD_ASSERTMSG(condition, ...) 
+	#define RJD_ASSERTFAIL(...)
 #endif
 
 #define RJD_UNUSED_PARAM(param) ((void)param)
@@ -54,7 +54,7 @@ struct rjd_logchannel
 	#define UNUSED_PARAM RJD_UNUSED_PARAM
 #endif
 
-void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* channel, const char* format, ...);
+void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* channel, enum rjd_log_verbosity verbosity, const char* format, ...);
 void rjd_log_resetglobal();
 
 extern const struct rjd_logchannel* g_rjd_global_logchannel;
@@ -62,15 +62,19 @@ extern const struct rjd_logchannel* g_rjd_global_logchannel;
 #ifdef RJD_IMPL
 
 const struct rjd_logchannel rjd_global_logchannel = {
-	.verbosity = RJD_LOG_VERBOSITY_DEFAULT,
+	.verbosity = RJD_LOG_VERBOSITY_MED,
 	.enabled = true,
 	.name = "Default Global",
 };
 const struct rjd_logchannel* g_rjd_global_logchannel = &rjd_global_logchannel;
 
-void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* channel, const char* format, ...)
+void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* channel, enum rjd_log_verbosity verbosity, const char* format, ...)
 {
 	if (!channel || !channel->enabled) {
+		return;
+	}
+
+	if (verbosity > channel->verbosity) {
 		return;
 	}
 
@@ -101,12 +105,12 @@ void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* 
 
 	const int size = sprintf(formatted, formattedLog, file, line, rawMessage);
 
-	//OutputDebugString(formatted);
-	fwrite(formatted, 1, size, stdout);
-	fflush(stdout);
-
 	if (channel->hook) {
 		channel->hook(formatted, size);
+	} else {
+		//OutputDebugString(formatted);
+		fwrite(formatted, 1, size, stdout);
+		fflush(stdout);
 	}
 }
 
