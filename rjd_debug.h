@@ -1,5 +1,7 @@
 #pragma once
 
+#define RJD_DEBUG 1
+
 // DEPENDENCIES:
 // stdio.h
 // stdbool.h

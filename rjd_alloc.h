@@ -1,5 +1,7 @@
 #pragma once
 
+#define RJD_ALLOC 1
+
 // DEPENDENCIES: 
 // stdlib.h (malloc/free)
 // rjd_debug.h
