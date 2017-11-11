@@ -8,10 +8,27 @@
 ////////////////////////////////////////////////////////////////////////////////
 // expect utils
 
+#define expect_true(condition) if (!(condition)) { printf("Expected \"%s\" to be true, but got false\n", #condition); }
+#define expect_false(condition) if (condition) { printf("Expected \"%s\" to be false, but got true\n", #condition); }
+
 void expect_str(const char* expected, const char* actual)
 {
 	if (expected != actual && strcmp(expected, actual)) {
 		printf("Expected:\n%s\nbut got:\n%s\n", expected, actual);
+	}
+}
+
+void expect_int32(int32_t expected, int32_t actual)
+{
+	if (expected != actual) {
+		printf("Expected: %d, but got: %d\n", expected, actual);
+	}
+}
+
+void expect_uint32(uint32_t expected, uint32_t actual)
+{
+	if (expected != actual) {
+		printf("Expected: %u, but got: %u\n", expected, actual);
 	}
 }
 
@@ -74,19 +91,19 @@ void test_logging()
 	};
 
 	LOG_CHANNEL(&local2, RJD_LOG_VERBOSITY_MED, "other channel");
-
+	
 	// expect equals
 	const char* expected = 
-		"tests.c(41): test\n"
-		"tests.c(42): \n"
-		"tests.c(43): forma11ed!\n"
-		"tests.c(52): ok1\n"
-		"tests.c(57): ok2\n"
-		"tests.c(58): ok2\n"
-		"tests.c(62): ok3\n"
-		"tests.c(63): ok3\n"
-		"tests.c(64): ok3\n"
-		"tests.c(76): other channel\n";
+		"tests.c(58): test\n"
+		"tests.c(59): \n"
+		"tests.c(60): forma11ed!\n"
+		"tests.c(69): ok1\n"
+		"tests.c(74): ok2\n"
+		"tests.c(75): ok2\n"
+		"tests.c(79): ok3\n"
+		"tests.c(80): ok3\n"
+		"tests.c(81): ok3\n"
+		"tests.c(93): other channel\n";
 
 	expect_str(expected, logbuffer);
 	
@@ -98,8 +115,22 @@ void test_alloc()
 {
 	// default allocator
 	{
-		//struct rjd_alloc_context ctx = alloc_initdefault();
-		//char* p1 = (char*)rmalloc(
+		struct rjd_alloc_context ctx = alloc_initdefault();
+		int32_t* v = rmalloc(int32_t, &ctx);
+		*v = 1337;
+		expect_int32(1337, *v);
+
+		char* p1 = rmalloc_array(char, 128, &ctx);
+		strncpy(p1, "thequickbrownfoxjumpedoverthesuperdeduperlazydog!", 128);
+		p1[127] = 0;
+
+		char* p2 = rmalloc_array(char, 64, &ctx);
+		strncpy(p2, "this fox wasn't as quick as the last one", 64);
+		p2[63] = 0;
+
+		rfree(v, &ctx);
+		rfree(p1, &ctx);
+		rfree(p2, &ctx);
 	}
 
 	// linear allocator
@@ -110,28 +141,104 @@ void test_alloc()
 
 void test_array()
 {
-//	char stackmem[1024 * 128];
-//	memHeap heap = memInitHeap(stackmem, sizeof(stackmem));
-//
-//	int32* a = rjd_alloc(int32, 8, &heap);
-//	rjd_assert(rjd_capacity(a) == 8);
-//	rjd_assert(rjd_array_count(a) == 0);
-//
-//	for (int32 i = 0; i < 8; ++i)
-//	{
-//		rjd_push(a, i);
-//		rjd_assert(a[i] == i);
-//		rjd_assert(rjd_array_count(a) == (uint32)i + 1);
-//	}
-//
-//	for (int32 i = 0; rjd_array_count(a) > 0; ++i)
-//	{
-//		rjd_erase(a, 0);
-//		if (rjd_array_count(a) > 0)
-//		{
-//			rjd_assert(a[0] == i + 1);
-//		}
-//	}
+	struct rjd_alloc_context context = alloc_initdefault();
+
+	// general functionality
+	{
+		struct test {
+			int a;
+			int b;
+			int c;
+			int d;
+		};
+		struct test* a = arr_alloc(struct test, 32, &context);
+		expect_uint32(arr_count(a), 0);
+		expect_uint32(arr_capacity(a), 32);
+		expect_true(arr_empty(a));
+		expect_false(arr_full(a));
+
+		arr_resize(a, 16);
+		expect_uint32(16, arr_count(a));
+		expect_uint32(32, arr_capacity(a));
+
+		arr_resize(a, 50);
+		expect_uint32(50, arr_count(a));
+		expect_uint32(50, arr_capacity(a));
+
+		for (size_t i = 0; i < arr_count(a); ++i) {
+			struct test v = { i };
+			a[0] = v;
+		}
+		expect_false(arr_empty(a));
+		expect_true(arr_full(a));
+
+		arr_erase(a, 0);
+		expect_int32(1, a[0].a);
+		arr_erase(a, 1);
+		expect_int32(3, a[1].a);
+
+		expect_false(arr_empty(a));
+		expect_false(arr_full(a));
+
+		struct test end = arr_pop(a);
+		expect_int32(50, end.a);
+
+		arr_resize(a, 0);
+		expect_true(arr_empty(a));
+		expect_uint32(0, arr_count(a));
+		expect_uint32(50, arr_capacity(a));
+
+		arr_push(a, end);
+		expect_int32(end.a, a[0].a);
+
+		arr_free(a);
+	}
+
+	// first/last
+	{
+		int32_t* a = arr_alloc(int32_t, 16, &context);
+		for (size_t i = 0; i < arr_capacity(a); ++i) {
+			arr_push(a, arr_capacity(a) - i + 50);
+		}
+
+		int32_t* b = arr_alloc(int32_t, 16, &context);
+
+		int32_t first = arr_first(b, 1337);
+		expect_int32(1337, first);
+		first = arr_first(a, 0);
+		expect_int32(16 + 50, first);
+
+		int32_t last = arr_last(b, 1337);
+		expect_int32(1337, last);
+		last = arr_last(a, 0);
+		expect_int32(50, last);
+
+		arr_free(a);
+		arr_free(b);
+	}
+
+	// functional-style tests
+	{
+		int32_t* b = arr_alloc(int32_t, 16, &context);
+		for (size_t i = 0; i < 16; ++i) {
+			arr_push(b, i);
+		}
+
+		#define testfilter(element) (element < 8)
+		arr_filter(b, testfilter);
+		expect_uint32(8, arr_count(b));
+
+		#define testsum(acc, element) (acc + element)
+		int32_t sum1 = 0;
+		arr_reduce(b, sum1, testsum);
+		expect_int32(1 + 2 + 3 + 4 + 5 + 6 + 7, sum1);
+
+		int32_t sum2 = 0;
+		arr_sum(b, sum2);
+		expect_int32(sum1, sum2);
+
+		arr_free(b);
+	}
 }
 
 int main(void) 
