@@ -8,8 +8,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 // expect utils
 
-#define expect_true(condition) if (!(condition)) { printf("Expected \"%s\" to be true, but got false\n", #condition); }
-#define expect_false(condition) if (condition) { printf("Expected \"%s\" to be false, but got true\n", #condition); }
+#define expect_true(condition) if (!(condition)) { ASSERTFAIL("Expected \"%s\" to be true, but got false\n", #condition); }
+#define expect_false(condition) if (condition) { ASSERTFAIL("Expected \"%s\" to be false, but got true\n", #condition); }
 
 void expect_str(const char* expected, const char* actual)
 {
@@ -21,14 +21,14 @@ void expect_str(const char* expected, const char* actual)
 void expect_int32(int32_t expected, int32_t actual)
 {
 	if (expected != actual) {
-		printf("Expected: %d, but got: %d\n", expected, actual);
+		ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
 	}
 }
 
 void expect_uint32(uint32_t expected, uint32_t actual)
 {
 	if (expected != actual) {
-		printf("Expected: %u, but got: %u\n", expected, actual);
+		ASSERTFAIL("Expected: %u, but got: %u\n", expected, actual);
 	}
 }
 
@@ -166,8 +166,8 @@ void test_array()
 		expect_uint32(50, arr_capacity(a));
 
 		for (size_t i = 0; i < arr_count(a); ++i) {
-			struct test v = { i };
-			a[0] = v;
+			struct test v = { (int)i };
+			a[i] = v;
 		}
 		expect_false(arr_empty(a));
 		expect_true(arr_full(a));
@@ -181,7 +181,7 @@ void test_array()
 		expect_false(arr_full(a));
 
 		struct test end = arr_pop(a);
-		expect_int32(50, end.a);
+		expect_int32(49, end.a);
 
 		arr_resize(a, 0);
 		expect_true(arr_empty(a));
@@ -190,6 +190,10 @@ void test_array()
 
 		arr_push(a, end);
 		expect_int32(end.a, a[0].a);
+		
+		arr_clear(a);
+		expect_int32(0, arr_count(a));
+		expect_int32(50, arr_capacity(a));
 
 		arr_free(a);
 	}
@@ -197,8 +201,8 @@ void test_array()
 	// first/last
 	{
 		int32_t* a = arr_alloc(int32_t, 16, &context);
-		for (size_t i = 0; i < arr_capacity(a); ++i) {
-			arr_push(a, arr_capacity(a) - i + 50);
+		for (int32_t i = 0; i < (int32_t)arr_capacity(a); ++i) {
+			arr_push(a, 0xD00D + i);
 		}
 
 		int32_t* b = arr_alloc(int32_t, 16, &context);
@@ -206,12 +210,12 @@ void test_array()
 		int32_t first = arr_first(b, 1337);
 		expect_int32(1337, first);
 		first = arr_first(a, 0);
-		expect_int32(16 + 50, first);
+		expect_int32(0xD00D + 0, first);
 
 		int32_t last = arr_last(b, 1337);
 		expect_int32(1337, last);
 		last = arr_last(a, 0);
-		expect_int32(50, last);
+		expect_int32(0xD00D + 15, last);
 
 		arr_free(a);
 		arr_free(b);
@@ -220,7 +224,7 @@ void test_array()
 	// functional-style tests
 	{
 		int32_t* b = arr_alloc(int32_t, 16, &context);
-		for (size_t i = 0; i < 16; ++i) {
+		for (int32_t i = 0; i < 16; ++i) {
 			arr_push(b, i);
 		}
 

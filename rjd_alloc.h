@@ -30,7 +30,7 @@ struct rjd_linearheap
 	size_t size;
 };
 
-struct rjd_alloc_context rjd_alloc_initdefault();
+struct rjd_alloc_context rjd_alloc_initdefault(void);
 struct rjd_alloc_context rjd_alloc_initglobal(rjd_func_alloc a, rjd_func_free f);
 struct rjd_alloc_context rjd_alloc_initscoped(rjd_func_alloc_scoped a, rjd_func_free_scoped f, void* allocator);
 struct rjd_alloc_context rjd_alloc_initlinearheap(void* mem, size_t heapsize);
