@@ -45,7 +45,7 @@ void rjd_free(void* mem, struct rjd_alloc_context* context);
 	#define alloc_initglobal     rjd_alloc_initglobal
 	#define alloc_initscoped     rjd_alloc_initscoped
 	#define alloc_initlinearheap rjd_alloc_initlinearheap
-	#define rmalloc rjd_malloc_impl
+	#define rmalloc rjd_malloc
 	#define rmalloc_array rjd_malloc_array
 	#define rfree rjd_free
 #endif
