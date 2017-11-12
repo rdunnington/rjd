@@ -31,6 +31,8 @@ struct rjd_logchannel
 	#define RJD_LOG(...)
 #endif
 
+#define RJD_STATIC_ASSERT(condition) { enum { unused = 1 / ((int)(!!(condition))), }; }
+
 #if RJD_ENABLE_ASSERT
 	#define RJD_FORCECRASH() ((*(volatile int*)0) = 0xDEADDEAD)
 	#define RJD_ASSERT(condition) RJD_ASSERTMSG(condition, #condition)
@@ -49,6 +51,7 @@ void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* 
 void rjd_log_resetglobal(void);
 
 #if RJD_ENABLE_SHORTNAMES
+	#define STATIC_ASSERT RJD_STATIC_ASSERT
 	#define ASSERT RJD_ASSERT
 	#define ASSERTMSG RJD_ASSERTMSG
 	#define ASSERTFAIL RJD_ASSERTFAIL
