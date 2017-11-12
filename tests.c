@@ -34,6 +34,14 @@ void expect_uint32(uint32_t expected, uint32_t actual)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+RJD_STATIC_ASSERT(true);
+RJD_STATIC_ASSERT(1 == 1);
+RJD_STATIC_ASSERT(sizeof(uint32_t) == sizeof(char) * 4);
+
+////////////////////////////////////////////////////////////////////////////////
+
+const char* test = __FILE__;
+
 char logbuffer[1024 * 128];
 size_t logbuffer_pos = 0;
 void test_log_hook(const char* msg, size_t length)
@@ -94,16 +102,16 @@ void test_logging()
 	
 	// expect equals
 	const char* expected = 
-		"tests.c(58): test\n"
-		"tests.c(59): \n"
-		"tests.c(60): forma11ed!\n"
-		"tests.c(69): ok1\n"
-		"tests.c(74): ok2\n"
-		"tests.c(75): ok2\n"
-		"tests.c(79): ok3\n"
-		"tests.c(80): ok3\n"
-		"tests.c(81): ok3\n"
-		"tests.c(93): other channel\n";
+		"tests.c(66): test\n"
+		"tests.c(67): \n"
+		"tests.c(68): forma11ed!\n"
+		"tests.c(77): ok1\n"
+		"tests.c(82): ok2\n"
+		"tests.c(83): ok2\n"
+		"tests.c(87): ok3\n"
+		"tests.c(88): ok3\n"
+		"tests.c(89): ok3\n"
+		"tests.c(101): other channel\n";
 
 	expect_str(expected, logbuffer);
 	

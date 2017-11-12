@@ -31,7 +31,9 @@ struct rjd_logchannel
 	#define RJD_LOG(...)
 #endif
 
-#define RJD_STATIC_ASSERT(condition) { enum { unused = 1 / ((int)(!!(condition))), }; }
+#define RJD_NAMEGEN2(a, b) a##b
+#define RJD_NAMEGEN(a, b) RJD_NAMEGEN2(a, b)
+#define RJD_STATIC_ASSERT(condition) typedef char RJD_NAMEGEN(rjd_staticassert_failure_, __COUNTER__)[(condition) ? 1 : -1]
 
 #if RJD_ENABLE_ASSERT
 	#define RJD_FORCECRASH() ((*(volatile int*)0) = 0xDEADDEAD)
