@@ -26,6 +26,8 @@ struct rjd_alloc_context;
 
 #define rjd_array_first(buf, _default)		(((buf) && rjd_array_count(buf) > 0) ? ((buf)[0]) : (_default))
 #define rjd_array_last(buf, _default)		(((buf) && rjd_array_count(buf) > 0) ? ((buf)[rjd_array_count(buf) - 1]) : (_default))
+#define rjd_array_contains(buf, value)		rjd_array_contains_impl((buf), &(value), sizeof(*buf))
+//#define rjd_array_contains(buf, value)		RJD_STATIC_ASSERT(sizeof(*buf) == sizeof(value)), rjd_array_contains_impl((buf), &(value), sizeof(*buf))
 #define rjd_array_filter(buf, pred)			for(int _i = (int)rjd_array_count(buf) - 1; _i >= 0; --_i) { if (!(pred((buf)[_i]))) { rjd_array_erase((buf), _i); } }
 #define rjd_array_map(in, out, pred)		rjd_array_resize((out), rjd_array_count(buf)), for (size_t _i = 0; _i < rjd_array_count(buf); ++_i) { out[_i] = pred(in[_i]); }
 #define rjd_array_reduce(buf, acc, pred)	for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = pred(acc, ((buf)[_i])); }
@@ -52,6 +54,7 @@ struct rjd_alloc_context;
 
 	#define arr_first				rjd_array_first
 	#define arr_last				rjd_array_last
+	#define arr_contains			rjd_array_contains
 	#define arr_filter				rjd_array_filter
 	#define arr_map					rjd_array_map
 	#define	arr_reduce				rjd_array_reduce
@@ -66,6 +69,7 @@ void* rjd_array_resize_impl(void* buffer, uint32_t newsize, size_t sizeofType);
 void rjd_array_erase_impl(void* buffer, uint32_t index, size_t sizeofType);
 void rjd_array_erase_unordered_impl(void* buffer, uint32_t index, size_t sizeofType);
 void* rjd_array_grow_impl(void* buffer, size_t sizeofType);
+bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeofType);
 
 #if RJD_IMPL
 
@@ -202,6 +206,17 @@ void* rjd_array_grow_impl(void* buffer, size_t sizeofType) {
 
 	*rjd_array_count_impl(buffer) += 1;
 	return buffer;
+}
+
+bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeofType)
+{
+	char* raw = (char*)buffer;
+	for (uint32_t i = 0; i < rjd_array_count(buffer); ++i) {
+		if (!memcmp(raw + i * sizeofType, value, sizeofType)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 #endif //RJD_IMPL

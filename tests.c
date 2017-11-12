@@ -241,6 +241,14 @@ void test_array()
 		arr_sum(b, sum2);
 		expect_int32(sum1, sum2);
 
+		int32_t two = 2;
+		bool has2 = arr_contains(b, two);
+		expect_true(has2);
+
+		int32_t ten = 10;
+		bool has10 = arr_contains(b, ten);
+		expect_false(has10);
+
 		arr_free(b);
 	}
 }
