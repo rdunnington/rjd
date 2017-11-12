@@ -261,11 +261,24 @@ void test_array()
 	}
 }
 
+void test_profiler(void)
+{
+	PROFILE_SCOPE(Test1, {
+		double d = 1;
+		for (size_t i = 0; i < 1000; ++i) {
+			d += d;
+		}
+		printf("d: %f\n", d);
+		expect_true(d > 0);
+	});
+}
+
 int main(void) 
 {
 	test_logging();
 	test_alloc();
 	test_array();
+	test_profiler();
 
 	return 0;
 }
