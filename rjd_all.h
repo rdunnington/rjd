@@ -12,4 +12,4 @@
 #include "rjd_alloc.h"
 #include "rjd_array.h"
 #include "rjd_profiler.h"
-
+#include "rjd_cmd.h"

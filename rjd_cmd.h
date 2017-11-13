@@ -27,15 +27,15 @@ struct rjd_cmd
 	struct rjd_alloc_context* allocator;
 };
 
-struct rjd_cmd rjd_cmd_init(struct rjd_alloc_context* allocator);
+struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_alloc_context* allocator);
+void rjd_cmd_free(struct rjd_cmd* cmd);
 void rjd_cmd_add_opt(struct rjd_cmd* cmd, const char* shortname, const char* longname, const char* argname, const char* description);
 void rjd_cmd_add_req(struct rjd_cmd* cmd, const char* argname, const char* description);
 bool rjd_cmd_ok(const struct rjd_cmd* cmd);
-void rjd_cmd_print(const struct rjd_cmd* cmd);
+void rjd_cmd_usage(const struct rjd_cmd* cmd);
 void rjd_cmd_help(const struct rjd_cmd* cmd);
 
 int rjd_cmd_int(const struct rjd_cmd* cmd, const char* shortname);
-unsigned rjd_cmd_uint(const struct rjd_cmd* cmd, const char* shortname);
 double rjd_cmd_float(const struct rjd_cmd* cmd, const char* shortname);
 bool rjd_cmd_bool(const struct rjd_cmd* cmd, const char* shortname);
 const char* rjd_cmd_str(const struct rjd_cmd* cmd, const char* shortname);
@@ -45,11 +45,10 @@ const char* rjd_cmd_str(const struct rjd_cmd* cmd, const char* shortname);
 	#define cmd_add_opt rjd_cmd_add_opt
 	#define cmd_add_req rjd_cmd_add_req
 	#define cmd_ok	rjd_cmd_optsok
-	#define cmd_print rjd_cmd_print
+	#define cmd_usage rjd_cmd_usage
 	#define cmd_help rjd_cmd_help
 
 	#define cmd_int rjd_cmd_int
-	#define cmd_uint rjd_cmd_uint
 	#define cmd_float rjd_cmd_float
 	#define cmd_bool rjd_cmd_bool
 	#define cmd_str rjd_cmd_str
@@ -62,6 +61,12 @@ struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_alloc_contex
 	struct rjd_cmd cmd = {argc, argv, NULL, NULL, allocator};
 	rjd_cmd_add_opt(&cmd, "-h", "--help", NULL, "Prints help");
 	return cmd;
+}
+
+void rjd_cmd_free(struct rjd_cmd* cmd)
+{
+	rjd_array_free(cmd->opts);
+	rjd_array_free(cmd->reqs);
 }
 
 void rjd_cmd_add_opt(struct rjd_cmd* cmd, const char* shortname, const char* longname, const char* argname, const char* description)
@@ -88,8 +93,6 @@ void rjd_cmd_add_req(struct rjd_cmd* cmd, const char* argname, const char* descr
 bool rjd_cmd_ok(const struct rjd_cmd* cmd)
 {
 	RJD_ASSERT(cmd);
-
-	// return rjd_array_issubset(cmd->req, cmd->argv);
 
 	size_t count = rjd_array_count(cmd->req);
 	if (cmd->argc - 1 < count) {
@@ -129,7 +132,7 @@ bool rjd_cmd_ok(const struct rjd_cmd* cmd)
 	return true;
 }
 
-void rjd_cmd_print(const struct rjd_cmd* cmd)
+void rjd_cmd_usage(const struct rjd_cmd* cmd)
 {
 	// TODO rjd_stringbuilder
 
@@ -154,7 +157,7 @@ void rjd_cmd_print(const struct rjd_cmd* cmd)
 
 void rjd_cmd_help(const struct rjd_cmd* cmd) 
 {
-	rjd_cmd_print(cmd);
+	rjd_cmd_usage(cmd);
 
 	for (size_t i = 0; i < rjd_array_count(cmd->req); ++i) {
 		printf("required arg: %s\n", cmd->req[i].argname);
@@ -172,10 +175,7 @@ void rjd_cmd_help(const struct rjd_cmd* cmd)
 
 int rjd_cmd_int(const struct rjd_cmd* cmd, const char* name)
 {
-}
-
-unsigned rjd_cmd_uint(const struct rjd_cmd* cmd, const char* name)
-{
+	// assert if no requirement found by that argname AND no option with arg by that shortname
 }
 
 double rjd_cmd_float(const struct rjd_cmd* cmd, const char* name)

@@ -273,12 +273,63 @@ void test_profiler(void)
 	});
 }
 
+void test_cmd()
+{
+	struct rjd_alloc_context context = alloc_initdefault();
+	
+	struct rjd_cmd cmd = cmd_init(0, NULL, &context);
+
+	expect_true(cmd_ok(&cmd));
+
+	cmd_add_req(&cmd, "PATTERN", "The regex pattern to search for.");
+	cmd_add_req(&cmd, "FILE", "File in which to search for the pattern.");
+	cmd_add_opt(&cmd, "-c", "--color", NULL, "Enable colorized output");
+	cmd_add_opt(&cmd, "-w", "--wordsonly", NULL, "Force matching of whole words only.");
+	cmd_add_opt(&cmd, "-z", "--zfile", "ZFILE", "Metafile.");
+
+	expect_false(cmd_ok(&cmd));
+
+	const char* argv1[] = { "a.exe", "mypattern", "file.txt", NULL };
+	cmd.argc = 3;
+	cmd.argv = argv1;
+	expect_true(cmd_ok(&cmd));
+	expect_str("mypattern", cmd_str(&cmd, "PATTERN"));
+	expect_str("file.txt", cmd_str(&cmd, "file.txt"));
+
+	const char* argv2[] = { "a.exe", "-c", "-w", "mypattern", "file.txt", NULL };
+	cmd.argc = 5;
+	cmd.argv = argv2;
+	expect_true(cmd_ok(&cmd));
+	expect_true(cmd_bool(&cmd, "-c");
+	expect_true(cmd_bool(&cmd, "-w");
+	expect_false(cmd_bool(&cmd, "-z");
+
+	const char* argv3[] = { "a.exe", "-z", "meta.txt", "mypattern", "file.txt", NULL };
+	cmd.argc = 5;
+	cmd.argv = argv3;
+	expect_true(cmd_ok(&cmd));
+	expect_false(cmd_bool(&cmd, "-c");
+	expect_false(cmd_bool(&cmd, "-w");
+	expect_true(cmd_bool(&cmd, "-z");
+	expect_str("meta.txt", cmd_str(&cmd, "-z"));
+
+	const char* argv4[] = { "a.exe", "-z", "1337", "mypattern", "file.txt", NULL };
+	cmd.argc = 5;
+	cmd.argv = argv4;
+	expect_true(cmd_ok(&cmd));
+	expect_int32(1337, cmd_int(&cmd, "-z"));
+	expect_float(1337.0, cmd_int(&cmd, "-z"));
+
+	cmd_free(&cmd);
+}
+
 int main(void) 
 {
 	test_logging();
 	test_alloc();
 	test_array();
 	test_profiler();
+	test_cmd();
 
 	return 0;
 }
