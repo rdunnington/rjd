@@ -35,23 +35,26 @@ bool rjd_cmd_ok(const struct rjd_cmd* cmd);
 void rjd_cmd_usage(const struct rjd_cmd* cmd);
 void rjd_cmd_help(const struct rjd_cmd* cmd);
 
-int rjd_cmd_int(const struct rjd_cmd* cmd, const char* shortname);
-double rjd_cmd_float(const struct rjd_cmd* cmd, const char* shortname);
+int rjd_cmd_int(const struct rjd_cmd* cmd, const char* shortname, int _default);
+unsigned rjd_cmd_uint(const struct rjd_cmd* cmd, const char* shortname, unsigned _default);
+double rjd_cmd_float(const struct rjd_cmd* cmd, const char* shortname, double _default);
 bool rjd_cmd_bool(const struct rjd_cmd* cmd, const char* shortname);
 const char* rjd_cmd_str(const struct rjd_cmd* cmd, const char* shortname);
 
 #if RJD_ENABLE_SHORTNAMES
-	#define cmd_init rjd_cmd_init
-	#define cmd_add_opt rjd_cmd_add_opt
-	#define cmd_add_req rjd_cmd_add_req
-	#define cmd_ok	rjd_cmd_optsok
-	#define cmd_usage rjd_cmd_usage
-	#define cmd_help rjd_cmd_help
+	#define cmd_init	rjd_cmd_init
+	#define cmd_free	rjd_cmd_free
+	#define cmd_add_opt	rjd_cmd_add_opt
+	#define cmd_add_req	rjd_cmd_add_req
+	#define cmd_ok		rjd_cmd_ok
+	#define cmd_usage	rjd_cmd_usage
+	#define cmd_help	rjd_cmd_help
 
-	#define cmd_int rjd_cmd_int
-	#define cmd_float rjd_cmd_float
-	#define cmd_bool rjd_cmd_bool
-	#define cmd_str rjd_cmd_str
+	#define cmd_int		rjd_cmd_int
+	#define cmd_uint	rjd_cmd_uint
+	#define cmd_float	rjd_cmd_float
+	#define cmd_bool	rjd_cmd_bool
+	#define cmd_str		rjd_cmd_str
 #endif
 
 #if RJD_IMPL
@@ -90,24 +93,24 @@ void rjd_cmd_add_req(struct rjd_cmd* cmd, const char* argname, const char* descr
 	rjd_array_push(cmd->reqs, req);
 }
 
-static const rjd_cmd_opt* rjd_cmd_matchopt(const struct rjd_cmd* cmd, const char* argv);
+static const struct rjd_cmd_argv* rjd_cmd_matchopt(const struct rjd_cmd* cmd, const char* argv);
 static int rjd_cmd_lastopt(const struct rjd_cmd* cmd);
-static const rjd_cmd_argv* rjd_cmd_getopt(const struct rjd_cmd* cmd, const char* shortname);
-static const rjd_cmd_argv* rjd_cmd_findopt(const struct rjd_cmd* cmd, const char* shortname);
+static const struct rjd_cmd_argv* rjd_cmd_getopt(const struct rjd_cmd* cmd, const char* shortname);
+static const char* rjd_cmd_findopt(const struct rjd_cmd* cmd, const char* shortname);
 static const char* rjd_cmd_findreq(const struct rjd_cmd* cmd, const char* argname);
 
 bool rjd_cmd_ok(const struct rjd_cmd* cmd)
 {
 	RJD_ASSERT(cmd);
 
-	size_t count = rjd_array_count(cmd->reqs);
+	int count = rjd_array_count(cmd->reqs);
 	if (cmd->argc - 1 < count) {
 		return false;
 	}
 
 	const int lastopt = rjd_cmd_lastopt(cmd);
 
-	for (size_t i = 1; i < lastopt; ++i) {
+	for (int i = 1; i < lastopt; ++i) {
 		const struct rjd_cmd_argv* opt = rjd_cmd_matchopt(cmd, cmd->argv[i]);
 
 		if (!opt) {
@@ -117,7 +120,7 @@ bool rjd_cmd_ok(const struct rjd_cmd* cmd)
 		if (opt->argname) {
 			if (!strcmp(cmd->argv[i], opt->shortname)) {
 				// since we're expecting an argument, this shouldn't match any other options
-				if (rjd_cmd_matchopt(cmd->argv[i+1])) {
+				if (rjd_cmd_matchopt(cmd, cmd->argv[i+1])) {
 					return false;
 				}
 			} else {
@@ -134,7 +137,7 @@ bool rjd_cmd_ok(const struct rjd_cmd* cmd)
 		}
 	}
 	
-	return (cmd->argc - lastopt) == rjd_array_count(cmd->reqs);
+	return (cmd->argc - lastopt) == (int) rjd_array_count(cmd->reqs);
 }
 
 void rjd_cmd_usage(const struct rjd_cmd* cmd)
@@ -145,7 +148,7 @@ void rjd_cmd_usage(const struct rjd_cmd* cmd)
 
 	char optString[4096];
 	for (size_t i = 0; i < rjd_array_count(cmd->opts); ++i) {
-		offset += snprintf(optString + offset, sizeof(optString) - offset, cmd->opts[i].shortname);
+		offset += snprintf(optString + offset, sizeof(optString) - offset, "%s", cmd->opts[i].shortname);
 		offset += snprintf(optString + offset, sizeof(optString) - offset, " ");
 	}
 
@@ -153,7 +156,7 @@ void rjd_cmd_usage(const struct rjd_cmd* cmd)
 
 	char reqString[4096];
 	for (size_t i = 0; i < rjd_array_count(cmd->reqs); ++i) {
-		offset += snprintf(optString + offset, sizeof(optString) - offset, cmd->reqs[i].argname);
+		offset += snprintf(optString + offset, sizeof(optString) - offset, "%s", cmd->reqs[i].argname);
 		offset += snprintf(optString + offset, sizeof(optString) - offset, " ");
 	}
 
@@ -169,7 +172,7 @@ void rjd_cmd_help(const struct rjd_cmd* cmd)
 	}
 
 	for (size_t i = 0; i < rjd_array_count(cmd->opts); ++i) {
-		const struct rjd_cmd_argv* arg = cmd->opts[i];
+		const struct rjd_cmd_argv* arg = cmd->opts + i;
 		if (arg->argname) {
 			printf("optional arg: %s %s, %s=%s\n", arg->shortname, arg->argname, arg->longname, arg->argname);
 		} else {
@@ -183,6 +186,15 @@ int rjd_cmd_int(const struct rjd_cmd* cmd, const char* name, int _default)
 	return (int)rjd_cmd_float(cmd, name, _default);
 }
 
+unsigned rjd_cmd_uint(const struct rjd_cmd* cmd, const char* name, unsigned _default)
+{
+	double v = rjd_cmd_float(cmd, name, _default);
+	if (v < 0) {
+		return _default;
+	}
+	return (unsigned)v;
+}
+
 double rjd_cmd_float(const struct rjd_cmd* cmd, const char* name, double _default)
 {
 	const char* str = rjd_cmd_str(cmd, name);
@@ -190,7 +202,7 @@ double rjd_cmd_float(const struct rjd_cmd* cmd, const char* name, double _defaul
 		return _default;
 	}
 
-	const char* end = NULL;
+	char* end = NULL;
 	double v = strtod(str, &end);
 	if (v == 0 && end != NULL) {
 		return _default;
@@ -211,7 +223,7 @@ bool rjd_cmd_bool(const struct rjd_cmd* cmd, const char* name)
 		return false;
 	}
 
-	const rjd_cmd_argv* opt = rjd_cmd_getopt(name)
+	const struct rjd_cmd_argv* opt = rjd_cmd_getopt(cmd, name);
 	return opt && !strcmp(opt->shortname, name);
 }
 
@@ -230,27 +242,27 @@ const char* rjd_cmd_str(const struct rjd_cmd* cmd, const char* name)
 	return NULL;
 }
 
-static const rjd_cmd_opt* rjd_cmd_matchopt(const struct rjd_cmd* cmd, const char* argv)
+static const struct rjd_cmd_argv* rjd_cmd_matchopt(const struct rjd_cmd* cmd, const char* argv)
 {
-	for (int32_t i = 0; i < rjd_array_count(cmd->opts); ++i) {
+	for (uint32_t i = 0; i < rjd_array_count(cmd->opts); ++i) {
 		const char* shortname = cmd->opts[i].shortname;
 		const char* longname = cmd->opts[i].longname;
 		if (!strcmp(shortname, argv)) {
-			return true;
+			return cmd->opts + i;
 		}
 		if (strstr(argv, longname) == argv) {
-			return true;
+			return cmd->opts + i;
 		}
 	}
 
-	return false;
+	return NULL;
 }
 
 static int rjd_cmd_lastopt(const struct rjd_cmd* cmd)
 {
 	int last = 1;
 	for (int i = 1; i < cmd->argc; ++i) {
-		const rjd_cmd_argv* opt = rjd_cmd_matchopt(cmd, cmd->argv[i]);
+		const struct rjd_cmd_argv* opt = rjd_cmd_matchopt(cmd, cmd->argv[i]);
 		if (opt) {
 			// skip the argument (assuming the format is ok)
 			if (strcmp(cmd->argv[i], opt->shortname) && opt->argname) {
@@ -265,21 +277,21 @@ static int rjd_cmd_lastopt(const struct rjd_cmd* cmd)
 	return last;
 }
 
-static const rjd_cmd_argv* rjd_cmd_getopt(const struct rjd_cmd* cmd, const char* shortname)
+static const struct rjd_cmd_argv* rjd_cmd_getopt(const struct rjd_cmd* cmd, const char* shortname)
 {
-	for (int32_t i = 0; i < rjd_array_count(cmd->opts); ++i) {
-		if (!strcmp(cmd->opts[i], shortname)) {
+	for (uint32_t i = 0; i < rjd_array_count(cmd->opts); ++i) {
+		if (!strcmp(cmd->opts[i].shortname, shortname)) {
 			return cmd->opts + i;
 		}
 	}
 	return NULL;
 }
 
-static const rjd_cmd_argv* rjd_cmd_findopt(const struct rjd_cmd* cmd, const char* shortname)
+static const char* rjd_cmd_findopt(const struct rjd_cmd* cmd, const char* shortname)
 {
-	for (int32_t i = 0; i < cmd->argc; ++i) {
+	for (int i = 0; i < cmd->argc; ++i) {
 		const struct rjd_cmd_argv* opt = rjd_cmd_matchopt(cmd, cmd->argv[i]);
-		if (opt) {
+		if (opt && !strcmp(opt->shortname, shortname)) {
 			if (!opt->argname) {
 				return cmd->argv[i];
 			}
@@ -299,7 +311,7 @@ static const rjd_cmd_argv* rjd_cmd_findopt(const struct rjd_cmd* cmd, const char
 static const char* rjd_cmd_findreq(const struct rjd_cmd* cmd, const char* argname) 
 {
 	int reqindex = -1;
-	for (int i = 0; i < rjd_array_count(cmd->reqs); ++i) {
+	for (int i = 0; i < (int)rjd_array_count(cmd->reqs); ++i) {
 		if (!strcmp(cmd->reqs[i].argname, argname)) {
 			reqindex = i;
 			break;

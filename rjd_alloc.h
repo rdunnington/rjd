@@ -59,20 +59,13 @@ static void rjd_free_scoped_noop(void* mem, void* heap);
 
 struct rjd_alloc_context rjd_alloc_initglobal(rjd_func_alloc a, rjd_func_free f)
 {
-	struct rjd_alloc_context context = {0};
-	context.alloc_global = a;
-	context.free_global = f;
-
+	struct rjd_alloc_context context = { a, f, NULL, NULL, NULL };
 	return context;
 }
 
 struct rjd_alloc_context rjd_alloc_initscoped(rjd_func_alloc_scoped a, rjd_func_free_scoped f, void* heap)
 {
-	struct rjd_alloc_context context = {0};
-	context.alloc_scoped = a;
-	context.free_scoped = f;
-	context.scope = heap;
-
+	struct rjd_alloc_context context = { NULL, NULL, a, f, heap };
 	return context;
 }
 
@@ -110,10 +103,7 @@ void rjd_free(void* mem, struct rjd_alloc_context* context)
 
 static struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size)
 {
-	struct rjd_linearheap heap = {0};
-	heap.base = mem;
-	heap.next = mem;
-	heap.size = size;
+	struct rjd_linearheap heap = { mem, mem, size };
 	return heap;
 }
 

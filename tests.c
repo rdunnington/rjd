@@ -1,8 +1,9 @@
+#include <math.h>
+
 #define RJD_IMPL true
 #define RJD_ENABLE_ASSERT true
 #define RJD_ENABLE_LOGGING true
 #define RJD_ENABLE_SHORTNAMES true
-
 #include "rjd_all.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,6 +30,13 @@ void expect_uint32(uint32_t expected, uint32_t actual)
 {
 	if (expected != actual) {
 		ASSERTFAIL("Expected: %u, but got: %u\n", expected, actual);
+	}
+}
+
+void expect_float(double expected, double actual)
+{
+	if (fabs(expected - actual) > 0.00001) {
+		ASSERTFAIL("Expected: %f, but got: %f", expected, actual);
 	}
 }
 
@@ -174,7 +182,7 @@ void test_array()
 		expect_uint32(50, arr_capacity(a));
 
 		for (size_t i = 0; i < arr_count(a); ++i) {
-			struct test v = { (int)i };
+			struct test v = { (int)i, 0, 0, 0 };
 			a[i] = v;
 		}
 		expect_false(arr_empty(a));
@@ -300,25 +308,25 @@ void test_cmd()
 	cmd.argc = 5;
 	cmd.argv = argv2;
 	expect_true(cmd_ok(&cmd));
-	expect_true(cmd_bool(&cmd, "-c");
-	expect_true(cmd_bool(&cmd, "-w");
-	expect_false(cmd_bool(&cmd, "-z");
+	expect_true(cmd_bool(&cmd, "-c"));
+	expect_true(cmd_bool(&cmd, "-w"));
+	expect_false(cmd_bool(&cmd, "-z"));
 
-	const char* argv3[] = { "a.exe", "-z", "meta.txt", "mypattern", "file.txt", NULL };
+	const char* argv3[] = { "a.exe", "-z", "-w", "true", "-c", "false", "meta.txt", "mypattern", "file.txt", NULL };
 	cmd.argc = 5;
 	cmd.argv = argv3;
 	expect_true(cmd_ok(&cmd));
-	expect_false(cmd_bool(&cmd, "-c");
-	expect_false(cmd_bool(&cmd, "-w");
-	expect_true(cmd_bool(&cmd, "-z");
+	expect_false(cmd_bool(&cmd, "-c"));
+	expect_true(cmd_bool(&cmd, "-w"));
+	expect_true(cmd_bool(&cmd, "-z"));
 	expect_str("meta.txt", cmd_str(&cmd, "-z"));
 
 	const char* argv4[] = { "a.exe", "-z", "1337", "mypattern", "file.txt", NULL };
 	cmd.argc = 5;
 	cmd.argv = argv4;
 	expect_true(cmd_ok(&cmd));
-	expect_int32(1337, cmd_int(&cmd, "-z"));
-	expect_float(1337.0, cmd_int(&cmd, "-z"));
+	expect_int32(1337, cmd_int(&cmd, "-z", 0));
+	expect_float(1337, cmd_int(&cmd, "-z", 0));
 
 	cmd_free(&cmd);
 }
