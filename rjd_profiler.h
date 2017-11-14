@@ -44,7 +44,6 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 	return rjd_timer_global() - timer->timestamp;
 }
 
-// TODO support osx/linux
 #ifdef _WIN32
 	#define WIN32_LEAN_AND_MEAN
 	#define WIN32_EXTRA_LEANA
@@ -73,5 +72,25 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 		return (time.QuadPart * 1000LL) / RJD_QPC_FREQUENCY;
 	}
 #endif //_WIN32
+
+#if __APPLE__ && __MACH__ 
+	#include <mach/mach.h>
+	#include <mach/mach_time.h>
+
+	static mach_timebase_info_data_t RJD_MACH_TIMEBASE_INFO;
+	double rjd_timer_global(void)
+	{
+		if (RJD_MACH_TIMEBASE_INFO.denom == 0) {
+			int ok = mach_timebase_info(&RJD_MACH_TIMEBASE_INFO);
+			if (ok != KERN_SUCCESS) {
+				LOG("Failed to get mach timebase info: %d", ok);
+			}
+		}
+
+		double time = (double)mach_absolute_time();
+		return time * (double)RJD_MACH_TIMEBASE_INFO.numer / ((double)RJD_MACH_TIMEBASE_INFO.denom / 1000000);
+	}
+#endif // 
+
 #endif // RJD_IMPL
 
