@@ -13,7 +13,7 @@ double rjd_timer_global(void);
 #define RJD_PROFILE_SCOPE(name, scope) {									\
 		struct rjd_timer _timer##name = rjd_timer_init(); 					\
 		{scope}																\
-		LOG("Elapsed %s: %.2fms", #name, rjd_timer_elapsed(&_timer##name));	\
+		LOG("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&_timer##name));	\
 	}
 
 #if RJD_ENABLE_SHORTNAMES
@@ -88,7 +88,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 		}
 
 		double time = (double)mach_absolute_time();
-		return time * (double)RJD_MACH_TIMEBASE_INFO.numer / ((double)RJD_MACH_TIMEBASE_INFO.denom / 1000000);
+		return time * ((double)RJD_MACH_TIMEBASE_INFO.numer / ((double)RJD_MACH_TIMEBASE_INFO.denom)) / 1000000;
 	}
 #endif // 
 

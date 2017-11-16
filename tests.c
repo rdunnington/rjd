@@ -274,7 +274,6 @@ void test_profiler(void)
 		for (size_t i = 0; i < 1000; ++i) {
 			d += d;
 		}
-		printf("d: %f\n", d);
 		expect_true(d > 0);
 	});
 }
