@@ -13,3 +13,5 @@
 #include "rjd_array.h"
 #include "rjd_profiler.h"
 #include "rjd_cmd.h"
+#include "rjd_rng.h"
+

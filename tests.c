@@ -19,26 +19,24 @@ void expect_str(const char* expected, const char* actual)
 	}
 }
 
-void expect_int32(int32_t expected, int32_t actual)
-{
-	if (expected != actual) {
-		ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
-	}
-}
-
-void expect_uint32(uint32_t expected, uint32_t actual)
-{
-	if (expected != actual) {
-		ASSERTFAIL("Expected: %u, but got: %u\n", expected, actual);
-	}
-}
-
 void expect_float(double expected, double actual)
 {
 	if (fabs(expected - actual) > 0.00001) {
 		ASSERTFAIL("Expected: %f, but got: %f", expected, actual);
 	}
 }
+
+#define DEFINE_EXPECT_INTTYPE(type, format_specifier)															\
+	void expect_##type(type##_t expected, type##_t actual) {													\
+		if (expected != actual) {																				\
+			ASSERTFAIL("Expected: " format_specifier ", but got: " format_specifier "\n", expected, actual);	\
+		}																										\
+	}
+
+DEFINE_EXPECT_INTTYPE(int32,  "%d")
+DEFINE_EXPECT_INTTYPE(int64,  "%lld")
+DEFINE_EXPECT_INTTYPE(uint32, "%u")
+DEFINE_EXPECT_INTTYPE(uint64, "%llu")
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -331,13 +329,34 @@ void test_cmd()
 	cmd_free(&cmd);
 }
 
+void test_rng()
+{
+	struct rjd_rng rng = rng_init(0xF7A290B49);
+	expect_int64(11675382715271363104ull, rng_next(&rng));
+	expect_int64(15127709716525989220ull, rng_next(&rng));
+	expect_int64(6059634119111723720ull, rng_next(&rng));
+	expect_int32(41, rng_range32(&rng, 0, 100));
+	expect_int32(67, rng_range32(&rng, 0, 100));
+	expect_int32(87, rng_range32(&rng, 0, 100));
+	expect_int32(80, rng_range32(&rng, 0, 100));
+	expect_float(0.619404, rng_float(&rng));
+	expect_float(0.349893, rng_float(&rng));
+	expect_float(0.877108, rng_float(&rng));
+	expect_float(0.933046, rng_float(&rng));
+
+	rng = rng_init(0xF7A290B49);
+	expect_int64(11675382715271363104ull, rng_next(&rng));
+	expect_int64(15127709716525989220ull, rng_next(&rng));
+}
+
 int main(void) 
 {
 	test_logging();
 	test_alloc();
 	test_array();
 	test_profiler();
-	test_cmd();
+	//test_cmd();
+	test_rng();
 
 	return 0;
 }
