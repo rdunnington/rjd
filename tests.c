@@ -265,6 +265,28 @@ void test_array()
 
 		arr_free(b);
 	}
+
+	// rng tests
+	{
+		struct rjd_rng rng = rng_init(0x1337C0DE);
+
+		int32_t* a = arr_alloc(int32_t, 8, &context);
+		for (int32_t i = 0; i < 8; ++i) {
+			arr_push(a, i);
+		}
+
+		expect_int32(5, arr_sample(a, &rng));
+
+		arr_shuffle(a, &rng);
+		expect_int32(3, a[0]);
+		expect_int32(6, a[1]);
+		expect_int32(0, a[2]);
+		expect_int32(7, a[3]);
+		expect_int32(2, a[4]);
+		expect_int32(4, a[5]);
+		expect_int32(1, a[6]);
+		expect_int32(5, a[7]);
+	}
 }
 
 void test_profiler(void)
