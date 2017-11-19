@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "rjd_platform.h"
 #include "rjd_debug.h"
 #include "rjd_alloc.h"
 #include "rjd_rng.h"

@@ -9,6 +9,18 @@
 
 struct rjd_alloc_context;
 
+#if RJD_COMPILER_MSVC
+	#define rjd_countof(buf) _countof(buf)
+#elif RJD_COMPILER_CLANG || RJD_COMPILER_GCC
+	#define RJD_SAME_TYPE(a, b) (__builtin_types_compatible_p(__typeof__(a), __typeof__(b)))
+	#define RJD_STATIC_ZERO(a) (sizeof(int[(a)?1:-1]) * 0)
+	#define RJD_MUST_BE_ARRAY(a) (RJD_STATIC_ZERO(!RJD_SAME_TYPE((a), &(*a))))
+
+	#define rjd_countof(buf) (sizeof(buf) / sizeof(*(buf)) + RJD_MUST_BE_ARRAY(buf))
+#else
+	#define rjd_countof(buf) ( (sizeof(buf) / sizeof(*(buf))) / ((size_t)(!sizeof(buf) % sizeof(0[buf]))) )
+#endif
+
 #define rjd_array_alloc(type, capacity, alloc_context)	((type*)(rjd_array_alloc_impl((capacity), (alloc_context), sizeof(type))))
 #define rjd_array_free(buf)								rjd_array_free_impl(buf)
 #define rjd_array_capacity(buf) 						((const uint32_t)(*rjd_array_capacity_impl(buf)))
@@ -28,7 +40,7 @@ struct rjd_alloc_context;
 #define rjd_array_last(buf, _default)		(((buf) && rjd_array_count(buf) > 0) ? ((buf)[rjd_array_count(buf) - 1]) : (_default))
 #define rjd_array_contains(buf, value)		rjd_array_contains_impl((buf), &(value), sizeof(*buf), sizeof(value))
 #define rjd_array_filter(buf, pred)			for(int _i = (int)rjd_array_count(buf) - 1; _i >= 0; --_i) { if (!(pred((buf)[_i]))) { rjd_array_erase((buf), _i); } }
-#define rjd_array_map(in, out, pred)		rjd_array_resize((out), rjd_array_count(buf)), for (size_t _i = 0; _i < rjd_array_count(buf); ++_i) { out[_i] = pred(in[_i]); }
+#define rjd_array_map(in, out, pred)		rjd_array_resize((out), rjd_array_count(in)), for (size_t _i = 0; _i < rjd_array_count(in); ++_i) { out[_i] = pred(in[_i]); }
 #define rjd_array_reduce(buf, acc, pred)	for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = pred(acc, ((buf)[_i])); }
 #define rjd_array_sum(buf, acc)				for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = rjd_array_sum_pred((acc), ((buf)[_i])); }
 
@@ -38,6 +50,8 @@ struct rjd_alloc_context;
 #endif
 
 #if RJD_ENABLE_SHORTNAMES
+	#define countof					rjd_countof
+
 	#define arr_alloc    			rjd_array_alloc
 	#define arr_free    			rjd_array_free
 	#define arr_capacity 			rjd_array_capacity
@@ -113,7 +127,9 @@ static struct rjd_alloc_context* rjd_array_getcontext_impl(void* buffer)
 
 void rjd_array_free_impl(void* buffer)
 {
-	RJD_ASSERT(buffer);
+	if (!buffer) {
+		return;
+	}
 
 	struct rjd_alloc_context* context = rjd_array_getcontext_impl(buffer);
 
@@ -226,11 +242,13 @@ bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeof_type, size
 	return false;
 }
 
-#ifdef rjd_array_shuffle
+#if RJD_RNG
 	void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_type)
 	{
 		char tmp[512];
-		RJD_ASSERTMSG(sizeof_type <= sizeof(tmp), "tmp (%u bytes) must be greater than or equal to sizeof_type (%u bytes)", (unsigned) sizeof(tmp), (unsigned) sizeof_type);
+		RJD_ASSERTMSG(sizeof_type <= sizeof(tmp), 
+			"tmp (%u bytes) must be greater than or equal to sizeof_type (%u bytes)", 
+			(unsigned) sizeof(tmp), (unsigned) sizeof_type);
 
 		char* raw = (char*)buffer;
 		for (uint32_t i = 0; i < rjd_array_count(buffer); ++i) {
@@ -247,7 +265,7 @@ bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeof_type, size
 			memcpy(b, tmp, sizeof_type);
 		}
 	}
-#endif // rjd_array_shuffle
+#endif // RJD_RNG
 
 #endif //RJD_IMPL
 

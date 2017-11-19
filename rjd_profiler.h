@@ -1,5 +1,7 @@
 #pragma once
 
+#define RJD_PROFILER 1
+
 struct rjd_timer
 {
 	double timestamp;
@@ -43,8 +45,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 {
 	return rjd_timer_global() - timer->timestamp;
 }
-
-#ifdef _WIN32
+#ifdef RJD_PLATFORM_WINDOWS
 	#define WIN32_LEAN_AND_MEAN
 	#define WIN32_EXTRA_LEANA
 	#define NOMINMAX
@@ -73,7 +74,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 	}
 #endif //_WIN32
 
-#if __APPLE__ && __MACH__ 
+#if RJD_PLATFORM_OSX
 	#include <mach/mach.h>
 	#include <mach/mach_time.h>
 

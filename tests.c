@@ -147,7 +147,7 @@ void test_alloc()
 		rfree(p2, &ctx);
 	}
 
-	// linear allocator
+	// TODO linear allocator
 	{
 		//char stackmem[1024 * 1024];
 	}
@@ -156,6 +156,18 @@ void test_alloc()
 void test_array()
 {
 	struct rjd_alloc_context context = alloc_initdefault();
+
+	// countof
+	{
+		int a[3];
+		expect_uint32(3, countof(a));
+
+		unsigned long long b[64];
+		expect_uint32(64, countof(b));
+
+		struct { uint32_t a[4]; const char* b; unsigned c[20]; } c[20];
+		expect_uint32(20, countof(c));
+	}
 
 	// general functionality
 	{
@@ -304,7 +316,8 @@ void test_cmd()
 {
 	struct rjd_alloc_context context = alloc_initdefault();
 	
-	struct rjd_cmd cmd = cmd_init(0, NULL, &context);
+	const char* argv0[] = { "test.exe", NULL };
+	struct rjd_cmd cmd = cmd_init(2, argv0, &context);
 
 	expect_true(cmd_ok(&cmd));
 
@@ -376,7 +389,7 @@ int main(void)
 	test_alloc();
 	test_array();
 	test_profiler();
-	//test_cmd();
+	test_cmd();
 	test_rng();
 
 	return 0;
