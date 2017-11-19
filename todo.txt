@@ -1,5 +1,3 @@
-rjd_profiler.h
-rjd_random.h
 rjd_dict.h
 rjd_string.h
 rjd_stringbuilder.h
