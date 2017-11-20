@@ -14,8 +14,8 @@
 
 void expect_str(const char* expected, const char* actual)
 {
-	if (expected != actual && strcmp(expected, actual)) {
-		printf("Expected:\n%s\nbut got:\n%s\n", expected, actual);
+	if (expected != actual && (expected == NULL || actual == NULL || strcmp(expected, actual))) {
+		ASSERTFAIL("Expected:\n%s\nbut got:\n%s\n", expected ? expected : "", actual ? actual : "");
 	}
 }
 
@@ -108,16 +108,16 @@ void test_logging()
 	
 	// expect equals
 	const char* expected = 
-		"tests.c(66): test\n"
-		"tests.c(67): \n"
-		"tests.c(68): forma11ed!\n"
-		"tests.c(77): ok1\n"
-		"tests.c(82): ok2\n"
-		"tests.c(83): ok2\n"
-		"tests.c(87): ok3\n"
-		"tests.c(88): ok3\n"
-		"tests.c(89): ok3\n"
-		"tests.c(101): other channel\n";
+		"tests.c(72): test\n"
+		"tests.c(73): \n"
+		"tests.c(74): forma11ed!\n"
+		"tests.c(83): ok1\n"
+		"tests.c(88): ok2\n"
+		"tests.c(89): ok2\n"
+		"tests.c(93): ok3\n"
+		"tests.c(94): ok3\n"
+		"tests.c(95): ok3\n"
+		"tests.c(107): other channel\n";
 
 	expect_str(expected, logbuffer);
 	
@@ -317,7 +317,7 @@ void test_cmd()
 	struct rjd_alloc_context context = alloc_initdefault();
 	
 	const char* argv0[] = { "test.exe", NULL };
-	struct rjd_cmd cmd = cmd_init(2, argv0, &context);
+	struct rjd_cmd cmd = cmd_init(countof(argv0), argv0, &context);
 
 	expect_true(cmd_ok(&cmd));
 
@@ -330,35 +330,44 @@ void test_cmd()
 	expect_false(cmd_ok(&cmd));
 
 	const char* argv1[] = { "a.exe", "mypattern", "file.txt", NULL };
-	cmd.argc = 3;
+	cmd.argc = countof(argv1);
 	cmd.argv = argv1;
 	expect_true(cmd_ok(&cmd));
 	expect_str("mypattern", cmd_str(&cmd, "PATTERN"));
-	expect_str("file.txt", cmd_str(&cmd, "file.txt"));
+	expect_str("file.txt", cmd_str(&cmd, "FILE"));
 
 	const char* argv2[] = { "a.exe", "-c", "-w", "mypattern", "file.txt", NULL };
-	cmd.argc = 5;
+	cmd.argc = countof(argv2);
 	cmd.argv = argv2;
 	expect_true(cmd_ok(&cmd));
 	expect_true(cmd_bool(&cmd, "-c"));
 	expect_true(cmd_bool(&cmd, "-w"));
 	expect_false(cmd_bool(&cmd, "-z"));
+	expect_str("mypattern", cmd_str(&cmd, "PATTERN"));
+	expect_str("file.txt", cmd_str(&cmd, "FILE"));
 
-	const char* argv3[] = { "a.exe", "-z", "-w", "true", "-c", "false", "meta.txt", "mypattern", "file.txt", NULL };
-	cmd.argc = 5;
+	const char* argv3[] = { "a.exe", "-z", "meta.txt", "-w", "--color", "mypattern", "file.txt", NULL };
+	cmd.argc = countof(argv3);
 	cmd.argv = argv3;
 	expect_true(cmd_ok(&cmd));
-	expect_false(cmd_bool(&cmd, "-c"));
-	expect_true(cmd_bool(&cmd, "-w"));
 	expect_true(cmd_bool(&cmd, "-z"));
+	expect_true(cmd_bool(&cmd, "-w"));
+	expect_true(cmd_bool(&cmd, "-c"));
 	expect_str("meta.txt", cmd_str(&cmd, "-z"));
+	expect_str("mypattern", cmd_str(&cmd, "PATTERN"));
+	expect_str("file.txt", cmd_str(&cmd, "FILE"));
 
 	const char* argv4[] = { "a.exe", "-z", "1337", "mypattern", "file.txt", NULL };
-	cmd.argc = 5;
+	cmd.argc = countof(argv4);
 	cmd.argv = argv4;
 	expect_true(cmd_ok(&cmd));
 	expect_int32(1337, cmd_int(&cmd, "-z", 0));
 	expect_float(1337, cmd_int(&cmd, "-z", 0));
+	expect_str("mypattern", cmd_str(&cmd, "PATTERN"));
+	expect_str("file.txt", cmd_str(&cmd, "FILE"));
+
+	cmd_usage(&cmd);
+	cmd_help(&cmd);
 
 	cmd_free(&cmd);
 }
