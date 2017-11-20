@@ -4,7 +4,7 @@
 #define RJD_ENABLE_ASSERT true
 #define RJD_ENABLE_LOGGING true
 #define RJD_ENABLE_SHORTNAMES true
-#include "rjd_all.h"
+#include "rjd.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // expect utils

@@ -1,3 +1,7 @@
 xcode
 a.out
-a.exe
+*.exe
+*.ilk
+*.obj
+*.pdb
+.vs
