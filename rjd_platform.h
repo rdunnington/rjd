@@ -1,5 +1,7 @@
 #pragma once
 
+#define RJD_PLATFORM 1
+
 // Platforms
 #ifdef _WIN32
 	#define RJD_PLATFORM_WINDOWS 1
