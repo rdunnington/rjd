@@ -23,10 +23,10 @@ struct rjd_alloc_context;
 
 #define rjd_array_alloc(type, capacity, alloc_context)	((type*)(rjd_array_alloc_impl((capacity), (alloc_context), sizeof(type))))
 #define rjd_array_free(buf)								rjd_array_free_impl(buf)
-#define rjd_array_capacity(buf) 						((const uint32_t)(*rjd_array_capacity_impl(buf)))
-#define rjd_array_count(buf) 							((const uint32_t)(*rjd_array_count_impl(buf)))
+#define rjd_array_capacity(buf) 						((buf)?(const uint32_t)(*rjd_array_capacity_impl(buf)):0)
+#define rjd_array_count(buf) 							((buf)?(const uint32_t)(*rjd_array_count_impl(buf)):0)
 #define rjd_array_clear(buf)							(*rjd_array_count_impl(buf) = 0)
-#define rjd_array_resize(buf, size) 					buf = rjd_array_resize_impl((buf), size, sizeof(*(buf)))
+#define rjd_array_resize(buf, size) 					(buf = rjd_array_resize_impl((buf), size, sizeof(*(buf))))
 #define rjd_array_erase(buf, index) 					rjd_array_erase_impl((buf), index, sizeof(*(buf)))
 #define rjd_array_erase_unordered(buf, index) 			rjd_array_erase_unordered_impl((buf), index, sizeof(*(buf)))
 #define rjd_array_empty(buf) 							(rjd_array_count(buf) == 0)
@@ -172,6 +172,9 @@ void* rjd_array_resize_impl(void* buffer, uint32_t newsize, size_t sizeof_type)
 		uint32_t oldcount = *count;
 		memcpy(newbuf, buffer, oldcount * sizeof_type);
 		count = rjd_array_count_impl(newbuf);
+		
+		uint32_t diff = newcapacity - *capacity;
+		memset(newbuf, 0, diff * sizeof_type);
 
 		rjd_array_free(buffer);
 		buffer = newbuf;

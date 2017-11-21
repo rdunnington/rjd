@@ -35,7 +35,7 @@ struct rjd_alloc_context rjd_alloc_initglobal(rjd_func_alloc a, rjd_func_free f)
 struct rjd_alloc_context rjd_alloc_initscoped(rjd_func_alloc_scoped a, rjd_func_free_scoped f, void* allocator);
 struct rjd_alloc_context rjd_alloc_initlinearheap(void* mem, size_t heapsize);
 void* rjd_malloc_impl(size_t size, struct rjd_alloc_context* context);
-void rjd_free(void* mem, struct rjd_alloc_context* context);
+void rjd_free(const void* mem, struct rjd_alloc_context* context);
 
 #define rjd_malloc(type, context) ((type*)rjd_malloc_impl(sizeof(type), context))
 #define rjd_malloc_array(type, count, context) ((type*)rjd_malloc_impl(sizeof(type) * count, context))
@@ -92,12 +92,12 @@ void* rjd_malloc_impl(size_t size, struct rjd_alloc_context* context)
 	return context->alloc_scoped(size, context->scope);
 }
 
-void rjd_free(void* mem, struct rjd_alloc_context* context)
+void rjd_free(const void* mem, struct rjd_alloc_context* context)
 {
 	if (context->free_global) {
-		context->free_global(mem);
+		context->free_global((void*)mem);
 	} else {
-		context->free_scoped(mem, context->scope);
+		context->free_scoped((void*)mem, context->scope);
 	}
 }
 

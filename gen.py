@@ -18,7 +18,8 @@ files = [
     "rjd_rng.h",
     "rjd_array.h",
     "rjd_profiler.h",
-    "rjd_cmd.h"
+    "rjd_cmd.h",
+    "rjd_dict.h"
 ]
 
 concat = "#pragma once\n\n"
@@ -48,3 +49,14 @@ for filename in files:
 
 with open("rjd.h", "w") as file:
     file.write(concat)
+
+with open("rjd_all.h", "w") as file:
+    allh = "#pragma once\n\n"
+    for include in includes:
+        allh += "#include " + include + "\n"
+    for include in includes_impl:
+        allh += "#include " + include + "\n"
+    allh += "\n"
+    for include in files:
+        allh += "#include \"" + include + "\"\n"
+    file.write(allh)

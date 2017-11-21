@@ -4,7 +4,7 @@
 #define RJD_ENABLE_ASSERT true
 #define RJD_ENABLE_LOGGING true
 #define RJD_ENABLE_SHORTNAMES true
-#include "rjd.h"
+#include "rjd_all.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // expect utils
@@ -392,6 +392,46 @@ void test_rng()
 	expect_int64(15127709716525989220ull, rng_next(&rng));
 }
 
+void test_dict()
+{
+	struct rjd_alloc_context context = alloc_initdefault();
+	
+	struct rjd_dict dict = dict_init(&context);
+	expect_str(NULL, (char*)dict_get(&dict, "key"));
+	expect_str(NULL, (char*)dict_erase(&dict, "key"));
+
+	dict_insert(&dict, "key1", "ok1");
+	dict_insert(&dict, "key2", "ok2");
+	dict_insert(&dict, "key3", "ok3");
+	dict_insert(&dict, "key4", "ok4");
+	dict_insert(&dict, "key5", NULL);
+
+	expect_str("ok1", (const char*)dict_get(&dict, "key1"));
+	expect_str("ok2", (const char*)dict_get(&dict, "key2"));
+	expect_str("ok3", (const char*)dict_get(&dict, "key3"));
+	expect_str("ok4", (const char*)dict_get(&dict, "key4"));
+	expect_str(NULL,  (const char*)dict_get(&dict, "key5"));
+
+	expect_str("ok2", (const char*)dict_erase(&dict, "key2"));
+	expect_str(NULL,  (const char*)dict_get(&dict, "key2"));
+
+	int32_t data[] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31};
+
+	for (size_t i = 0; i < countof(data); ++i) {
+		char key[32] = {0};
+		sprintf(key, "k%d", i);
+		dict_insert(&dict, key, data + i);
+	}
+
+	for (size_t i = 0; i < countof(data); ++i) {
+		char key[32] = {0};
+		sprintf(key, "k%d", i);
+		expect_int32(i, *(int32_t*)dict_get(&dict, key));
+	}
+
+	dict_free(&dict);
+}
+
 int main(void) 
 {
 	test_logging();
@@ -400,6 +440,7 @@ int main(void)
 	test_profiler();
 	test_cmd();
 	test_rng();
+	test_dict();
 
 	return 0;
 }
