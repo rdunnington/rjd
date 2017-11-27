@@ -301,6 +301,59 @@ void test_array()
 	}
 }
 
+void test_math(void)
+{
+	// helper functions
+	expect_uint32(0, next_pow2(0));
+	expect_uint32(1, next_pow2(1));
+	expect_uint32(2, next_pow2(2));
+	expect_uint32(4, next_pow2(3));
+	expect_uint32(4, next_pow2(4));
+	expect_uint32(8, next_pow2(5));
+	expect_uint32(8, next_pow2(6));
+	expect_uint32(8, next_pow2(7));
+	expect_uint32(8, next_pow2(8));
+
+	expect_int32(1, pow32(2, 0));
+	expect_int32(2, pow32(2, 1));
+	expect_int32(64, pow32(2, 6));
+	expect_int32(-32, pow32(-2, 5));
+	expect_int32(1, pow32(23987, 0));
+	expect_int32(23987, pow32(23987, 1));
+
+	expect_int32(1, sign32(0));
+	expect_int32(1, sign32(67));
+	expect_int32(-1, sign32(-231));
+	expect_float(1, sign(0.0));
+	expect_float(1, sign(-0.0));
+	expect_float(1, sign(234.0));
+	expect_float(-1, sign(-234.0));
+	expect_float(1, (double)signf(234.0f));
+	expect_float(-1, (double)signf(-234.0f));
+
+	expect_true(isequal(0, 0));
+	expect_true(isequal(505, 505));
+	expect_true(isequal(0.00000001, 0.00000002));
+	expect_true(isequal(0.00000001f, 0.00000002f));
+	expect_false(isequal(1, 2));
+	expect_false(isequal(1/3.0, 1/3.1));
+
+	expect_float(0, remap(0, 0, 1, 0, 2));
+	expect_float(1, remap(.5, 0, 1, 0, 2));
+	expect_float(2, remap(1, 0, 1, 0, 2));
+	
+	expect_int32(1, min32(2, 1));
+	expect_int32(-1, min32(-1, 1));
+	expect_int32(10, minu32(10, 1100));
+	expect_int32(1, max32(-1, 1));
+	expect_int32(2, max32(2, 1));
+	expect_int32(1100, maxu32(10, 1100));
+
+	// vec
+
+	// matrix
+}
+
 void test_strbuf(void)
 {	
 	struct rjd_alloc_context context = alloc_initdefault();
@@ -466,6 +519,7 @@ int main(void)
 	test_logging();
 	test_alloc();
 	test_array();
+	test_math();
 	test_strbuf();
 	test_profiler();
 	test_cmd();
