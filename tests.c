@@ -1,9 +1,9 @@
 #include <math.h>
-
 #define RJD_IMPL true
 #define RJD_ENABLE_ASSERT true
 #define RJD_ENABLE_LOGGING true
 #define RJD_ENABLE_SHORTNAMES true
+#define RJD_STRBUF_STATIC_SIZE 32
 #include "rjd_all.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -301,6 +301,35 @@ void test_array()
 	}
 }
 
+void test_strbuf(void)
+{	
+	struct rjd_alloc_context context = alloc_initdefault();
+
+	struct rjd_strbuf builder = rjd_strbuf_init(&context);
+
+	rjd_strbuf_append(&builder, "test");
+	expect_str("test", rjd_strbuf_str(&builder));
+
+	rjd_strbuf_append(&builder, "123");
+	rjd_strbuf_append(&builder, "123");
+	expect_str("test123123", rjd_strbuf_str(&builder));
+
+	rjd_strbuf_free(&builder);
+
+	rjd_strbuf_append(&builder, "forma%d%ded", 1, 1);
+	expect_str("forma11ed", rjd_strbuf_str(&builder));
+
+	rjd_strbuf_append(&builder, "1234567890123456789012345678901234567890");
+
+	expect_str("forma11ed1234567890123456789012345678901234567890", rjd_strbuf_str(&builder));
+
+	rjd_strbuf_free(&builder);
+	rjd_strbuf_append(&builder, "12345678901234567890123456789010");
+	expect_str("12345678901234567890123456789010", rjd_strbuf_str(&builder));
+
+	rjd_strbuf_free(&builder);
+}
+
 void test_profiler(void)
 {
 	PROFILE_SCOPE(Test1, {
@@ -437,6 +466,7 @@ int main(void)
 	test_logging();
 	test_alloc();
 	test_array();
+	test_strbuf();
 	test_profiler();
 	test_cmd();
 	test_rng();

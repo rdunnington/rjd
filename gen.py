@@ -14,9 +14,11 @@ includes_impl = [
 files = [ 
     "rjd_platform.h",
     "rjd_debug.h",
+    "rjd_math.h",
     "rjd_alloc.h",
     "rjd_rng.h",
     "rjd_array.h",
+    "rjd_strbuf.h",
     "rjd_profiler.h",
     "rjd_cmd.h",
     "rjd_dict.h"
