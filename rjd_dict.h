@@ -139,6 +139,15 @@ static const char* rjd_dict_copystr(const char* s, struct rjd_alloc_context* all
 
 static uint32_t rjd_dict_hash_string(const char* key)
 {
+	// Code derived from:
+	// Copyright (c) 2011 Stephan Brumme. All rights reserved.
+	// see http://create.stephan-brumme.com/disclaimer.html
+	//
+	// originally developed by Fowler, Noll and Vo
+	// http://isthe.com/chongo/tech/comp/fnv/
+	//
+	// prime/seed from http://isthe.com/chongo/tech/comp/fnv/
+
 	RJD_ASSERT(key);
 
 	if (*key == '\0') {
