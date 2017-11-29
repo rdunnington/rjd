@@ -301,6 +301,15 @@ void test_array()
 	}
 }
 
+void expect_float3(float3 expected, float3 actual) 
+{
+	if (!float3_eq(expected, actual)) {
+		ASSERTFAIL("Expected (%.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f)", 
+			float3_x(expected), float3_y(expected), float3_z(expected), 
+			float3_x(actual), float3_y(actual), float3_z(actual));
+	}
+}
+
 void test_math(void)
 {
 	// helper functions
@@ -349,7 +358,39 @@ void test_math(void)
 	expect_int32(2, max32(2, 1));
 	expect_int32(1100, maxu32(10, 1100));
 
-	// vec
+	// float3
+	expect_true(float3_eq(float3_left(), float3_left()));
+	expect_float3(float3_zero(), float3_xyz(0,0,0));
+	expect_float3(float3_up(), float3_xyz(0,1,0));
+	expect_float3(float3_back(), float3_xyz(0,0,-1));
+	expect_float3(float3_xyz(1, 1, 0), float3_add(float3_up(), float3_right()));
+	expect_float(32, float3_x(float3_splat(32)));
+	expect_float(128, float3_y(float3_splat(128)));
+	expect_float(777, float3_z(float3_splat(777)));
+	expect_float3(float3_xyz(7, 7, 9), float3_shuffle(float3_xyz(9,0,7), 2, 2, 0));
+	expect_float(8, float3_x(float3_setx(float3_zero(), 8)));
+	expect_float(8, float3_y(float3_sety(float3_zero(), 8)));
+	expect_float(8, float3_z(float3_setz(float3_zero(), 8)));
+	expect_float(6, float3_sum(float3_xyz(2, 2, 2)));
+	expect_float(2, float3_dot(float3_up(), float3_xyz(0,2,0)));
+	expect_float(0, float3_dot(float3_up(), float3_xyz(1,0,0)));
+	expect_float(16, float3_lengthsq(float3_xyz(4,0,0)));
+	expect_float(4, float3_length(float3_xyz(4,0,0)));
+	expect_float(5, float3_length(float3_xyz(3,4,0)));
+	expect_float3(float3_xyz(1,0,0), float3_normalize(float3_xyz(7368, 0, 0)));
+	expect_float(PI/4, float3_angle(float3_up(), float3_xyz(1,1,0)));
+	expect_float3(float3_xyz(26, 60, 44), float3_scale(float3_xyz(13, 30, 22), 2));
+	expect_float3(float3_xyz(3,3,3), float3_add(float3_xyz(1,1,1), float3_xyz(2,2,2)));
+	expect_float3(float3_xyz(-1,-1,-1), float3_sub(float3_xyz(1,1,1), float3_xyz(2,2,2)));
+	expect_float3(float3_xyz(2,2,2), float3_mul(float3_xyz(1,1,1), float3_xyz(2,2,2)));
+	expect_float3(float3_xyz(.5,.5,.5), float3_div(float3_xyz(1,1,1), float3_xyz(2,2,2)));
+	expect_float3(float3_left(), float3_cross(float3_forward(), float3_up()));
+	expect_float3(float3_right(), float3_cross(float3_up(), float3_forward()));
+	expect_float3(float3_xyz(23, 45, 21), float3_min(float3_xyz(23,45,72), float3_xyz(43, 75, 21)));
+	expect_float3(float3_xyz(43, 75, 72), float3_max(float3_xyz(23,45,72), float3_xyz(43, 75, 21)));
+	expect_float3(float3_xyz(1,0,0), float3_project(float3_xyz(1,1,1), float3_xyz(1,0,0)));
+	expect_float3(float3_xyz(1,1,0), float3_reflect(float3_xyz(1,-1,0), float3_up()));
+	expect_float3(float3_xyz(1,2,4), float3_lerp(float3_zero(), float3_xyz(2, 4, 8), .5));
 
 	// matrix
 }
@@ -501,13 +542,13 @@ void test_dict()
 
 	for (size_t i = 0; i < countof(data); ++i) {
 		char key[32] = {0};
-		sprintf(key, "k%d", i);
+		sprintf(key, "k%zu", i);
 		dict_insert(&dict, key, data + i);
 	}
 
 	for (size_t i = 0; i < countof(data); ++i) {
 		char key[32] = {0};
-		sprintf(key, "k%d", i);
+		sprintf(key, "k%zu", i);
 		expect_int32(i, *(int32_t*)dict_get(&dict, key));
 	}
 
