@@ -301,12 +301,12 @@ void test_array()
 	}
 }
 
-void expect_float3(float3 expected, float3 actual) 
+void expect_vec3(vec3 expected, vec3 actual) 
 {
-	if (!float3_eq(expected, actual)) {
+	if (!vec3_eq(expected, actual)) {
 		ASSERTFAIL("Expected (%.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f)", 
-			float3_x(expected), float3_y(expected), float3_z(expected), 
-			float3_x(actual), float3_y(actual), float3_z(actual));
+			vec3_x(expected), vec3_y(expected), vec3_z(expected), 
+			vec3_x(actual), vec3_y(actual), vec3_z(actual));
 	}
 }
 
@@ -358,39 +358,39 @@ void test_math(void)
 	expect_int32(2, max32(2, 1));
 	expect_int32(1100, maxu32(10, 1100));
 
-	// float3
-	expect_true(float3_eq(float3_left(), float3_left()));
-	expect_float3(float3_zero(), float3_xyz(0,0,0));
-	expect_float3(float3_up(), float3_xyz(0,1,0));
-	expect_float3(float3_back(), float3_xyz(0,0,-1));
-	expect_float3(float3_xyz(1, 1, 0), float3_add(float3_up(), float3_right()));
-	expect_float(32, float3_x(float3_splat(32)));
-	expect_float(128, float3_y(float3_splat(128)));
-	expect_float(777, float3_z(float3_splat(777)));
-	expect_float3(float3_xyz(7, 7, 9), float3_shuffle(float3_xyz(9,0,7), 2, 2, 0));
-	expect_float(8, float3_x(float3_setx(float3_zero(), 8)));
-	expect_float(8, float3_y(float3_sety(float3_zero(), 8)));
-	expect_float(8, float3_z(float3_setz(float3_zero(), 8)));
-	expect_float(6, float3_sum(float3_xyz(2, 2, 2)));
-	expect_float(2, float3_dot(float3_up(), float3_xyz(0,2,0)));
-	expect_float(0, float3_dot(float3_up(), float3_xyz(1,0,0)));
-	expect_float(16, float3_lengthsq(float3_xyz(4,0,0)));
-	expect_float(4, float3_length(float3_xyz(4,0,0)));
-	expect_float(5, float3_length(float3_xyz(3,4,0)));
-	expect_float3(float3_xyz(1,0,0), float3_normalize(float3_xyz(7368, 0, 0)));
-	expect_float(PI/4, float3_angle(float3_up(), float3_xyz(1,1,0)));
-	expect_float3(float3_xyz(26, 60, 44), float3_scale(float3_xyz(13, 30, 22), 2));
-	expect_float3(float3_xyz(3,3,3), float3_add(float3_xyz(1,1,1), float3_xyz(2,2,2)));
-	expect_float3(float3_xyz(-1,-1,-1), float3_sub(float3_xyz(1,1,1), float3_xyz(2,2,2)));
-	expect_float3(float3_xyz(2,2,2), float3_mul(float3_xyz(1,1,1), float3_xyz(2,2,2)));
-	expect_float3(float3_xyz(.5,.5,.5), float3_div(float3_xyz(1,1,1), float3_xyz(2,2,2)));
-	expect_float3(float3_left(), float3_cross(float3_forward(), float3_up()));
-	expect_float3(float3_right(), float3_cross(float3_up(), float3_forward()));
-	expect_float3(float3_xyz(23, 45, 21), float3_min(float3_xyz(23,45,72), float3_xyz(43, 75, 21)));
-	expect_float3(float3_xyz(43, 75, 72), float3_max(float3_xyz(23,45,72), float3_xyz(43, 75, 21)));
-	expect_float3(float3_xyz(1,0,0), float3_project(float3_xyz(1,1,1), float3_xyz(1,0,0)));
-	expect_float3(float3_xyz(1,1,0), float3_reflect(float3_xyz(1,-1,0), float3_up()));
-	expect_float3(float3_xyz(1,2,4), float3_lerp(float3_zero(), float3_xyz(2, 4, 8), .5));
+	// vec3
+	expect_true(vec3_eq(vec3_left(), vec3_left()));
+	expect_vec3(vec3_zero(), vec3_xyz(0,0,0));
+	expect_vec3(vec3_up(), vec3_xyz(0,1,0));
+	expect_vec3(vec3_back(), vec3_xyz(0,0,-1));
+	expect_vec3(vec3_xyz(1, 1, 0), vec3_add(vec3_up(), vec3_right()));
+	expect_float(32, vec3_x(vec3_splat(32)));
+	expect_float(128, vec3_y(vec3_splat(128)));
+	expect_float(777, vec3_z(vec3_splat(777)));
+	expect_vec3(vec3_xyz(7, 7, 9), vec3_shuffle(vec3_xyz(9,0,7), 2, 2, 0));
+	expect_float(8, vec3_x(vec3_setx(vec3_zero(), 8)));
+	expect_float(8, vec3_y(vec3_sety(vec3_zero(), 8)));
+	expect_float(8, vec3_z(vec3_setz(vec3_zero(), 8)));
+	expect_float(6, vec3_sum(vec3_xyz(2, 2, 2)));
+	expect_float(2, vec3_dot(vec3_up(), vec3_xyz(0,2,0)));
+	expect_float(0, vec3_dot(vec3_up(), vec3_xyz(1,0,0)));
+	expect_float(16, vec3_lengthsq(vec3_xyz(4,0,0)));
+	expect_float(4, vec3_length(vec3_xyz(4,0,0)));
+	expect_float(5, vec3_length(vec3_xyz(3,4,0)));
+	expect_vec3(vec3_xyz(1,0,0), vec3_normalize(vec3_xyz(7368, 0, 0)));
+	expect_float(PI/4, vec3_angle(vec3_up(), vec3_xyz(1,1,0)));
+	expect_vec3(vec3_xyz(26, 60, 44), vec3_scale(vec3_xyz(13, 30, 22), 2));
+	expect_vec3(vec3_xyz(3,3,3), vec3_add(vec3_xyz(1,1,1), vec3_xyz(2,2,2)));
+	expect_vec3(vec3_xyz(-1,-1,-1), vec3_sub(vec3_xyz(1,1,1), vec3_xyz(2,2,2)));
+	expect_vec3(vec3_xyz(2,2,2), vec3_mul(vec3_xyz(1,1,1), vec3_xyz(2,2,2)));
+	expect_vec3(vec3_xyz(.5,.5,.5), vec3_div(vec3_xyz(1,1,1), vec3_xyz(2,2,2)));
+	expect_vec3(vec3_left(), vec3_cross(vec3_forward(), vec3_up()));
+	expect_vec3(vec3_right(), vec3_cross(vec3_up(), vec3_forward()));
+	expect_vec3(vec3_xyz(23, 45, 21), vec3_min(vec3_xyz(23,45,72), vec3_xyz(43, 75, 21)));
+	expect_vec3(vec3_xyz(43, 75, 72), vec3_max(vec3_xyz(23,45,72), vec3_xyz(43, 75, 21)));
+	expect_vec3(vec3_xyz(1,0,0), vec3_project(vec3_xyz(1,1,1), vec3_xyz(1,0,0)));
+	expect_vec3(vec3_xyz(1,1,0), vec3_reflect(vec3_xyz(1,-1,0), vec3_up()));
+	expect_vec3(vec3_xyz(1,2,4), vec3_lerp(vec3_zero(), vec3_xyz(2, 4, 8), .5));
 
 	// matrix
 }
