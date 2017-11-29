@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <xmmintrin.h>
+#include <pmmintrin.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>

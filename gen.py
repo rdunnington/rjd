@@ -2,6 +2,8 @@ includes = [
     "<stdint.h>",
     "<stddef.h>",
     "<stdbool.h>",
+    "<xmmintrin.h>", # SSE2
+    "<pmmintrin.h>"  # SSE3
 ]
 
 includes_impl = [

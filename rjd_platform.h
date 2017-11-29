@@ -18,5 +18,13 @@
 	#define RJD_COMPILER_CLANG 1
 #elif __GNUC__
 	#define RJD_COMPILER_GCC 1
+#else
+	#error Unknown platform.
+#endif
+
+#if RJD_COMPILER_MSVC
+	#define RJD_INLINE __forceinline
+#elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
+	#define RJD_INLINE static inline __attribute__(always_inline)
 #endif
 

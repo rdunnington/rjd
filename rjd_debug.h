@@ -35,13 +35,17 @@ struct rjd_logchannel
 #define RJD_NAMEGEN(a, b) RJD_NAMEGEN2(a, b)
 #define RJD_STATIC_ASSERT(condition) typedef char RJD_NAMEGEN(rjd_staticassert_failure_, __COUNTER__)[(condition) ? 1 : -1]
 
+#if RJD_COMPILER_MSVC
+	#define RJD_TRAP() __debugbreak()
+#elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
+	#define RJD_TRAP() __builtin_trap()
+#endif
+
 #if RJD_ENABLE_ASSERT
-	#define RJD_FORCECRASH() ((*(volatile int*)0) = 0xDEADDEAD)
 	#define RJD_ASSERT(condition) RJD_ASSERTMSG(condition, #condition)
-	#define RJD_ASSERTMSG(condition, ...) if (!(condition)) { RJD_LOG(__VA_ARGS__); RJD_FORCECRASH(); }
-	#define RJD_ASSERTFAIL(...) { RJD_LOG(__VA_ARGS__); RJD_FORCECRASH(); }
+	#define RJD_ASSERTMSG(condition, ...) if (!(condition)) { RJD_LOG(__VA_ARGS__); RJD_TRAP(); }
+	#define RJD_ASSERTFAIL(...) { RJD_LOG(__VA_ARGS__); RJD_TRAP(); }
 #else
-	#define RJD_FORCECRASH() ((*(int*)0) = 0xDEADDEAD)
 	#define RJD_ASSERT(condition, ...) 
 	#define RJD_ASSERTMSG(condition, ...) 
 	#define RJD_ASSERTFAIL(...)
@@ -97,7 +101,7 @@ void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* 
 	if (written < 0)
 	{
 		printf("Failed to format message.\n");
-		RJD_FORCECRASH();
+		RJD_TRAP();
 	}
 
 	static const char* formattedLog = "%s(%u): %s\n";
@@ -108,7 +112,7 @@ void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* 
 	if (sizeof(formatted) <= logLength + written)
 	{
 		printf("Static buffer not large enough.\n");
-		RJD_FORCECRASH();
+		RJD_TRAP();
 	}
 
 	const int size = sprintf(formatted, formattedLog, file, line, rawMessage);
