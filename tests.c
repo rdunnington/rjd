@@ -301,6 +301,16 @@ void test_array()
 	}
 }
 
+void expect_vec4(vec4 expected, vec4 actual) 
+{
+	if (!vec4_eq(expected, actual)) {
+		ASSERTFAIL("Expected (%.2f, %.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f, %.2f)", 
+			vec4_x(expected), vec4_y(expected), vec4_z(expected), vec4_w(expected),
+			vec4_x(actual), vec4_y(actual), vec4_z(actual), vec4_w(actual));
+	}
+}
+
+
 void expect_vec3(vec3 expected, vec3 actual) 
 {
 	if (!vec3_eq(expected, actual)) {
@@ -357,6 +367,37 @@ void test_math(void)
 	expect_int32(1, max32(-1, 1));
 	expect_int32(2, max32(2, 1));
 	expect_int32(1100, maxu32(10, 1100));
+
+	// vec4
+	expect_true(vec4_eq(vec4_zero(), vec4_zero()));
+	expect_true(vec4_eq(vec4_xyzw(1,2,3,4), vec4_xyzw(1,2,3,4)));
+	expect_vec4(vec4_zero(), vec4_xyzw(0,0,0,0));
+	expect_vec4(vec4_xyzw(1,1,0,1), vec4_add(vec4_xyzw(1,0,0,0), vec4_xyzw(0,1,0,1)));
+	expect_float(32, vec4_x(vec4_splat(32)));
+	expect_float(128, vec4_y(vec4_splat(128)));
+	expect_float(777, vec4_z(vec4_splat(777)));
+	expect_float(987234, vec4_w(vec4_splat(987234)));
+	expect_vec4(vec4_xyzw(7, 7, 9, 20), vec4_shuffle(vec4_xyzw(9,0,7,20), 2, 2, 0, 3));
+	expect_float(8, vec4_x(vec4_setx(vec4_zero(), 8)));
+	expect_float(8, vec4_y(vec4_sety(vec4_zero(), 8)));
+	expect_float(8, vec4_z(vec4_setz(vec4_zero(), 8)));
+	expect_float(8, vec4_w(vec4_setw(vec4_zero(), 8)));
+	expect_float(8, vec4_sum(vec4_xyzw(2, 2, 2, 2)));
+	expect_float(2, vec4_dot(vec4_xyzw(0,1,0,0), vec4_xyzw(0,2,0,0)));
+	expect_float(0, vec4_dot(vec4_xyzw(0,1,0,0), vec4_xyzw(1,0,0,0)));
+	expect_float(16, vec4_lengthsq(vec4_xyzw(4,0,0,0)));
+	expect_float(4, vec4_length(vec4_xyzw(4,0,0,0)));
+	expect_float(5, vec4_length(vec4_xyzw(3,0,0,4)));
+	expect_vec4(vec4_xyzw(1,0,0,0), vec4_normalize(vec4_xyzw(7368,0,0,0)));
+	expect_vec4(vec4_xyzw(26, 60, 44, 6), vec4_scale(vec4_xyzw(13, 30, 22, 3), 2));
+	expect_vec4(vec4_xyzw(3,3,3,3), vec4_add(vec4_xyzw(1,1,1,1), vec4_xyzw(2,2,2,2)));
+	expect_vec4(vec4_xyzw(-1,-1,-1,-1), vec4_sub(vec4_xyzw(1,1,1,1), vec4_xyzw(2,2,2,2)));
+	expect_vec4(vec4_xyzw(2,2,2,2), vec4_mul(vec4_xyzw(1,1,1,1), vec4_xyzw(2,2,2,2)));
+	expect_vec4(vec4_xyzw(.5,.5,.5,.5), vec4_div(vec4_xyzw(1,1,1,1), vec4_xyzw(2,2,2,2)));
+	expect_vec4(vec4_xyzw(23,45,21,5), vec4_min(vec4_xyzw(23,45,72,5), vec4_xyzw(43,75,21,6)));
+	expect_vec4(vec4_xyzw(43,75,72,6), vec4_max(vec4_xyzw(23,45,72,5), vec4_xyzw(43,75,21,6)));
+	expect_vec4(vec4_xyzw(1,0,0,0), vec4_project(vec4_xyzw(1,1,1,1), vec4_xyzw(1,0,0,0)));
+	expect_vec4(vec4_xyzw(1,2,4,8), vec4_lerp(vec4_zero(), vec4_xyzw(2, 4, 8, 16), .5));
 
 	// vec3
 	expect_true(vec3_eq(vec3_left(), vec3_left()));

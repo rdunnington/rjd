@@ -5,6 +5,9 @@
 #define RJD_MATH_PI (3.141592653589793238462643f)
 #define RJD_MATH_EPSILON (0.000001)
 
+////////////////////////////////////////////////////////////////////////////////
+// utils
+
 static inline uint32_t rjd_math_next_pow2(uint32_t v);
 static inline int32_t rjd_math_pow32(int32_t v, uint32_t power);
 static inline double rjd_math_remap(double v, double oldmin, double oldmax, double newmin, double newmax);
@@ -53,14 +56,49 @@ RJD_MATH_MAX_FUNCS(RJD_MATH_DECLARE_MAX_FUNC)
 	xmacro(rjd_math_clampu64, uint64_t)
 RJD_MATH_CLAMP_FUNCS(RJD_MATH_DECLARE_CLAMP_FUNC)
 
-// vector
+// vec4
 
-typedef struct
-{
+typedef struct {
+	__m128 v;
+} rjd_math_vec4;
+
+#define rjd_math_vec4_shuffle(v4, x, y, z, w) ((rjd_math_vec4){_mm_shuffle_ps((v4).v, (v4).v, _MM_SHUFFLE(w, z, y, x))})
+
+static inline rjd_math_vec4 rjd_math_vec4_zero(void);
+static inline rjd_math_vec4 rjd_math_vec4_xyzw(float x, float y, float z, float w);
+static inline rjd_math_vec4 rjd_math_vec4_splat(float v);
+static inline rjd_math_vec4 rjd_math_vec4_one(void);
+static inline rjd_math_vec4 rjd_math_vec4_setx(rjd_math_vec4 v, float x);
+static inline rjd_math_vec4 rjd_math_vec4_sety(rjd_math_vec4 v, float y);
+static inline rjd_math_vec4 rjd_math_vec4_setz(rjd_math_vec4 v, float z);
+static inline rjd_math_vec4 rjd_math_vec4_setw(rjd_math_vec4 v, float w);
+static inline float 		rjd_math_vec4_x(rjd_math_vec4 v);
+static inline float 		rjd_math_vec4_y(rjd_math_vec4 v);
+static inline float 		rjd_math_vec4_z(rjd_math_vec4 v);
+static inline float 		rjd_math_vec4_w(rjd_math_vec4 v);
+static inline float 		rjd_math_vec4_sum(rjd_math_vec4 v);
+static inline float 		rjd_math_vec4_dot(rjd_math_vec4 a, rjd_math_vec4 b);
+static inline float 		rjd_math_vec4_lengthsq(rjd_math_vec4 v);
+static inline float 		rjd_math_vec4_length(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_normalize(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s);
+static inline rjd_math_vec4 rjd_math_vec4_add(rjd_math_vec4 a, rjd_math_vec4 b);
+static inline rjd_math_vec4 rjd_math_vec4_sub(rjd_math_vec4 a, rjd_math_vec4 b);
+static inline rjd_math_vec4 rjd_math_vec4_mul(rjd_math_vec4 a, rjd_math_vec4 b);
+static inline rjd_math_vec4 rjd_math_vec4_div(rjd_math_vec4 a, rjd_math_vec4 b);
+static inline rjd_math_vec4 rjd_math_vec4_min(rjd_math_vec4 a, rjd_math_vec4 b);
+static inline rjd_math_vec4 rjd_math_vec4_max(rjd_math_vec4 a, rjd_math_vec4 b);
+static inline rjd_math_vec4 rjd_math_vec4_project(rjd_math_vec4 a, rjd_math_vec4 b);
+static inline rjd_math_vec4 rjd_math_vec4_lerp(rjd_math_vec4 a, rjd_math_vec4 b, float t);
+static inline bool			rjd_math_vec4_eq(rjd_math_vec4 a, rjd_math_vec4 b);
+
+// vec3
+
+typedef struct {
 	__m128 v;
 } rjd_math_vec3;
 
-#define rjd_math_vec3_shuffle(v3, x, y, z) ((rjd_math_vec3){_mm_shuffle_ps((v3).v, (v3).v, _MM_SHUFFLE(z, z, y, x))})
+#define rjd_math_vec3_shuffle(v3, x, y, z) ((rjd_math_vec3){_mm_shuffle_ps((v3).v, (v3).v, _MM_SHUFFLE(3, z, y, x))})
 
 static inline rjd_math_vec3 rjd_math_vec3_zero(void);
 static inline rjd_math_vec3 rjd_math_vec3_xyz(float x, float y, float z);
@@ -133,7 +171,38 @@ typedef struct
 	#define clampu32	rjd_math_clampu32
 	#define clampu64	rjd_math_clampu64
 
+	#define vec4 			rjd_math_vec4
+	#define vec4_shuffle	rjd_math_vec4_shuffle
+	#define vec4_zero     	rjd_math_vec4_zero
+	#define vec4_xyzw     	rjd_math_vec4_xyzw
+	#define vec4_splat    	rjd_math_vec4_splat
+	#define vec4_one      	rjd_math_vec4_one
+	#define vec4_setx     	rjd_math_vec4_setx
+	#define vec4_sety     	rjd_math_vec4_sety
+	#define vec4_setz     	rjd_math_vec4_setz
+	#define vec4_setw     	rjd_math_vec4_setw
+	#define vec4_x        	rjd_math_vec4_x
+	#define vec4_y        	rjd_math_vec4_y
+	#define vec4_z        	rjd_math_vec4_z
+	#define vec4_w        	rjd_math_vec4_w
+	#define vec4_sum      	rjd_math_vec4_sum
+	#define vec4_dot      	rjd_math_vec4_dot
+	#define vec4_lengthsq 	rjd_math_vec4_lengthsq
+	#define vec4_length   	rjd_math_vec4_length
+	#define vec4_normalize	rjd_math_vec4_normalize
+	#define vec4_scale    	rjd_math_vec4_scale
+	#define vec4_add      	rjd_math_vec4_add
+	#define vec4_sub      	rjd_math_vec4_sub
+	#define vec4_mul      	rjd_math_vec4_mul
+	#define vec4_div      	rjd_math_vec4_div
+	#define vec4_min      	rjd_math_vec4_min
+	#define vec4_max      	rjd_math_vec4_max
+	#define vec4_project  	rjd_math_vec4_project
+	#define vec4_lerp     	rjd_math_vec4_lerp
+	#define vec4_eq       	rjd_math_vec4_eq
+
 	#define vec3			rjd_math_vec3
+	#define vec3_shuffle  	rjd_math_vec3_shuffle
 	#define vec3_zero     	rjd_math_vec3_zero
 	#define vec3_xyz      	rjd_math_vec3_xyz
 	#define vec3_splat    	rjd_math_vec3_splat
@@ -144,7 +213,6 @@ typedef struct
 	#define vec3_right    	rjd_math_vec3_right
 	#define vec3_forward  	rjd_math_vec3_forward
 	#define vec3_back     	rjd_math_vec3_back
-	#define vec3_shuffle  	rjd_math_vec3_shuffle
 	#define vec3_yzx      	rjd_math_vec3_yzx
 	#define vec3_zxy      	rjd_math_vec3_zxy
 	#define vec3_setx     	rjd_math_vec3_setx
@@ -172,6 +240,8 @@ typedef struct
 	#define vec3_lerp     	rjd_math_vec3_lerp
 	#define vec3_eq       	rjd_math_vec3_eq
 #endif
+
+// implementation
 
 RJD_MATH_SIGN_FUNCS(RJD_MATH_DEFINE_SIGN_FUNC)
 RJD_MATH_ISEQUAL_FUNCS(RJD_MATH_DEFINE_ISEQUAL_FUNC)
@@ -209,13 +279,139 @@ static inline double rjd_math_remap(double v, double oldmin, double oldmax, doub
 	return ((v - oldmin) * newrange) / oldrange + newmin;
 }
 
-static inline rjd_math_vec3 rjd_math_vec3_zero(void) { 
-	rjd_math_vec3 v = { _mm_setzero_ps() };
+// vec3 <-> vec4 conversion helpers
+
+static inline rjd_math_vec4 rjd_math_vec3to4(rjd_math_vec3 v3) {
+	rjd_math_vec4 v4 = { v3.v };
+	return v4;
+}
+
+static inline rjd_math_vec3 rjd_math_vec4to3(rjd_math_vec4 v4) {
+	rjd_math_vec3 v3 = { v4.v };
+	return v3;
+}
+
+// vec4
+
+static inline rjd_math_vec4 rjd_math_vec4_zero(void) {
+	rjd_math_vec4 v = { _mm_setzero_ps() };
 	return v;
 }
-static inline rjd_math_vec3 rjd_math_vec3_xyz(float x, float y, float z) {
-	rjd_math_vec3 v = { _mm_set_ps(0, z, y, x) }; 
+static inline rjd_math_vec4 rjd_math_vec4_xyzw(float x, float y, float z, float w) {
+	rjd_math_vec4 v = { _mm_set_ps(w, z, y, x) }; 
 	return v;
+}
+static inline rjd_math_vec4 rjd_math_vec4_splat(float v) {
+	return rjd_math_vec4_xyzw(v,v,v,v);
+}
+static inline rjd_math_vec4 rjd_math_vec4_one(void) {
+	return rjd_math_vec4_splat(1);
+}
+static inline rjd_math_vec4 rjd_math_vec4_setx(rjd_math_vec4 v, float x) {
+	v.v = _mm_move_ss(v.v, rjd_math_vec4_splat(x).v);
+	return v;
+}
+static inline rjd_math_vec4 rjd_math_vec4_sety(rjd_math_vec4 v, float y) {
+	v = rjd_math_vec4_shuffle(v, 1, 0, 2, 3);
+	v = rjd_math_vec4_setx(v, y);
+	v = rjd_math_vec4_shuffle(v, 1, 0, 2, 3);
+	return v;
+}
+static inline rjd_math_vec4 rjd_math_vec4_setz(rjd_math_vec4 v, float z) {
+	v = rjd_math_vec4_shuffle(v, 2, 1, 0, 3);
+	v = rjd_math_vec4_setx(v, z);
+	v = rjd_math_vec4_shuffle(v, 2, 1, 0, 3);
+	return v;
+}
+static inline rjd_math_vec4 rjd_math_vec4_setw(rjd_math_vec4 v, float w) {
+	v = rjd_math_vec4_shuffle(v, 3, 1, 2, 0);
+	v = rjd_math_vec4_setx(v, w);
+	v = rjd_math_vec4_shuffle(v, 3, 1, 2, 0);
+	return v;
+}
+static inline float rjd_math_vec4_x(rjd_math_vec4 v) {
+	return _mm_cvtss_f32(v.v);
+}
+static inline float rjd_math_vec4_y(rjd_math_vec4 v) {
+	return rjd_math_vec4_x(rjd_math_vec4_shuffle(v, 1, 0, 2, 3));
+}
+static inline float rjd_math_vec4_z(rjd_math_vec4 v) {
+	return rjd_math_vec4_x(rjd_math_vec4_shuffle(v, 2, 1, 0, 3));
+}
+static inline float rjd_math_vec4_w(rjd_math_vec4 v) {
+	return rjd_math_vec4_x(rjd_math_vec4_shuffle(v, 3, 1, 2, 0));
+}
+static inline float rjd_math_vec4_sum(rjd_math_vec4 v) {
+	v.v = _mm_hadd_ps(v.v, v.v);
+	v.v = _mm_hadd_ps(v.v, v.v);
+	return rjd_math_vec4_x(v);
+}
+static inline float rjd_math_vec4_dot(rjd_math_vec4 a, rjd_math_vec4 b) {
+	rjd_math_vec4 product = rjd_math_vec4_mul(a,b);
+	return rjd_math_vec4_sum(product);
+}
+static inline float rjd_math_vec4_lengthsq(rjd_math_vec4 v) {
+	return rjd_math_vec4_dot(v, v);
+}
+static inline float rjd_math_vec4_length(rjd_math_vec4 v) {
+	return sqrt(rjd_math_vec4_lengthsq(v));
+}
+static inline rjd_math_vec4 rjd_math_vec4_normalize(rjd_math_vec4 v) {
+	float length = rjd_math_vec4_length(v);
+	RJD_ASSERT(length != 0);
+	rjd_math_vec4 l = rjd_math_vec4_splat(length);
+	return rjd_math_vec4_div(v, l);
+}
+static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s) {
+	rjd_math_vec4 scales = rjd_math_vec4_splat(s);
+	return rjd_math_vec4_mul(v, scales);
+}
+static inline rjd_math_vec4 rjd_math_vec4_add(rjd_math_vec4 a, rjd_math_vec4 b) {
+	a.v = _mm_add_ps(a.v, b.v);
+	return a;
+}
+static inline rjd_math_vec4 rjd_math_vec4_sub(rjd_math_vec4 a, rjd_math_vec4 b) {
+	a.v = _mm_sub_ps(a.v, b.v);
+	return a;
+}
+static inline rjd_math_vec4 rjd_math_vec4_mul(rjd_math_vec4 a, rjd_math_vec4 b) {
+	a.v = _mm_mul_ps(a.v, b.v);
+	return a;
+}
+static inline rjd_math_vec4 rjd_math_vec4_div(rjd_math_vec4 a, rjd_math_vec4 b) {
+	a.v = _mm_div_ps(a.v, b.v);
+	return a;
+}
+static inline rjd_math_vec4 rjd_math_vec4_min(rjd_math_vec4 a, rjd_math_vec4 b) {
+	a.v = _mm_min_ps(a.v, b.v);
+	return a;
+}
+static inline rjd_math_vec4 rjd_math_vec4_max(rjd_math_vec4 a, rjd_math_vec4 b) {
+	a.v = _mm_max_ps(a.v, b.v);
+	return a;
+}
+static inline rjd_math_vec4 rjd_math_vec4_project(rjd_math_vec4 a, rjd_math_vec4 b) {
+	float dot = rjd_math_vec4_dot(a, b);
+	float lb = rjd_math_vec4_length(b);
+	return rjd_math_vec4_scale(b, dot / lb);
+}
+static inline rjd_math_vec4 rjd_math_vec4_lerp(rjd_math_vec4 a, rjd_math_vec4 b, float t) {
+	rjd_math_vec4 v = rjd_math_vec4_sub(b, a);
+	v = rjd_math_vec4_scale(v, t);
+	v = rjd_math_vec4_add(v, a);
+	return v;
+}
+static inline bool rjd_math_vec4_eq(rjd_math_vec4 a, rjd_math_vec4 b) {
+	return (_mm_movemask_ps(_mm_cmpeq_ps(a.v, b.v)) & 0xF) == 0xF;
+}
+
+// vec3
+
+static inline rjd_math_vec3 rjd_math_vec3_zero(void) { 
+	return rjd_math_vec4to3(rjd_math_vec4_zero());
+}
+static inline rjd_math_vec3 rjd_math_vec3_xyz(float x, float y, float z) {
+	return rjd_math_vec4to3(rjd_math_vec4_xyzw(x,y,z,0));
 }
 static inline rjd_math_vec3 rjd_math_vec3_splat(float v) { return rjd_math_vec3_xyz(v,v,v); }
 static inline rjd_math_vec3 rjd_math_vec3_one(void) { return rjd_math_vec3_xyz(1,1,1); }
@@ -236,34 +432,25 @@ static inline rjd_math_vec3 rjd_math_vec3_setx(rjd_math_vec3 v, float x) {
 	return v;
 }
 static inline rjd_math_vec3 rjd_math_vec3_sety(rjd_math_vec3 v, float y) {
-	v = rjd_math_vec3_shuffle(v, 1, 0, 2);
-	v = rjd_math_vec3_setx(v, y);
-	v = rjd_math_vec3_shuffle(v, 1, 0, 2);
-	return v;
+	return rjd_math_vec4to3(rjd_math_vec4_sety(rjd_math_vec3to4(v), y));
 }
 static inline rjd_math_vec3 rjd_math_vec3_setz(rjd_math_vec3 v, float z) {
-	v = rjd_math_vec3_shuffle(v, 2, 1, 0);
-	v = rjd_math_vec3_setx(v, z);
-	v = rjd_math_vec3_shuffle(v, 2, 1, 0);
-	return v;
+	return rjd_math_vec4to3(rjd_math_vec4_setz(rjd_math_vec3to4(v), z));
 }
 static inline float rjd_math_vec3_x(rjd_math_vec3 v) {
-	return _mm_cvtss_f32(v.v);
+	return rjd_math_vec4_x(rjd_math_vec3to4(v));
 }
 static inline float rjd_math_vec3_y(rjd_math_vec3 v) {
-	return rjd_math_vec3_x(rjd_math_vec3_shuffle(v, 1, 0, 2));
+	return rjd_math_vec4_y(rjd_math_vec3to4(v));
 }
 static inline float rjd_math_vec3_z(rjd_math_vec3 v) {
-	return rjd_math_vec3_x(rjd_math_vec3_shuffle(v, 2, 1, 0));
+	return rjd_math_vec4_z(rjd_math_vec3to4(v));
 }
 static inline float rjd_math_vec3_sum(rjd_math_vec3 v) {
-	v.v = _mm_hadd_ps(v.v, v.v);
-	v.v = _mm_hadd_ps(v.v, v.v);
-	return rjd_math_vec3_x(v);
+	return rjd_math_vec4_sum(rjd_math_vec3to4(v));
 }
 static inline float rjd_math_vec3_dot(rjd_math_vec3 a, rjd_math_vec3 b) {
-	rjd_math_vec3 product = rjd_math_vec3_mul(a,b);
-	return rjd_math_vec3_sum(product);
+	return rjd_math_vec4_dot(rjd_math_vec3to4(a), rjd_math_vec3to4(b));
 }
 static inline float rjd_math_vec3_angle(rjd_math_vec3 a, rjd_math_vec3 b) {
 	float dot = rjd_math_vec3_dot(a, b);
@@ -272,36 +459,28 @@ static inline float rjd_math_vec3_angle(rjd_math_vec3 a, rjd_math_vec3 b) {
 	return acos(dot / (la * lb));
 }
 static inline float rjd_math_vec3_lengthsq(rjd_math_vec3 v) {
-	return rjd_math_vec3_dot(v, v);
+	return rjd_math_vec4_lengthsq(rjd_math_vec3to4(v));
 }
 static inline float rjd_math_vec3_length(rjd_math_vec3 v) {
-	return sqrt(rjd_math_vec3_lengthsq(v));
+	return rjd_math_vec4_length(rjd_math_vec3to4(v));
 }
 static inline rjd_math_vec3 rjd_math_vec3_normalize(rjd_math_vec3 v) {
-	float length = rjd_math_vec3_length(v);
-	RJD_ASSERT(length != 0);
-	rjd_math_vec3 l = rjd_math_vec3_splat(length);
-	return rjd_math_vec3_div(v, l);
+	return rjd_math_vec4to3(rjd_math_vec4_normalize(rjd_math_vec3to4(v)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s) {
-	rjd_math_vec3 scales = rjd_math_vec3_splat(s);
-	return rjd_math_vec3_mul(v, scales);
+	return rjd_math_vec4to3(rjd_math_vec4_scale(rjd_math_vec3to4(v), s));
 }
 static inline rjd_math_vec3 rjd_math_vec3_add(rjd_math_vec3 a, rjd_math_vec3 b) {
-	a.v = _mm_add_ps(a.v, b.v);
-	return a;
+	return rjd_math_vec4to3(rjd_math_vec4_add(rjd_math_vec3to4(a), rjd_math_vec3to4(b)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_sub(rjd_math_vec3 a, rjd_math_vec3 b) {
-	a.v = _mm_sub_ps(a.v, b.v);
-	return a;
+	return rjd_math_vec4to3(rjd_math_vec4_sub(rjd_math_vec3to4(a), rjd_math_vec3to4(b)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_mul(rjd_math_vec3 a, rjd_math_vec3 b) {
-	a.v = _mm_mul_ps(a.v, b.v);
-	return a;
+	return rjd_math_vec4to3(rjd_math_vec4_mul(rjd_math_vec3to4(a), rjd_math_vec3to4(b)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_div(rjd_math_vec3 a, rjd_math_vec3 b) {
-	a.v = _mm_div_ps(a.v, b.v);
-	return a;
+	return rjd_math_vec4to3(rjd_math_vec4_div(rjd_math_vec3to4(a), rjd_math_vec3to4(b)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_cross(rjd_math_vec3 a, rjd_math_vec3 b) {
 	rjd_math_vec3 ap = rjd_math_vec3_mul(rjd_math_vec3_yzx(a), rjd_math_vec3_zxy(b));
@@ -309,17 +488,13 @@ static inline rjd_math_vec3 rjd_math_vec3_cross(rjd_math_vec3 a, rjd_math_vec3 b
 	return rjd_math_vec3_sub(ap, bp);
 }
 static inline rjd_math_vec3 rjd_math_vec3_min(rjd_math_vec3 a, rjd_math_vec3 b) {
-	a.v = _mm_min_ps(a.v, b.v);
-	return a;
+	return rjd_math_vec4to3(rjd_math_vec4_min(rjd_math_vec3to4(a), rjd_math_vec3to4(b)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_max(rjd_math_vec3 a, rjd_math_vec3 b) {
-	a.v = _mm_max_ps(a.v, b.v);
-	return a;
+	return rjd_math_vec4to3(rjd_math_vec4_max(rjd_math_vec3to4(a), rjd_math_vec3to4(b)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_project(rjd_math_vec3 a, rjd_math_vec3 b) {
-	float dot = rjd_math_vec3_dot(a, b);
-	float lb = rjd_math_vec3_length(b);
-	return rjd_math_vec3_scale(b, dot / lb);
+	return rjd_math_vec4to3(rjd_math_vec4_project(rjd_math_vec3to4(a), rjd_math_vec3to4(b)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_reflect(rjd_math_vec3 v, rjd_math_vec3 n) {
 	RJD_ASSERT(rjd_math_vec3_eq(n, rjd_math_vec3_normalize(n)));
@@ -327,12 +502,9 @@ static inline rjd_math_vec3 rjd_math_vec3_reflect(rjd_math_vec3 v, rjd_math_vec3
 	return rjd_math_vec3_sub(v, projected);
 }
 static inline rjd_math_vec3 rjd_math_vec3_lerp(rjd_math_vec3 a, rjd_math_vec3 b, float t) {
-	rjd_math_vec3 v = rjd_math_vec3_sub(b, a);
-	v = rjd_math_vec3_scale(v, t);
-	v = rjd_math_vec3_add(v, a);
-	return v;
+	return rjd_math_vec4to3(rjd_math_vec4_lerp(rjd_math_vec3to4(a), rjd_math_vec3to4(b), t));
 }
 static inline bool rjd_math_vec3_eq(rjd_math_vec3 a, rjd_math_vec3 b) {
-	return (_mm_movemask_ps(_mm_cmpeq_ps(a.v, b.v)) & 7) == 7;
+	return (_mm_movemask_ps(_mm_cmpeq_ps(a.v, b.v)) & 7) == 7; // 7 is the platform-independent version of 0b111
 }
 
