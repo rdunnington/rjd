@@ -40,6 +40,8 @@ void rjd_free(const void* mem, struct rjd_alloc_context* context);
 #define rjd_malloc(type, context) ((type*)rjd_malloc_impl(sizeof(type), context))
 #define rjd_malloc_array(type, count, context) ((type*)rjd_malloc_impl(sizeof(type) * count, context))
 
+#define RJD_ISALIGNED(p, align) ((p) & ((align)-1) == 0)
+
 #if RJD_ENABLE_SHORTNAMES
 	#define alloc_initdefault    rjd_alloc_initdefault
 	#define alloc_initglobal     rjd_alloc_initglobal
