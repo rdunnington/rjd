@@ -41,8 +41,18 @@ void rjd_free(const void* mem, struct rjd_alloc_context* context);
 #define rjd_malloc_array(type, count, context) ((type*)rjd_malloc_impl(sizeof(type) * count, context))
 
 #define RJD_ISALIGNED(p, align) ((p) & ((align)-1) == 0)
+#if RJD_COMPILER_MSVC
+	#define RJD_FORCEALIGN(alignment) (__declspec(alignment))
+#elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
+	#define RJD_FORCEALIGN(alignment) (__attribute__((aligned(alignment))))
+#else
+	#error Unhandled compiler
+#endif
 
 #if RJD_ENABLE_SHORTNAMES
+	#define ISALIGNED RJD_ISALIGNED
+	#define FORCEALIGN RJD_FORCEALIGN
+	
 	#define alloc_initdefault    rjd_alloc_initdefault
 	#define alloc_initglobal     rjd_alloc_initglobal
 	#define alloc_initscoped     rjd_alloc_initscoped
