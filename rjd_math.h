@@ -56,6 +56,17 @@ RJD_MATH_MAX_FUNCS(RJD_MATH_DECLARE_MAX_FUNC)
 	xmacro(rjd_math_clampu64, uint64_t)
 RJD_MATH_CLAMP_FUNCS(RJD_MATH_DECLARE_CLAMP_FUNC)
 
+
+static inline double rjd_math_remap(double v, double oldmin, double oldmax, double newmin, double newmax)
+
+#define RJD_MATH_DECLARE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax);
+#define RJD_MATH_DEFINE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax) { float oldrange = oldmax - oldmin; float newrange = newmax - newmin; return ((v - oldmin) * newrange) / oldrange + newmin; }
+#define RJD_MATH_REMAP_FUNCS(xmacro)	\
+	xmacro(rjd_math_remap, double)		\
+	xmacro(rjd_math_remapf, float)
+RJD_MATH_REMAP_FUNCS(RJD_MATH_DECLARE_REMAP_FUNC)
+
+
 // vec4
 
 typedef struct {
@@ -176,6 +187,7 @@ static inline void rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
 	#define isequal		rjd_math_isequal
 	#define isequalf	rjd_math_isequalf
 	#define remap		rjd_math_remap
+	#define remapf		rjd_math_remapf
 
 	#define min32		rjd_math_min32
 	#define min64		rjd_math_min64
@@ -273,6 +285,7 @@ RJD_MATH_ISEQUAL_FUNCS(RJD_MATH_DEFINE_ISEQUAL_FUNC)
 RJD_MATH_MIN_FUNCS(RJD_MATH_DEFINE_MIN_FUNC)
 RJD_MATH_MAX_FUNCS(RJD_MATH_DEFINE_MAX_FUNC)
 RJD_MATH_CLAMP_FUNCS(RJD_MATH_DEFINE_CLAMP_FUNC)
+RJD_MATH_REMAP_FUNCS(RJD_MATH_DEFINE_REMAP_FUNC)
 
 static inline uint32_t rjd_math_next_pow2(uint32_t v) 
 {
@@ -295,13 +308,6 @@ static inline int32_t rjd_math_pow32(int32_t v, uint32_t power)
 		--power;
 	}
 	return r;
-}
-
-static inline double rjd_math_remap(double v, double oldmin, double oldmax, double newmin, double newmax)
-{
-	float oldrange = oldmax - oldmin;
-	float newrange = newmax - newmin;
-	return ((v - oldmin) * newrange) / oldrange + newmin;
 }
 
 // vec3 <-> vec4 conversion helpers
