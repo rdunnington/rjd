@@ -40,19 +40,7 @@ void rjd_free(const void* mem, struct rjd_alloc_context* context);
 #define rjd_malloc(type, context) ((type*)rjd_malloc_impl(sizeof(type), context))
 #define rjd_malloc_array(type, count, context) ((type*)rjd_malloc_impl(sizeof(type) * count, context))
 
-#define RJD_ISALIGNED(p, align) ((p) & ((align)-1) == 0)
-#if RJD_COMPILER_MSVC
-	#define RJD_FORCEALIGN(alignment) (__declspec(alignment))
-#elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
-	#define RJD_FORCEALIGN(alignment) (__attribute__((aligned(alignment))))
-#else
-	#error Unhandled compiler
-#endif
-
 #if RJD_ENABLE_SHORTNAMES
-	#define ISALIGNED RJD_ISALIGNED
-	#define FORCEALIGN RJD_FORCEALIGN
-	
 	#define alloc_initdefault    rjd_alloc_initdefault
 	#define alloc_initglobal     rjd_alloc_initglobal
 	#define alloc_initscoped     rjd_alloc_initscoped
@@ -69,6 +57,11 @@ static struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size);
 static void* rjd_linearheap_malloc(size_t size, void* heap);
 static void rjd_free_scoped_noop(void* mem, void* heap);
 
+#if RJD_COMPILER_MSVC
+	static void* rjd_malloc_global_wrapper(size_t size);
+	static void rjd_free_global_wrapper(void* mem);
+#endif
+
 struct rjd_alloc_context rjd_alloc_initglobal(rjd_func_alloc a, rjd_func_free f)
 {
 	struct rjd_alloc_context context = { a, f, NULL, NULL, NULL };
@@ -83,7 +76,11 @@ struct rjd_alloc_context rjd_alloc_initscoped(rjd_func_alloc_scoped a, rjd_func_
 
 struct rjd_alloc_context rjd_alloc_initdefault()
 {
-	return rjd_alloc_initglobal(malloc, free);
+	#if RJD_COMPILER_MSVC
+		return rjd_alloc_initglobal(rjd_malloc_global_wrapper, rjd_free_global_wrapper);
+	#else
+		return rjd_alloc_initglobal(malloc, free);
+	#endif
 }
 
 struct rjd_alloc_context rjd_alloc_initlinearheap(void* mem, size_t heapsize)
@@ -144,6 +141,18 @@ static void rjd_free_scoped_noop(void* mem, void* heap)
 	RJD_UNUSED_PARAM(mem);
 	RJD_UNUSED_PARAM(heap);
 }
+
+#if RJD_COMPILER_MSVC
+	static void* rjd_malloc_global_wrapper(size_t size)
+	{
+		return malloc(size);
+	}
+	
+	static void rjd_free_global_wrapper(void* mem)
+	{
+		free(mem);
+	}
+#endif
 
 #endif // RJD_IMPL
 

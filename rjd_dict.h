@@ -51,7 +51,7 @@ void rjd_dict_insert(struct rjd_dict* dict, const char* key, void* value)
 	RJD_ASSERT(dict);
 	RJD_ASSERT(key);
 
-	const float load = dict->keys ? (dict->count + 1) / (const float)rjd_array_capacity(dict->keys) : 1;
+	const float load = dict->keys ? (dict->count + 1) / (float)rjd_array_capacity(dict->keys) : 1;
 	if (load > 0.6) {
 		uint32_t capacity = dict->keys ? rjd_array_capacity(dict->keys) * 2 : 32;
 

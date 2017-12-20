@@ -10,7 +10,6 @@
 
 static inline uint32_t rjd_math_next_pow2(uint32_t v);
 static inline int32_t rjd_math_pow32(int32_t v, uint32_t power);
-static inline double rjd_math_remap(double v, double oldmin, double oldmax, double newmin, double newmax);
 
 #define RJD_MATH_DECLARE_SIGN_FUNC(name, type) static inline type name(type v);
 #define RJD_MATH_DEFINE_SIGN_FUNC(name, type) static inline type name(type v) { return (v < 0) ? -1 : 1; }
@@ -57,8 +56,6 @@ RJD_MATH_MAX_FUNCS(RJD_MATH_DECLARE_MAX_FUNC)
 RJD_MATH_CLAMP_FUNCS(RJD_MATH_DECLARE_CLAMP_FUNC)
 
 
-static inline double rjd_math_remap(double v, double oldmin, double oldmax, double newmin, double newmax)
-
 #define RJD_MATH_DECLARE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax);
 #define RJD_MATH_DEFINE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax) { float oldrange = oldmax - oldmin; float newrange = newmax - newmin; return ((v - oldmin) * newrange) / oldrange + newmin; }
 #define RJD_MATH_REMAP_FUNCS(xmacro)	\
@@ -91,7 +88,9 @@ static inline float 		rjd_math_vec4_sum(rjd_math_vec4 v);
 static inline float 		rjd_math_vec4_dot(rjd_math_vec4 a, rjd_math_vec4 b);
 static inline float 		rjd_math_vec4_lengthsq(rjd_math_vec4 v);
 static inline float 		rjd_math_vec4_length(rjd_math_vec4 v);
-//static inline float 		rjd_math_vec4_i(rjd_math_vec4 v);
+static inline float 		rjd_math_vec4_i(rjd_math_vec4 v, size_t index);
+static inline float			rjd_math_vec4_hmin(rjd_math_vec4 v);
+static inline float			rjd_math_vec4_hmax(rjd_math_vec4 v);
 static inline rjd_math_vec4 rjd_math_vec4_normalize(rjd_math_vec4 v);
 static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s);
 static inline rjd_math_vec4 rjd_math_vec4_neg(rjd_math_vec4 v);
@@ -104,6 +103,8 @@ static inline rjd_math_vec4 rjd_math_vec4_max(rjd_math_vec4 a, rjd_math_vec4 b);
 static inline rjd_math_vec4 rjd_math_vec4_project(rjd_math_vec4 a, rjd_math_vec4 b);
 static inline rjd_math_vec4 rjd_math_vec4_lerp(rjd_math_vec4 a, rjd_math_vec4 b, float t);
 static inline bool			rjd_math_vec4_eq(rjd_math_vec4 a, rjd_math_vec4 b);
+static inline bool			rjd_math_vec4_ge(rjd_math_vec4 a, rjd_math_vec4 b);
+static inline float*		rjd_math_vec4_write(rjd_math_vec4 v, float* out);
 
 // vec3
 
@@ -136,6 +137,8 @@ static inline float 		rjd_math_vec3_dot(rjd_math_vec3 a, rjd_math_vec3 b);
 static inline float 		rjd_math_vec3_angle(rjd_math_vec3 a, rjd_math_vec3 b);
 static inline float 		rjd_math_vec3_lengthsq(rjd_math_vec3 v);
 static inline float 		rjd_math_vec3_length(rjd_math_vec3 v);
+static inline float			rjd_math_vec3_hmin(rjd_math_vec3 v);
+static inline float			rjd_math_vec3_hmax(rjd_math_vec3 v);
 static inline rjd_math_vec3 rjd_math_vec3_normalize(rjd_math_vec3 v);
 static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s);
 static inline rjd_math_vec3 rjd_math_vec3_neg(rjd_math_vec3 v);
@@ -150,6 +153,9 @@ static inline rjd_math_vec3 rjd_math_vec3_project(rjd_math_vec3 a, rjd_math_vec3
 static inline rjd_math_vec3 rjd_math_vec3_reflect(rjd_math_vec3 a, rjd_math_vec3 b);
 static inline rjd_math_vec3 rjd_math_vec3_lerp(rjd_math_vec3 a, rjd_math_vec3 b, float t);
 static inline bool			rjd_math_vec3_eq(rjd_math_vec3 a, rjd_math_vec3 b);
+static inline bool			rjd_math_vec3_ge(rjd_math_vec3 a, rjd_math_vec3 b);
+static inline float*		rjd_math_vec3_write(rjd_math_vec3 v, float* out);
+static inline float*		rjd_math_vec3_writefast(rjd_math_vec3 v, float* out); // writes 4 floats to out
 
 // column-major 4x4 matrix
 
@@ -158,22 +164,27 @@ typedef struct {
 } rjd_math_mat4;
 
 static inline rjd_math_mat4 rjd_math_mat4_identity(void);
-static inline rjd_math_mat4 rjd_math_mat4_translation(vec3 trans);
-static inline rjd_math_mat4 rjd_math_mat4_rotation(rjd_math_quat rot);
+static inline rjd_math_mat4 rjd_math_mat4_translation(rjd_math_vec3 trans);
+//static inline rjd_math_mat4 rjd_math_mat4_rotation(rjd_math_quat rot);
+static inline rjd_math_mat4 rjd_math_mat4_angleaxis(float angle, rjd_math_vec3 axis);
 static inline rjd_math_mat4 rjd_math_mat4_rotationx(float angle);
 static inline rjd_math_mat4 rjd_math_mat4_rotationy(float angle);
 static inline rjd_math_mat4 rjd_math_mat4_rotationz(float angle);
-static inline rjd_math_mat4 rjd_math_mat4_scaling(vec3 scale);
+static inline rjd_math_mat4 rjd_math_mat4_rotationbasis(rjd_math_vec3 x, rjd_math_vec3 y, rjd_math_vec3 z);
+static inline rjd_math_mat4 rjd_math_mat4_scaling(float scale);
+static inline rjd_math_mat4 rjd_math_mat4_scaling_nonuniform(rjd_math_vec3 scale);
 static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b);
 static inline rjd_math_mat4 rjd_math_mat4_mul(rjd_math_mat4 a, rjd_math_mat4 b);
+static inline rjd_math_vec3 rjd_math_mat4_mulv3(rjd_math_mat4 m, rjd_math_vec3 v);
+static inline rjd_math_vec4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v);
 static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m);
 static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m);
-static inline rjd_math_mat4 rjd_math_mat4_frustum();
-static inline rjd_math_mat4 rjd_math_mat4_ortho();
-static inline rjd_math_mat4 rjd_math_mat4_perspective();
+static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float top, float bot, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_ortho(float left, float right, float top, float bot, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_perspective(float y_fov, float aspect, float near, float far);
 static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
-static inline void rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out);
-static inline void rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
+static inline float*		rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out);
+static inline float*		rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
 
 #ifdef RJD_ENABLE_SHORTNAMES
 	#define PI		RJD_MATH_PI
@@ -223,7 +234,9 @@ static inline void rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
 	#define vec4_dot      	rjd_math_vec4_dot
 	#define vec4_lengthsq 	rjd_math_vec4_lengthsq
 	#define vec4_length   	rjd_math_vec4_length
-	//#define vec4_i			rjd_math_vec4_i
+	#define vec4_i			rjd_math_vec4_i
+	#define vec4_hmin		rjd_math_vec4_hmin
+	#define vec4_hmax		rjd_math_vec4_hmax
 	#define vec4_normalize	rjd_math_vec4_normalize
 	#define vec4_scale    	rjd_math_vec4_scale
 	#define vec4_neg		rjd_math_vec4_neg
@@ -236,6 +249,8 @@ static inline void rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
 	#define vec4_project  	rjd_math_vec4_project
 	#define vec4_lerp     	rjd_math_vec4_lerp
 	#define vec4_eq       	rjd_math_vec4_eq
+	#define vec4_ge			rjd_math_vec4_ge
+	#define vec4_write		rjd_math_vec4_write
 
 	#define vec3			rjd_math_vec3
 	#define vec3_shuffle  	rjd_math_vec3_shuffle
@@ -262,6 +277,8 @@ static inline void rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
 	#define vec3_angle    	rjd_math_vec3_angle
 	#define vec3_lengthsq 	rjd_math_vec3_lengthsq
 	#define vec3_length   	rjd_math_vec3_length
+	#define vec3_hmin		rjd_math_vec3_hmin
+	#define vec3_hmax		rjd_math_vec3_hmax
 	#define vec3_normalize	rjd_math_vec3_normalize
 	#define vec3_scale    	rjd_math_vec3_scale
 	#define vec3_neg    	rjd_math_vec3_neg
@@ -276,6 +293,9 @@ static inline void rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
 	#define vec3_reflect  	rjd_math_vec3_reflect
 	#define vec3_lerp     	rjd_math_vec3_lerp
 	#define vec3_eq       	rjd_math_vec3_eq
+	#define vec3_ge       	rjd_math_vec3_ge
+	#define vec3_write		rjd_math_vec3_write
+	#define vec3_writefast	rjd_math_vec3_writefast
 #endif
 
 // implementation
@@ -322,9 +342,14 @@ static inline rjd_math_vec3 rjd_math_vec4to3(rjd_math_vec4 v4) {
 	return v3;
 }
 
-static inline rjd_math_vec3to4w(rjd_math_vec3 v3, float w) {
+static inline rjd_math_vec4 rjd_math_vec3to4w(rjd_math_vec3 v3, float w) {
 	rjd_math_vec4 v4 = rjd_math_vec3to4(v3);
 	return rjd_math_vec4_setw(v4, w);
+}
+
+static inline rjd_math_vec3 rjd_math_vec4to3w(rjd_math_vec4 v4) {
+	v4 = rjd_math_vec4_setw(v4, 0);
+	return rjd_math_vec4to3(v4);
 }
 
 // vec4
@@ -337,8 +362,8 @@ static inline rjd_math_vec4 rjd_math_vec4_xyzw(float x, float y, float z, float 
 	rjd_math_vec4 v = { _mm_set_ps(w, z, y, x) }; 
 	return v;
 }
-static inline rjd_math_vec4 rjd_math_vec4_splat(float v) {
-	rjd_math_vec4 v = { _mm_set1_ps(v) };
+static inline rjd_math_vec4 rjd_math_vec4_splat(float f) {
+	rjd_math_vec4 v = { _mm_set1_ps(f) };
 	return v;
 }
 static inline rjd_math_vec4 rjd_math_vec4_one(void) {
@@ -393,10 +418,30 @@ static inline float rjd_math_vec4_lengthsq(rjd_math_vec4 v) {
 static inline float rjd_math_vec4_length(rjd_math_vec4 v) {
 	return sqrt(rjd_math_vec4_lengthsq(v));
 }
-//static inline float rjd_math_vec4_i(rjd_math_vec4 v, size_t index) {
-//	return rjd_math_vec4_x
-//	//return rjd_math_vec4_x(rjd_math_vec4_shuffle(v, index, index, index, index));
-//}
+static inline float rjd_math_vec4_hmin(rjd_math_vec4 v) {
+	v = rjd_math_vec4_min(v, rjd_math_vec4_shuffle(v,1,1,2,3));
+	v = rjd_math_vec4_min(v, rjd_math_vec4_shuffle(v,2,1,2,3));
+	v = rjd_math_vec4_min(v, rjd_math_vec4_shuffle(v,3,1,2,3));
+	return rjd_math_vec4_x(v);
+}
+static inline float rjd_math_vec4_hmax(rjd_math_vec4 v) {
+	v = rjd_math_vec4_max(v, rjd_math_vec4_shuffle(v,1,1,2,3));
+	v = rjd_math_vec4_max(v, rjd_math_vec4_shuffle(v,2,1,2,3));
+	v = rjd_math_vec4_max(v, rjd_math_vec4_shuffle(v,3,1,2,3));
+	return rjd_math_vec4_x(v);
+}
+static inline float rjd_math_vec4_i(rjd_math_vec4 v, size_t index) {
+	switch(index) {
+		case 0:	v = rjd_math_vec4_shuffle(v,0,0,0,0); break;
+		case 1:	v = rjd_math_vec4_shuffle(v,1,1,1,1); break;
+		case 2:	v = rjd_math_vec4_shuffle(v,2,2,2,2); break;
+		case 3:	v = rjd_math_vec4_shuffle(v,3,3,3,3); break;
+		default:
+			RJD_ASSERTFAIL("index must be between 0 and 3");
+			break;
+	}
+	return rjd_math_vec4_x(v);
+}
 static inline rjd_math_vec4 rjd_math_vec4_normalize(rjd_math_vec4 v) {
 	float length = rjd_math_vec4_length(v);
 	RJD_ASSERT(length != 0);
@@ -447,6 +492,14 @@ static inline rjd_math_vec4 rjd_math_vec4_lerp(rjd_math_vec4 a, rjd_math_vec4 b,
 }
 static inline bool rjd_math_vec4_eq(rjd_math_vec4 a, rjd_math_vec4 b) {
 	return (_mm_movemask_ps(_mm_cmpeq_ps(a.v, b.v)) & 0xF) == 0xF;
+}
+static inline bool rjd_math_vec4_ge(rjd_math_vec4 a, rjd_math_vec4 b) {
+	return (_mm_movemask_ps(_mm_cmpge_ps(a.v, b.v)) & 0xF) == 0xF;
+}
+static inline float* rjd_math_vec4_write(rjd_math_vec4 v, float* out) {
+	RJD_ASSERT(RJD_ISALIGNED(out, 16));
+	_mm_stream_ps(out,  v.v);
+	return out + 4;
 }
 
 // vec3
@@ -508,6 +561,16 @@ static inline float rjd_math_vec3_lengthsq(rjd_math_vec3 v) {
 static inline float rjd_math_vec3_length(rjd_math_vec3 v) {
 	return rjd_math_vec4_length(rjd_math_vec3to4(v));
 }
+static inline float rjd_math_vec3_hmin(rjd_math_vec3 v) {
+	v = rjd_math_vec3_min(v, rjd_math_vec3_shuffle(v,1,1,2));
+	v = rjd_math_vec3_min(v, rjd_math_vec3_shuffle(v,2,1,2));
+	return rjd_math_vec3_x(v);
+}
+static inline float rjd_math_vec3_hmax(rjd_math_vec3 v) {
+	v = rjd_math_vec3_max(v, rjd_math_vec3_shuffle(v,1,1,2));
+	v = rjd_math_vec3_max(v, rjd_math_vec3_shuffle(v,2,1,2));
+	return rjd_math_vec3_x(v);
+}
 static inline rjd_math_vec3 rjd_math_vec3_normalize(rjd_math_vec3 v) {
 	return rjd_math_vec4to3(rjd_math_vec4_normalize(rjd_math_vec3to4(v)));
 }
@@ -515,7 +578,7 @@ static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s) {
 	return rjd_math_vec4to3(rjd_math_vec4_scale(rjd_math_vec3to4(v), s));
 }
 static inline rjd_math_vec3 rjd_math_vec3_neg(rjd_math_vec3 v) {
-	return rjd_math_vec4to3(rjd_math_vec4_neg(v));
+	return rjd_math_vec4to3(rjd_math_vec4_neg(rjd_math_vec3to4(v)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_add(rjd_math_vec3 a, rjd_math_vec3 b) {
 	return rjd_math_vec4to3(rjd_math_vec4_add(rjd_math_vec3to4(a), rjd_math_vec3to4(b)));
@@ -554,18 +617,22 @@ static inline rjd_math_vec3 rjd_math_vec3_lerp(rjd_math_vec3 a, rjd_math_vec3 b,
 static inline bool rjd_math_vec3_eq(rjd_math_vec3 a, rjd_math_vec3 b) {
 	return (_mm_movemask_ps(_mm_cmpeq_ps(a.v, b.v)) & 7) == 7; // 7 is the platform-independent version of 0b111
 }
+static inline bool rjd_math_vec3_ge(rjd_math_vec3 a, rjd_math_vec3 b) {
+	return (_mm_movemask_ps(_mm_cmpge_ps(a.v, b.v)) & 7) == 7;
+}
+static inline float* rjd_math_vec3_write(rjd_math_vec3 v, float* out) {
+	RJD_FORCEALIGN(float, 16) tmp[4];
+	_mm_stream_ps(tmp, v.v);
+	memcpy(out, tmp, sizeof(float) * 3);
+	return out + 3;
+}
+static inline float* rjd_math_vec3_writefast(rjd_math_vec3 v, float* out) {
+	RJD_ASSERT(RJD_ISALIGNED(out, 16));
+	_mm_stream_ps(out, v.v);
+	return out + 3;
+}
 
 // mat4
-
-//static inline rjd_math_vec4 rjd_math_mat4_row(rjd_math_mat4 m, size_t index) {
-//	RJD_ASSERT(index < countof(m.m));
-//
-//	float x = rjd_math_vec4_i(m.m[0], index);
-//	float y = rjd_math_vec4_i(m.m[1], index);
-//	float z = rjd_math_vec4_i(m.m[2], index);
-//	float w = rjd_math_vec4_i(m.m[3], index);
-//	return rjd_math_vec4_xyzw(x,y,z,w);
-//}
 
 static inline rjd_math_mat4 rjd_math_mat4_identity(void) {
 	rjd_math_mat4 m;
@@ -587,24 +654,45 @@ static inline rjd_math_mat4 rjd_math_mat4_angleaxis(float angle, rjd_math_vec3 a
 	rjd_math_mat4 m;
 
 	// TODO optimize
-	float c = cos(angle);
-	float s = sin(angle);
+	float c = cosf(angle);
+	float k = 1 - c;
+	float s = sinf(angle);
 
-	float m11 = x*x + c*(1 - x*x*);
-	float m21 = x*y*(1-c) + z*s;
-	float m31 = x*z*(1-c) - y*s;
+	float x = rjd_math_vec3_x(axis);
+	float y = rjd_math_vec3_y(axis);
+	float z = rjd_math_vec3_z(axis);
 
-	float m12 = x*y*(1-c) - z*s;
-	float m22 = y*y + c*(1-y*y);
-	float m32 = y*z*(1 - c) + x*s;
+	//rjd_math_vec4 axis4 = rjd_math_vec3to4w(axis,1); // x,y,z,1
+	//rjd_math_vec4 tmp1 = rjd_math_vec4_mul(axis4, rjd_math_vec4_xyzw(s,s,s,c)); // x*s, y*s, z*s, c
+	//rjd_math_vec4 vk = rjd_math_vec4_splat(k);
 
-	float m13 = x*z*(1-c) + y*s;
-	float m23 = y*z*(1-c) - x*s;
-	float m33 = z*z + c*(1-z*z);
+	//rjd_math_vec4 v0 = rjd_math_vec4_mul(axis4, rjd_math_vec4_shuffle(axis4,0,0,0,3));
+	//v0 = rjd_math_vec4_mul(v0, vk);
 
-	m.m[0] = rjd_math_vec4_xyzw(m11, m21, m31, 0);
-	m.m[1] = rjd_math_vec4_xyzw(m12, m22, m32, 0);
-	m.m[2] = rjd_math_vec4_xyzw(m13, m23, m33, 0);
+	//v0 = rjd_math_vec4_add(v0, rjd_math_vec4_shuffle(tmp1,3,2,1));
+
+	//m.m[0] = 
+
+
+	//vec3 diagonal = rjd_math_vec3_mul(axis, axis);
+	//diagonal = rjd_math_vec3_mul(diagonal, veck);
+	//diagonal = rjd_math_vec3_add(diagonal, rjd_math_vec3_splat(c));
+	
+	float m00 = k*x*x + c;
+	float m10 = k*x*y + z*s;
+	float m20 = k*x*z - y*s;
+
+	float m01 = k*x*y - z*s;
+	float m11 = k*y*y + c;
+	float m21 = k*y*z + x*s;
+
+	float m02 = k*x*z + y*s;
+	float m12 = k*y*z - x*s;
+	float m22 = k*z*z + c;
+
+	m.m[0] = rjd_math_vec4_xyzw(m00, m10, m20, 0);
+	m.m[1] = rjd_math_vec4_xyzw(m01, m11, m21, 0);
+	m.m[2] = rjd_math_vec4_xyzw(m02, m12, m22, 0);
 	m.m[3] = rjd_math_vec4_xyzw(  0,   0,   0, 1);
 	return m;
 }
@@ -617,6 +705,13 @@ static inline rjd_math_mat4 rjd_math_mat4_rotationy(float angle) {
 static inline rjd_math_mat4 rjd_math_mat4_rotationz(float angle) {
 	return rjd_math_mat4_angleaxis(angle, rjd_math_vec3_forward());
 }
+static inline rjd_math_mat4 rjd_math_mat4_rotationbasis(rjd_math_vec3 x, rjd_math_vec3 y, rjd_math_vec3 z) {
+	rjd_math_vec4 xx = rjd_math_vec3to4(x);
+	rjd_math_vec4 yy = rjd_math_vec3to4(y);
+	rjd_math_vec4 zz = rjd_math_vec3to4(z);
+	rjd_math_mat4 m = { { xx, yy, zz, rjd_math_vec4_xyzw(0,0,0,1) } };
+	return m;
+}
 static inline rjd_math_mat4 rjd_math_mat4_scaling(float s) {
 	rjd_math_mat4 m;
 	m.m[0] = rjd_math_vec4_xyzw(s,0,0,0);
@@ -625,9 +720,21 @@ static inline rjd_math_mat4 rjd_math_mat4_scaling(float s) {
 	m.m[3] = rjd_math_vec4_xyzw(0,0,0,1);
 	return m;
 }
+static inline rjd_math_mat4 rjd_math_mat4_scaling_nonuniform(rjd_math_vec3 scale) {
+	float x = rjd_math_vec3_x(scale);
+	float y = rjd_math_vec3_y(scale);
+	float z = rjd_math_vec3_z(scale);
+
+	rjd_math_mat4 m;
+	m.m[0] = rjd_math_vec4_xyzw(x,0,0,0);
+	m.m[1] = rjd_math_vec4_xyzw(0,y,0,0);
+	m.m[2] = rjd_math_vec4_xyzw(0,0,z,0);
+	m.m[3] = rjd_math_vec4_xyzw(0,0,0,1);
+	return m;
+}
 static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) {
 	rjd_math_mat4 m;
-	for (size_t i = 0; i < countof(m.m); ++i) {
+	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
 		m.m[i] = rjd_math_vec4_add(a.m[i], b.m[i]);
 	}
 	return m;
@@ -636,14 +743,14 @@ static inline rjd_math_mat4 rjd_math_mat4_mul(rjd_math_mat4 a, rjd_math_mat4 b) 
 	rjd_math_mat4 t = rjd_math_mat4_transpose(b);
 	rjd_math_mat4 m;
 	for (size_t i = 0; i < countof(m.m); ++i) {
-		m[i] = rjd_math_mat4_mulv4(t, a.m[i]);
+		m.m[i] = rjd_math_mat4_mulv4(t, a.m[i]);
 	}
 	return m;
 }
-static inline rjd_math_mat4 rjd_math_mat4_mulv3(rjd_math_mat4 m, rjd_math_vec3 v) {
-	return rjd_math_mat4_mulv4(m, rjd_math_vec3to4w(v, 1));
+static inline rjd_math_vec3 rjd_math_mat4_mulv3(rjd_math_mat4 m, rjd_math_vec3 v) {
+	return rjd_math_vec4to3(rjd_math_mat4_mulv4(m, rjd_math_vec3to4w(v, 1)));
 }
-static inline rjd_math_mat4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v) {
+static inline rjd_math_vec4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v) {
 	// TODO optimize
 	float x = rjd_math_vec4_dot(m.m[0], v);
 	float y = rjd_math_vec4_dot(m.m[1], v);
@@ -651,15 +758,7 @@ static inline rjd_math_mat4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v
 	float w = rjd_math_vec4_dot(m.m[3], v);
 	return rjd_math_vec4_xyzw(x, y, z, w);
 }
-static inline rjd_math_mat4 rjd_math_mat4_mulv3(rjd_math_mat4 m, rjd_math_vec3 v) {
-	return rjd_math_mat4_mulv4(m, rjd_math_vec3to4w(v, 1));
-}
 static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
-	//rjd_math_vec4 m1 = m.m[0];
-	//rjd_math_vec4 m2 = m.m[1];
-	//rjd_math_vec4 m3 = m.m[2];
-	//rjd_math_vec4 m4 = m.m[3];
-
 	rjd_math_mat4 t = rjd_math_mat4_transpose(m);
 	rjd_math_vec4 t0 = t.m[0];
 	rjd_math_vec4 t1 = t.m[1];
@@ -711,33 +810,33 @@ static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
 	// inv.m[1].z = m00m23m31 + m01m20m33 + m03m21m30 - m00m21m33 - m01m23m30 - m03m20m31
 	// inv.m[1].w = m00m21m32 + m01m22m30 + m02m20m31 - m00m22m31 - m01m20m32 - m02m21m30
 	term = rjd_math_vec4_shuffle(t0,1,0,0,0);                         // m01,      m00,      m00,      m00
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,3,2,3,1); // m01m23,   m00m22,   m00m23,   m00m21
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,2,3,1,2); // m01m23m32,m00m22m33,m00m23m31,m00m21m32
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,3,2,3,1)); // m01m23,   m00m22,   m00m23,   m00m21
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,2,3,1,2)); // m01m23m32,m00m22m33,m00m23m31,m00m21m32
 	inv.m[1] = term;
 
 	term = rjd_math_vec4_shuffle(t0,2,2,1,1);                         // m02,      m02,      m01,      m01
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,1,3,0,2); // m02m21,   m02m23,   m01m20,   m01m22
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,3,0,3,0); // m02m21m33,m02m23m30,m01m20m33,m01m22m30
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,1,3,0,2)); // m02m21,   m02m23,   m01m20,   m01m22
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,3,0,3,0)); // m02m21m33,m02m23m30,m01m20m33,m01m22m30
 	inv.m[1] = rjd_math_vec4_add(inv.m[1], term);
 
 	term = rjd_math_vec4_shuffle(t0,3,3,3,2);                         // m03,      m03,      m03,      m02
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,2,0,1,0); // m03m22,   m03m20,   m03m21,   m02m20
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,1,0,0,1); // m03m22m31,m03m20m30,m03m21m30,m02m20m31
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,2,0,1,0)); // m03m22,   m03m20,   m03m21,   m02m20
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,1,0,0,1)); // m03m22m31,m03m20m30,m03m21m30,m02m20m31
 	inv.m[1] = rjd_math_vec4_add(inv.m[1], term);
 
 	term = rjd_math_vec4_shuffle(t0,1,0,0,0);                         // m01,      m00,      m00,      m00
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,2,3,1,2); // m01m22,   m00m23,   m00m21,   m00m22
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,3,2,3,1); // m01m22m33,m00m23m32,m00m21m33,m00m22m31
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,2,3,1,2)); // m01m22,   m00m23,   m00m21,   m00m22
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,3,2,3,1)); // m01m22m33,m00m23m32,m00m21m33,m00m22m31
 	inv.m[1] = rjd_math_vec4_sub(inv.m[1], term);
 
 	term = rjd_math_vec4_shuffle(t0,2,2,1,1);                         // m02,      m02,      m01,      m01
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,3,0,3,0); // m02m23,   m02m20,   m01m23,   m01m20
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,1,3,0,2); // m02m23m31,m02m20m33,m01m23m30,m01m20m32
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,3,0,3,0)); // m02m23,   m02m20,   m01m23,   m01m20
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,1,3,0,2)); // m02m23m31,m02m20m33,m01m23m30,m01m20m32
 	inv.m[1] = rjd_math_vec4_sub(inv.m[1], term);
 
 	term = rjd_math_vec4_shuffle(t0,3,3,3,2);                         // m03,      m03,      m03,      m02
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,1,2,0,1); // m03m21,   m03m22,   m03m20,   m02m21
-	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,2,0,1,0); // m03m21m32,m03m22m30,m03m20m31,m02m21m30
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,1,2,0,1)); // m03m21,   m03m22,   m03m20,   m02m21
+	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t3,2,0,1,0)); // m03m21m32,m03m22m30,m03m20m31,m02m21m30
 	inv.m[1] = rjd_math_vec4_sub(inv.m[1], term);
 
 	// third column
@@ -812,22 +911,23 @@ static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
 
 	rjd_math_vec4 det = rjd_math_vec4_mul(rjd_math_mat4_transpose(inv).m[0], m.m[0]);
 
-	det = _mm_hadd_ps(det);
-	det = _mm_hadd_ps(det);
-	det = rjd_math_vec4_shuffle(det_reciprocal,0,0,0,0);
+	det.v = _mm_hadd_ps(det.v, det.v);
+	det.v = _mm_hadd_ps(det.v, det.v);
+	det = rjd_math_vec4_shuffle(det,0,0,0,0);
 
 	RJD_ASSERTMSG(!rjd_math_isequalf(rjd_math_vec4_x(det), 0), "Matrix is not invertible - if you're not sure, check rjd_math_mat4_det() == 0 beforehand");
 
 	rjd_math_vec4 det_reciprocal = {_mm_rcp_ps(det.v)};
 
+	rjd_math_mat4 out;
 	for (size_t i = 0; i < countof(out.m); ++i) {
-		inv.m[i] = rjd_math_vec4_mul(det_reciprocal, inv.m[i]);
+		out.m[i] = rjd_math_vec4_mul(det_reciprocal, inv.m[i]);
 	}
 
 	// NOTE that intel's implementation is 82 intrinsics while this is at least 140(cofactor) + 9(determinant) + 
 	// 		12(transpose) + 12(transpose), but this implementation is more straightforward
 
-	return inv;
+	return out;
 }
 static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m) {
 	// TODO optimize with _mm_movelh_ps / _mm_movehl_ps
@@ -839,20 +939,20 @@ static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m) {
 	// v3 = m n o p -> d h l p
 
 	rjd_math_mat4 temp;
-	temp.m[0] = _mm_unpacklo_ps(m.m[0].v, m.m[1].v);
-	temp.m[1] = _mm_unpackhi_ps(m.m[0].v, m.m[1].v);
-	temp.m[2] = _mm_unpacklo_ps(m.m[2].v, m.m[3].v);
-	temp.m[3] = _mm_unpackhi_ps(m.m[2].v, m.m[3].v);
+	temp.m[0].v = _mm_unpacklo_ps(m.m[0].v, m.m[1].v);
+	temp.m[1].v = _mm_unpackhi_ps(m.m[0].v, m.m[1].v);
+	temp.m[2].v = _mm_unpacklo_ps(m.m[2].v, m.m[3].v);
+	temp.m[3].v = _mm_unpackhi_ps(m.m[2].v, m.m[3].v);
 
 	// v0 = a e b f
 	// v1 = c g d h
 	// v2 = i m j h
 	// v3 = k o l p
-	rjd_math_mat4 trans;
-	t.m[0] = _mm_unpacklo_ps(temp.m[0].v, temp.m[2]);
-	t.m[1] = _mm_unpackhi_ps(temp.m[0].v, temp.m[2]);
-	t.m[2] = _mm_unpacklo_ps(temp.m[1].v, temp.m[3]);
-	t.m[3] = _mm_unpackhi_ps(temp.m[1].v, temp.m[3]);
+	rjd_math_mat4 t;
+	t.m[0].v = _mm_unpacklo_ps(temp.m[0].v, temp.m[2].v);
+	t.m[1].v = _mm_unpackhi_ps(temp.m[0].v, temp.m[2].v);
+	t.m[2].v = _mm_unpacklo_ps(temp.m[1].v, temp.m[3].v);
+	t.m[3].v = _mm_unpackhi_ps(temp.m[1].v, temp.m[3].v);
 
 	// v0 = a e i m
 	// v1 = b j f h
@@ -870,27 +970,45 @@ static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m) {
 	return t;
 }
 static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float top, float bot, float near, float far) {
+	RJD_UNUSED_PARAM(left);
+	RJD_UNUSED_PARAM(right);
+	RJD_UNUSED_PARAM(top);
+	RJD_UNUSED_PARAM(bot);
+	RJD_UNUSED_PARAM(near);
+	RJD_UNUSED_PARAM(far);
+	return rjd_math_mat4_identity();
 }
 static inline rjd_math_mat4 rjd_math_mat4_ortho(float left, float right, float top, float bot, float near, float far) {
+	RJD_UNUSED_PARAM(left);
+	RJD_UNUSED_PARAM(right);
+	RJD_UNUSED_PARAM(top);
+	RJD_UNUSED_PARAM(bot);
+	RJD_UNUSED_PARAM(near);
+	RJD_UNUSED_PARAM(far);
+	return rjd_math_mat4_identity();
 }
 static inline rjd_math_mat4 rjd_math_mat4_perspective(float y_fov, float aspect, float near, float far) {
+	RJD_UNUSED_PARAM(y_fov);
+	RJD_UNUSED_PARAM(aspect);
+	RJD_UNUSED_PARAM(near);
+	RJD_UNUSED_PARAM(far);
+	return rjd_math_mat4_identity();
 }
 static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up) {
 	rjd_math_vec3 forward = rjd_math_vec3_normalize(rjd_math_vec3_sub(target, eye));
-	rjd_math_vec3 right = rjd_math_vec3_normalize(rjd_math_vec3_cross(forward, up));
-	up = rjd_math_vec3_normalize(rjd_math_vec3_cross(
+	rjd_math_vec3 left = rjd_math_vec3_normalize(rjd_math_vec3_cross(up, forward));
+	up = rjd_math_vec3_normalize(rjd_math_vec3_cross(forward, left));
 
-	rjd_math_mat4 rot = rjd_math_mat4_rotationbasis(forward, up, right);
+	rjd_math_mat4 rot = rjd_math_mat4_rotationbasis(left, up, forward);
 	rjd_math_mat4 trans = rjd_math_mat4_translation(rjd_math_vec3_neg(eye));
-	return rjd_math_mat4_mul(trans, rot);
+	return rjd_math_mat4_mul(trans, rjd_math_mat4_transpose(rot));
 }
 static inline float* rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out) {
 	RJD_ASSERT(RJD_ISALIGNED(out, 16));
-
-	_mm_stream_ps(out + 0,  m[0].v);
-	_mm_stream_ps(out + 4,  m[0].v);
-	_mm_stream_ps(out + 8,  m[0].v);
-	_mm_stream_ps(out + 12, m[0].v);
+	_mm_stream_ps(out + 0,  m.m[0].v);
+	_mm_stream_ps(out + 4,  m.m[0].v);
+	_mm_stream_ps(out + 8,  m.m[0].v);
+	_mm_stream_ps(out + 12, m.m[0].v);
 	return out + 16;
 }
 static inline float* rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out) {

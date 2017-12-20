@@ -26,8 +26,10 @@ enum rjd_ease_dir
 	RJD_EASE_DIR_MAX,
 };
 
+typedef float (*rjd_ease_func)(float t);
+
 static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir dir);
-static inline float rjd_ease_between(float t, float min, float max);
+static inline float rjd_ease_between(float t, float min, float max, rjd_ease_func f);
 static inline float rjd_ease_line(float t);
 static inline float rjd_ease_in_sine(float t);
 static inline float rjd_ease_in_quad(float t);
@@ -123,7 +125,7 @@ static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir
 			switch(type) {
 				case RJD_EASE_TYPE_LINE: return rjd_ease_line(t);
 				case RJD_EASE_TYPE_SINE: return rjd_ease_in_sine(t);
-				case RJD_EASE_TYPE_CUBI: return rjd_ease_in_cubi(t);
+				case RJD_EASE_TYPE_CUBE: return rjd_ease_in_cube(t);
 				case RJD_EASE_TYPE_QUAD: return rjd_ease_in_quad(t);
 				case RJD_EASE_TYPE_QUAR: return rjd_ease_in_quar(t);
 				case RJD_EASE_TYPE_QUIN: return rjd_ease_in_quin(t);
@@ -140,7 +142,7 @@ static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir
 			switch(type) {
 				case RJD_EASE_TYPE_LINE: return rjd_ease_line(t);
 				case RJD_EASE_TYPE_SINE: return rjd_ease_inout_sine(t);
-				case RJD_EASE_TYPE_CUBI: return rjd_ease_inout_cubi(t);
+				case RJD_EASE_TYPE_CUBE: return rjd_ease_inout_cube(t);
 				case RJD_EASE_TYPE_QUAD: return rjd_ease_inout_quad(t);
 				case RJD_EASE_TYPE_QUAR: return rjd_ease_inout_quar(t);
 				case RJD_EASE_TYPE_QUIN: return rjd_ease_inout_quin(t);
@@ -157,7 +159,7 @@ static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir
 			switch(type) {
 				case RJD_EASE_TYPE_LINE: return rjd_ease_line(t);
 				case RJD_EASE_TYPE_SINE: return rjd_ease_inout_sine(t);
-				case RJD_EASE_TYPE_CUBI: return rjd_ease_inout_cubi(t);
+				case RJD_EASE_TYPE_CUBE: return rjd_ease_inout_cube(t);
 				case RJD_EASE_TYPE_QUAD: return rjd_ease_inout_quad(t);
 				case RJD_EASE_TYPE_QUAR: return rjd_ease_inout_quar(t);
 				case RJD_EASE_TYPE_QUIN: return rjd_ease_inout_quin(t);
@@ -255,7 +257,7 @@ static inline float rjd_ease_out_expo(float t) {
 
 static inline float rjd_ease_out_circ(float t) {
 	float tt = t - 1;
-	return sqrtf(1 - tt * tt)
+	return sqrtf(1 - tt * tt);
 }
 
 static inline float rjd_ease_out_back(float t) {
@@ -273,7 +275,7 @@ static inline float rjd_ease_out_boun(float t) {
 	} else if (t < 8.0f/11.0f) {
 		return 363.0f/40.0f*t*t - 99.0f/10.0f*t + 17.0f/5.0f;
 	} else if (t < 9.0f/10.0f) {
-		return 4356.0f/361.0f*t*t - 3544230f/1805.0f*t + 16061.0f/1805.0f;
+		return 4356.0f/361.0f*t*t - 35442.0f/1805.0f*t + 16061.0f/1805.0f;
 	} else {
 		return 54.0f/5.0f*t*t - 513.0f/25.0f*t + 268.0/25.0f;
 	}
