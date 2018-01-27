@@ -3,12 +3,12 @@
 #define RJD_PLATFORM 1
 
 // Platforms
-#ifdef _WIN32
+#if _WIN32
 	#define RJD_PLATFORM_WINDOWS 1
-#endif
-
-#if __APPLE__ && __MACH__
+#elif __APPLE__ && __MACH__
 	#define RJD_PLATFORM_OSX 1
+#else
+#error Unknown platform.
 #endif
 
 // Compilers
@@ -19,15 +19,15 @@
 #elif __GNUC__
 	#define RJD_COMPILER_GCC 1
 #else
-	#error Unknown platform.
+	#error Unknown compiler.
 #endif
 
 #if RJD_COMPILER_MSVC
-	#define RJD_FORCEINLINE __forceinline
-	#define RJD_FORCEALIGN(type, alignment) __declspec(align(alignment)) type
+	#define RJD_FORCE_INLINE __forceinline
+	#define RJD_FORCE_ALIGN(type, alignment) __declspec(align(alignment)) type
 #elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
-	#define RJD_FORCEINLINE static inline __attribute__(always_inline)
-	#define RJD_FORCEALIGN(type, alignment) type __attribute__((aligned(alignment)))
+	#define RJD_FORCE_INLINE static inline __attribute__((always_inline))
+	#define RJD_FORCE_ALIGN(type, alignment) type __attribute__((aligned(alignment)))
 #else
 	#error Unhandled compiler
 #endif
@@ -53,8 +53,8 @@
 #endif
 
 #if RJD_ENABLE_SHORTNAMES
-	#define FORCEINLINE RJD_FORCEINLINE
-	#define FORCEALIGN RJD_FORCEALIGN
+	#define FORCE_INLINE RJD_FORCE_INLINE
+	#define FORCE_ALIGN RJD_FORCE_ALIGN
 	#define ISALIGNED RJD_ISALIGNED
 #endif
 
