@@ -12,10 +12,11 @@
 // * An enumname_parse() function that takes a const char* and pointer to enum and returns success/fail
 // * An array of the enum values' string representation
 //
-// For example, let's define a Result enum with the values Success and Fail:
+// For example, let's define a Result enum with the values Success and Fail. Note to not forget the 
+// backslash for extending the macro in the real version.
 //
-//	#define MY_ENUM_LIST(macro)		\
-//		macro(RESULT_FAIL)			\
+//	#define MY_ENUM_LIST(macro)
+//		macro(RESULT_FAIL)
 //		macro(RESULT_SUCCESS)
 //	RJD_ENUM_DECLARE(Result, MY_ENUM_LIST)
 //	RJD_ENUM_DEFINE(Result, MY_ENUM_LIST)
@@ -29,9 +30,9 @@
 //
 //	You can also specify custom strings if you want to override the default tostring/parse:
 //
-//	#define MY_ENUM_LIST2(macro)					\
-//		macro(MY_ENUM_LIST2_V1, "CustomStringRep1")	\
-//		macro(MY_ENUM_LIST2_V2, "CustomStringRep2")	\
+//	#define MY_ENUM_LIST2(macro)
+//		macro(MY_ENUM_LIST2_V1, "CustomStringRep1")
+//		macro(MY_ENUM_LIST2_V2, "CustomStringRep2")
 //		macro(MY_ENUM_LIST2_V3, "CustomStringRep3")
 //	RJD_ENUM_DECLARE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST)
 //	RJD_ENUM_DEFINE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST)
@@ -48,7 +49,7 @@
 #define RJD_ENUM_IMPL_TOSTRING_CASE(item) case item: return #item;
 
 #define RJD_ENUM_IMPL_MEMBER_WITH_STRING(item, str) item,
-#define RJD_ENUM_IMPL_SUM_WITH_STRING(item) 1 +
+#define RJD_ENUM_IMPL_SUM_WITH_STRING(item, str) 1 +
 #define RJD_ENUM_IMPL_WITH_STRING_ITEM(item, str) str,
 #define RJD_ENUM_IMPL_WITH_STRING_CASE(item, str) case item: return str;
 
@@ -58,11 +59,11 @@
 	};																				\
 	enum { RJD_ENUM_IMPL_COUNT(name) = macrolist(RJD_ENUM_IMPL_SUM) 0 };			\
 	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v);							\
-	bool RJD_ENUM_IMPL_PARSE(name)(const char* s);									\
+	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out);					\
 	extern const char* RJD_ENUM_IMPL_STRINGS(name)[];
 
 #define RJD_ENUM_DEFINE(name, macrolist)											\
-	const char* RJD_ENUM_IMPL_TOSTRING(name)(name v) {								\
+	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v) {							\
 		switch(v) {																	\
 			macrolist(RJD_ENUM_IMPL_TOSTRING_CASE)									\
 		}																			\
@@ -70,12 +71,13 @@
 	}																				\
 	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out) {					\
 		RJD_ASSERT(out);															\
-		for (size_t i = 0; i < rjd_countof(RJD_ENUM_IMPL_STRINGS(name))); ++i) {	\
+		for (size_t i = 0; i < RJD_ENUM_IMPL_COUNT(name); ++i) {					\
 			if (!strcmp(RJD_ENUM_IMPL_STRINGS(name)[i], s)) {						\
-				*out = RJD_ENUM_IMPL_STRINGS(name)[i];								\
-				return;																\
+				*out = (enum name)i;												\
+				return true;														\
 			}																		\
 		}																			\
+		return false;																\
 	}																				\
 	const char* RJD_ENUM_IMPL_STRINGS(name)[] = {									\
 		macrolist(RJD_ENUM_IMPL_TOSTRING_ITEM)										\
@@ -86,8 +88,8 @@
 		macrolist(RJD_ENUM_IMPL_MEMBER_WITH_STRING)									\
 	};																				\
 	enum { RJD_ENUM_IMPL_COUNT(name) = macrolist(RJD_ENUM_IMPL_SUM_WITH_STRING) 0 };\
-	const char* RJD_ENUM_IMPL_TOSTRING(name)(name v);								\
-	bool RJD_ENUM_IMPL_PARSE(name)(const char* s);									\
+	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v);							\
+	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out);					\
 	extern const char* RJD_ENUM_IMPL_STRINGS(name)[];
 
 #define RJD_ENUM_DEFINE_WITH_STRINGS(name, macrolist)								\
@@ -99,12 +101,13 @@
 	}																				\
 	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out) {					\
 		RJD_ASSERT(out);															\
-		for (size_t i = 0; i < rjd_countof(RJD_ENUM_IMPL_STRINGS(name))); ++i) {	\
+		for (size_t i = 0; i < RJD_ENUM_IMPL_COUNT(name); ++i) {					\
 			if (!strcmp(RJD_ENUM_IMPL_STRINGS(name)[i], s)) {						\
-				*out = RJD_ENUM_IMPL_STRINGS(name)[i];								\
-				return;																\
+				*out = (enum name)i;												\
+				return true;														\
 			}																		\
 		}																			\
+		return false;																\
 	}																				\
 	const char* RJD_ENUM_IMPL_STRINGS(name)[] = {									\
 		macrolist(RJD_ENUM_IMPL_WITH_STRING_ITEM)									\

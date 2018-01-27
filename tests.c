@@ -125,6 +125,59 @@ void test_logging()
 	rjd_log_resetglobal();
 }
 
+#define TEST_ENUM1_LIST(macro)	\
+	macro(e1_a)					\
+	macro(e1_b)					\
+	macro(e1_c)					\
+	macro(e1_d)
+
+#define TEST_ENUM2_LIST(macro)	\
+	macro(e2_ok, "OK")			\
+	macro(e2_notok, "NOTOK")
+
+ENUM_DECLARE(e1, TEST_ENUM1_LIST)
+ENUM_DEFINE(e1, TEST_ENUM1_LIST)
+
+ENUM_DECLARE_WITH_STRINGS(e2, TEST_ENUM2_LIST)
+ENUM_DEFINE_WITH_STRINGS(e2, TEST_ENUM2_LIST)
+
+void test_enum()
+{
+	// enum 1
+	expect_str("e1_a", s_e1_strings[0]);
+	expect_str("e1_b", s_e1_strings[1]);
+	expect_str("e1_c", s_e1_strings[2]);
+	expect_str("e1_d", s_e1_strings[3]);
+
+	expect_uint32(4, k_e1_count);
+
+	expect_str("e1_a", e1_tostring(e1_a));
+	expect_str("e1_b", e1_tostring(e1_b));
+	expect_str("e1_c", e1_tostring(e1_c));
+	expect_str("e1_d", e1_tostring(e1_d));
+
+	enum e1 e1_value;
+	expect_true(e1_parse("e1_a", &e1_value) && e1_value == e1_a);
+	expect_true(e1_parse("e1_b", &e1_value) && e1_value == e1_b);
+	expect_true(e1_parse("e1_c", &e1_value) && e1_value == e1_c);
+	expect_true(e1_parse("e1_d", &e1_value) && e1_value == e1_d);
+	expect_false(e1_parse("e1_e", &e1_value));
+
+	// enum 2
+	expect_str("OK", s_e2_strings[0]);
+	expect_str("NOTOK", s_e2_strings[1]);
+
+	char test[k_e2_count];
+	expect_uint32(2, rjd_countof(test));
+
+	expect_str("OK", e2_tostring(e2_ok));
+	expect_str("NOTOK", e2_tostring(e2_notok));
+
+	enum e2 e2_value;
+	expect_true(e2_parse("OK", &e2_value) && e2_value == e2_ok);
+	expect_true(e2_parse("NOTOK", &e2_value) && e2_value == e2_notok);
+}
+
 void test_alloc()
 {
 	// default allocator
@@ -599,13 +652,14 @@ void test_dict()
 int main(void) 
 {
 	test_logging();
+	test_enum();
 	test_alloc();
+	test_rng();
 	test_array();
 	test_math();
 	test_strbuf();
 	test_profiler();
 	test_cmd();
-	test_rng();
 	test_dict();
 
 	return 0;
