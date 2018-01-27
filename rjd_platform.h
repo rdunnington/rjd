@@ -3,12 +3,12 @@
 #define RJD_PLATFORM 1
 
 // Platforms
-#if _WIN32
+#if _WIN32 || __CYGWIN__
 	#define RJD_PLATFORM_WINDOWS 1
 #elif __APPLE__ && __MACH__
 	#define RJD_PLATFORM_OSX 1
 #else
-#error Unknown platform.
+	#error Unknown platform.
 #endif
 
 // Compilers

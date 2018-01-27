@@ -1,5 +1,5 @@
 all:
-	gcc --std=c99 -pedantic -Wall -Wextra -Wno-missing-field-initializers -g -march=native tests.c
+	gcc --std=c99 -pedantic -Wall -Wextra -Wno-missing-field-initializers -g -march=native tests.c 
 
 clean:
 	rm *.exe
@@ -7,4 +7,5 @@ clean:
 	rm *.obj
 	rm *.pdb
 	rm -r Debug
+	rm *.stackdump
 
