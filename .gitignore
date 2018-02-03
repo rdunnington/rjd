@@ -4,4 +4,5 @@ a.out
 *.ilk
 *.obj
 *.pdb
+*.stackdump
 .vs
