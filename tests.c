@@ -649,6 +649,54 @@ void test_dict()
 	dict_free(&dict);
 }
 
+void expect_fio(enum fio_err expected, enum fio_err actual)
+{
+	if (expected != actual) {
+		ASSERTFAIL("fio: expected %d, but got %d\n", expected, actual);
+	}
+}
+
+void test_fio()
+{
+	struct rjd_alloc_context context = alloc_initdefault();
+
+	const char expected_contents[] = "this is a test file that has a utf-8 character!";
+
+	enum fio_err err;
+	err = fio_write("test.txt", expected_contents, sizeof(expected_contents), FIO_WRITEMODE_REPLACE);
+	expect_fio(FIO_ERR_OK, err);
+
+	char* buffer;
+	err = fio_read("does_not_exist.txt", &buffer, &context);
+	expect_fio(FIO_ERR_IO, err);
+	err = fio_read("test.txt", &buffer, &context);
+	expect_fio(FIO_ERR_OK, err);
+	expect_uint32(sizeof(expected_contents), array_count(buffer));
+	expect_true(!memcmp(buffer, expected_contents, sizeof(expected_contents)));
+
+	err = fio_write("test2.txt", expected_contents, sizeof(expected_contents), FIO_WRITEMODE_REPLACE);
+	expect_fio(FIO_ERR_OK, err);
+	err = fio_write("test2.txt", expected_contents, sizeof(expected_contents), FIO_WRITEMODE_APPEND);
+	char* buffer2;
+	err = fio_read("test2.txt", &buffer2, &context);
+	expect_fio(FIO_ERR_OK, err);
+	expect_uint32(sizeof(expected_contents)*2, array_count(buffer2));
+
+	size_t filesize;
+	err = fio_size("does_not_exist.txt", &filesize);
+	expect_fio(FIO_ERR_IO, err);
+	err = fio_size("test.txt", &filesize);
+	expect_fio(FIO_ERR_OK, err);
+	expect_uint32(sizeof(expected_contents), (uint32_t)filesize);
+
+	err = fio_delete("does_not_exist.txt");
+	expect_fio(FIO_ERR_IO, err);
+	err = fio_delete("test.txt");
+	expect_fio(FIO_ERR_OK, err);
+	err = fio_delete("test2.txt");
+	expect_fio(FIO_ERR_OK, err);
+}
+
 int main(void) 
 {
 	test_logging();
@@ -661,6 +709,7 @@ int main(void)
 	test_profiler();
 	test_cmd();
 	test_dict();
+	test_fio();
 
 	return 0;
 }
