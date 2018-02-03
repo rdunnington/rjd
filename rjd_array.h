@@ -52,29 +52,29 @@ struct rjd_alloc_context;
 #if RJD_ENABLE_SHORTNAMES
 	#define countof					rjd_countof
 
-	#define arr_alloc    			rjd_array_alloc
-	#define arr_free    			rjd_array_free
-	#define arr_capacity 			rjd_array_capacity
-	#define arr_count    			rjd_array_count
-	#define arr_clear				rjd_array_clear
-	#define arr_resize   			rjd_array_resize
-	#define arr_erase    			rjd_array_erase
-	#define arr_erase_unordered		rjd_array_erase_unordered
-	#define arr_empty    			rjd_array_empty
-	#define arr_full     			rjd_array_full
-	#define arr_push     			rjd_array_push
-	#define arr_pop      			rjd_array_pop
+	#define array_alloc    			rjd_array_alloc
+	#define array_free    			rjd_array_free
+	#define array_capacity 			rjd_array_capacity
+	#define array_count    			rjd_array_count
+	#define array_clear				rjd_array_clear
+	#define array_resize   			rjd_array_resize
+	#define array_erase    			rjd_array_erase
+	#define array_erase_unordered		rjd_array_erase_unordered
+	#define array_empty    			rjd_array_empty
+	#define array_full     			rjd_array_full
+	#define array_push     			rjd_array_push
+	#define array_pop      			rjd_array_pop
 
-	#define arr_first				rjd_array_first
-	#define arr_last				rjd_array_last
-	#define arr_contains			rjd_array_contains
-	#define arr_filter				rjd_array_filter
-	#define arr_map					rjd_array_map
-	#define	arr_reduce				rjd_array_reduce
-	#define arr_sum					rjd_array_sum
+	#define array_first				rjd_array_first
+	#define array_last				rjd_array_last
+	#define array_contains			rjd_array_contains
+	#define array_filter				rjd_array_filter
+	#define array_map					rjd_array_map
+	#define	array_reduce				rjd_array_reduce
+	#define array_sum					rjd_array_sum
 
-	#define arr_sample				rjd_array_sample
-	#define arr_shuffle				rjd_array_shuffle
+	#define array_sample				rjd_array_sample
+	#define array_shuffle				rjd_array_shuffle
 #endif
 
 struct rjd_rng;

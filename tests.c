@@ -230,119 +230,119 @@ void test_array()
 			int c;
 			int d;
 		};
-		struct test* a = arr_alloc(struct test, 32, &context);
-		expect_uint32(arr_count(a), 0);
-		expect_uint32(arr_capacity(a), 32);
-		expect_true(arr_empty(a));
-		expect_false(arr_full(a));
+		struct test* a = array_alloc(struct test, 32, &context);
+		expect_uint32(array_count(a), 0);
+		expect_uint32(array_capacity(a), 32);
+		expect_true(array_empty(a));
+		expect_false(array_full(a));
 
-		arr_resize(a, 16);
-		expect_uint32(16, arr_count(a));
-		expect_uint32(32, arr_capacity(a));
+		array_resize(a, 16);
+		expect_uint32(16, array_count(a));
+		expect_uint32(32, array_capacity(a));
 
-		arr_resize(a, 50);
-		expect_uint32(50, arr_count(a));
-		expect_uint32(50, arr_capacity(a));
+		array_resize(a, 50);
+		expect_uint32(50, array_count(a));
+		expect_uint32(50, array_capacity(a));
 
-		for (size_t i = 0; i < arr_count(a); ++i) {
+		for (size_t i = 0; i < array_count(a); ++i) {
 			struct test v = { (int)i, 0, 0, 0 };
 			a[i] = v;
 		}
-		expect_false(arr_empty(a));
-		expect_true(arr_full(a));
+		expect_false(array_empty(a));
+		expect_true(array_full(a));
 
-		arr_erase(a, 0);
+		array_erase(a, 0);
 		expect_int32(1, a[0].a);
-		arr_erase(a, 1);
+		array_erase(a, 1);
 		expect_int32(3, a[1].a);
 
-		expect_false(arr_empty(a));
-		expect_false(arr_full(a));
+		expect_false(array_empty(a));
+		expect_false(array_full(a));
 
-		struct test end = arr_pop(a);
+		struct test end = array_pop(a);
 		expect_int32(49, end.a);
 
-		arr_resize(a, 0);
-		expect_true(arr_empty(a));
-		expect_uint32(0, arr_count(a));
-		expect_uint32(50, arr_capacity(a));
+		array_resize(a, 0);
+		expect_true(array_empty(a));
+		expect_uint32(0, array_count(a));
+		expect_uint32(50, array_capacity(a));
 
-		arr_push(a, end);
+		array_push(a, end);
 		expect_int32(end.a, a[0].a);
 		
-		arr_clear(a);
-		expect_int32(0, arr_count(a));
-		expect_int32(50, arr_capacity(a));
+		array_clear(a);
+		expect_int32(0, array_count(a));
+		expect_int32(50, array_capacity(a));
 
-		arr_free(a);
+		array_free(a);
 	}
 
 	// first/last
 	{
-		int32_t* a = arr_alloc(int32_t, 16, &context);
-		for (int32_t i = 0; i < (int32_t)arr_capacity(a); ++i) {
-			arr_push(a, 0xD00D + i);
+		int32_t* a = array_alloc(int32_t, 16, &context);
+		for (int32_t i = 0; i < (int32_t)array_capacity(a); ++i) {
+			array_push(a, 0xD00D + i);
 		}
 
-		int32_t* b = arr_alloc(int32_t, 16, &context);
+		int32_t* b = array_alloc(int32_t, 16, &context);
 
-		int32_t first = arr_first(b, 1337);
+		int32_t first = array_first(b, 1337);
 		expect_int32(1337, first);
-		first = arr_first(a, 0);
+		first = array_first(a, 0);
 		expect_int32(0xD00D + 0, first);
 
-		int32_t last = arr_last(b, 1337);
+		int32_t last = array_last(b, 1337);
 		expect_int32(1337, last);
-		last = arr_last(a, 0);
+		last = array_last(a, 0);
 		expect_int32(0xD00D + 15, last);
 
-		arr_free(a);
-		arr_free(b);
+		array_free(a);
+		array_free(b);
 	}
 
 	// functional-style tests
 	{
-		int32_t* b = arr_alloc(int32_t, 16, &context);
+		int32_t* b = array_alloc(int32_t, 16, &context);
 		for (int32_t i = 0; i < 16; ++i) {
-			arr_push(b, i);
+			array_push(b, i);
 		}
 
 		#define testfilter(element) (element < 8)
-		arr_filter(b, testfilter);
-		expect_uint32(8, arr_count(b));
+		array_filter(b, testfilter);
+		expect_uint32(8, array_count(b));
 
 		#define testsum(acc, element) (acc + element)
 		int32_t sum1 = 0;
-		arr_reduce(b, sum1, testsum);
+		array_reduce(b, sum1, testsum);
 		expect_int32(1 + 2 + 3 + 4 + 5 + 6 + 7, sum1);
 
 		int32_t sum2 = 0;
-		arr_sum(b, sum2);
+		array_sum(b, sum2);
 		expect_int32(sum1, sum2);
 
 		int32_t two = 2;
-		bool has2 = arr_contains(b, two);
+		bool has2 = array_contains(b, two);
 		expect_true(has2);
 
 		int32_t ten = 10;
-		bool has10 = arr_contains(b, ten);
+		bool has10 = array_contains(b, ten);
 		expect_false(has10);
 
-		arr_free(b);
+		array_free(b);
 	}
 
 	// rng tests
 	{
 		struct rjd_rng rng = rng_init(0x1337C0DE);
 
-		int32_t* a = arr_alloc(int32_t, 8, &context);
+		int32_t* a = array_alloc(int32_t, 8, &context);
 		for (int32_t i = 0; i < 8; ++i) {
-			arr_push(a, i);
+			array_push(a, i);
 		}
 
-		expect_int32(5, arr_sample(a, &rng));
+		expect_int32(5, array_sample(a, &rng));
 
-		arr_shuffle(a, &rng);
+		array_shuffle(a, &rng);
 		expect_int32(3, a[0]);
 		expect_int32(6, a[1]);
 		expect_int32(0, a[2]);
