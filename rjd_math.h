@@ -621,7 +621,7 @@ static inline bool rjd_math_vec3_ge(rjd_math_vec3 a, rjd_math_vec3 b) {
 	return (_mm_movemask_ps(_mm_cmpge_ps(a.v, b.v)) & 7) == 7;
 }
 static inline float* rjd_math_vec3_write(rjd_math_vec3 v, float* out) {
-	RJD_FORCEALIGN(float, 16) tmp[4];
+	RJD_FORCE_ALIGN(float, 16) tmp[4];
 	_mm_stream_ps(tmp, v.v);
 	memcpy(out, tmp, sizeof(float) * 3);
 	return out + 3;

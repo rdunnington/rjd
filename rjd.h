@@ -27,12 +27,12 @@
 #define RJD_PLATFORM 1
 
 // Platforms
-#ifdef _WIN32
+#if _WIN32 || __CYGWIN__
 	#define RJD_PLATFORM_WINDOWS 1
-#endif
-
-#if __APPLE__ && __MACH__
+#elif __APPLE__ && __MACH__
 	#define RJD_PLATFORM_OSX 1
+#else
+	#error Unknown platform.
 #endif
 
 // Compilers
@@ -43,15 +43,15 @@
 #elif __GNUC__
 	#define RJD_COMPILER_GCC 1
 #else
-	#error Unknown platform.
+	#error Unknown compiler.
 #endif
 
 #if RJD_COMPILER_MSVC
-	#define RJD_FORCEINLINE __forceinline
-	#define RJD_FORCEALIGN(type, alignment) __declspec(align(alignment)) type
+	#define RJD_FORCE_INLINE __forceinline
+	#define RJD_FORCE_ALIGN(type, alignment) __declspec(align(alignment)) type
 #elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
-	#define RJD_FORCEINLINE static inline __attribute__(always_inline)
-	#define RJD_FORCEALIGN(type, alignment) type __attribute__((aligned(alignment)))
+	#define RJD_FORCE_INLINE static inline __attribute__((always_inline))
+	#define RJD_FORCE_ALIGN(type, alignment) type __attribute__((aligned(alignment)))
 #else
 	#error Unhandled compiler
 #endif
@@ -77,8 +77,8 @@
 #endif
 
 #if RJD_ENABLE_SHORTNAMES
-	#define FORCEINLINE RJD_FORCEINLINE
-	#define FORCEALIGN RJD_FORCEALIGN
+	#define FORCE_INLINE RJD_FORCE_INLINE
+	#define FORCE_ALIGN RJD_FORCE_ALIGN
 	#define ISALIGNED RJD_ISALIGNED
 #endif
 
@@ -221,6 +221,134 @@ void rjd_log_resetglobal()
 }
 
 #endif // RJD_IMPL
+
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_enum.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#define RJD_ENUM 1
+
+// TODO support RJD_ENABLE_ENUM_TYPEDEF
+
+// To use these macros, you need to define an xmacro list, then the use the appropriate *DECLARE
+// in a header and *DEFINE in source files. By using these macros, you get:
+// * The enum definition (as if you defined it yourself)
+// * A count of members in the enum named k_<enumname>_count
+// * An enumname_tostring() function that takes the enum and returns a static string (no mem allocation)
+// * An enumname_parse() function that takes a const char* and pointer to enum and returns success/fail
+// * An array of the enum values' string representation
+//
+// For example, let's define a Result enum with the values Success and Fail. Note to not forget the 
+// backslash for extending the macro in the real version.
+//
+//	#define MY_ENUM_LIST(macro)
+//		macro(RESULT_FAIL)
+//		macro(RESULT_SUCCESS)
+//	RJD_ENUM_DECLARE(Result, MY_ENUM_LIST)
+//	RJD_ENUM_DEFINE(Result, MY_ENUM_LIST)
+//
+//	The generated interface for the Result enum above would be:
+//		enum Result { RESULT_FAIL, RESULT_SUCCESS };
+//		enum { k_Result_count = 2 };
+//		const char* Result_tostring(enum Result v);
+//		bool Result_parse(const char* s, enum Result v);
+//		const char* s_Result_strings[] = { "RESULT_FAIL", "RESULT_SUCCESS" };
+//
+//	You can also specify custom strings if you want to override the default tostring/parse:
+//
+//	#define MY_ENUM_LIST2(macro)
+//		macro(MY_ENUM_LIST2_V1, "CustomStringRep1")
+//		macro(MY_ENUM_LIST2_V2, "CustomStringRep2")
+//		macro(MY_ENUM_LIST2_V3, "CustomStringRep3")
+//	RJD_ENUM_DECLARE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST)
+//	RJD_ENUM_DEFINE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST)
+//
+
+#define RJD_ENUM_IMPL_TOSTRING(name) name ## _tostring
+#define RJD_ENUM_IMPL_COUNT(name) k_ ## name ## _count
+#define RJD_ENUM_IMPL_PARSE(name) name ## _parse
+#define RJD_ENUM_IMPL_STRINGS(name) s_ ## name ## _strings
+
+#define RJD_ENUM_IMPL_MEMBER(item) item,
+#define RJD_ENUM_IMPL_SUM(item) 1 +
+#define RJD_ENUM_IMPL_TOSTRING_ITEM(item) #item,
+#define RJD_ENUM_IMPL_TOSTRING_CASE(item) case item: return #item;
+
+#define RJD_ENUM_IMPL_MEMBER_WITH_STRING(item, str) item,
+#define RJD_ENUM_IMPL_SUM_WITH_STRING(item, str) 1 +
+#define RJD_ENUM_IMPL_WITH_STRING_ITEM(item, str) str,
+#define RJD_ENUM_IMPL_WITH_STRING_CASE(item, str) case item: return str;
+
+#define RJD_ENUM_DECLARE(name, macrolist)											\
+	enum name {																		\
+		macrolist(RJD_ENUM_IMPL_MEMBER)												\
+	};																				\
+	enum { RJD_ENUM_IMPL_COUNT(name) = macrolist(RJD_ENUM_IMPL_SUM) 0 };			\
+	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v);							\
+	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out);					\
+	extern const char* RJD_ENUM_IMPL_STRINGS(name)[];
+
+#define RJD_ENUM_DEFINE(name, macrolist)											\
+	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v) {							\
+		switch(v) {																	\
+			macrolist(RJD_ENUM_IMPL_TOSTRING_CASE)									\
+		}																			\
+		return "invalid value";														\
+	}																				\
+	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out) {					\
+		RJD_ASSERT(out);															\
+		for (size_t i = 0; i < RJD_ENUM_IMPL_COUNT(name); ++i) {					\
+			if (!strcmp(RJD_ENUM_IMPL_STRINGS(name)[i], s)) {						\
+				*out = (enum name)i;												\
+				return true;														\
+			}																		\
+		}																			\
+		return false;																\
+	}																				\
+	const char* RJD_ENUM_IMPL_STRINGS(name)[] = {									\
+		macrolist(RJD_ENUM_IMPL_TOSTRING_ITEM)										\
+	};
+
+#define RJD_ENUM_DECLARE_WITH_STRINGS(name, macrolist)								\
+	enum name {																		\
+		macrolist(RJD_ENUM_IMPL_MEMBER_WITH_STRING)									\
+	};																				\
+	enum { RJD_ENUM_IMPL_COUNT(name) = macrolist(RJD_ENUM_IMPL_SUM_WITH_STRING) 0 };\
+	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v);							\
+	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out);					\
+	extern const char* RJD_ENUM_IMPL_STRINGS(name)[];
+
+#define RJD_ENUM_DEFINE_WITH_STRINGS(name, macrolist)								\
+	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v) {							\
+		switch(v) {																	\
+			macrolist(RJD_ENUM_IMPL_WITH_STRING_CASE)								\
+		}																			\
+		return "invalid value";														\
+	}																				\
+	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out) {					\
+		RJD_ASSERT(out);															\
+		for (size_t i = 0; i < RJD_ENUM_IMPL_COUNT(name); ++i) {					\
+			if (!strcmp(RJD_ENUM_IMPL_STRINGS(name)[i], s)) {						\
+				*out = (enum name)i;												\
+				return true;														\
+			}																		\
+		}																			\
+		return false;																\
+	}																				\
+	const char* RJD_ENUM_IMPL_STRINGS(name)[] = {									\
+		macrolist(RJD_ENUM_IMPL_WITH_STRING_ITEM)									\
+	};
+
+#ifdef RJD_ENABLE_SHORTNAMES
+	#define	ENUM_DECLARE	RJD_ENUM_DECLARE 
+	#define ENUM_DEFINE		RJD_ENUM_DEFINE
+
+	#define	ENUM_DECLARE_WITH_STRINGS	RJD_ENUM_DECLARE_WITH_STRINGS
+	#define ENUM_DEFINE_WITH_STRINGS	RJD_ENUM_DEFINE_WITH_STRINGS
+#endif
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -510,38 +638,38 @@ struct rjd_alloc_context;
 #if RJD_ENABLE_SHORTNAMES
 	#define countof					rjd_countof
 
-	#define arr_alloc    			rjd_array_alloc
-	#define arr_free    			rjd_array_free
-	#define arr_capacity 			rjd_array_capacity
-	#define arr_count    			rjd_array_count
-	#define arr_clear				rjd_array_clear
-	#define arr_resize   			rjd_array_resize
-	#define arr_erase    			rjd_array_erase
-	#define arr_erase_unordered		rjd_array_erase_unordered
-	#define arr_empty    			rjd_array_empty
-	#define arr_full     			rjd_array_full
-	#define arr_push     			rjd_array_push
-	#define arr_pop      			rjd_array_pop
+	#define array_alloc    			rjd_array_alloc
+	#define array_free    			rjd_array_free
+	#define array_capacity 			rjd_array_capacity
+	#define array_count    			rjd_array_count
+	#define array_clear				rjd_array_clear
+	#define array_resize   			rjd_array_resize
+	#define array_erase    			rjd_array_erase
+	#define array_erase_unordered		rjd_array_erase_unordered
+	#define array_empty    			rjd_array_empty
+	#define array_full     			rjd_array_full
+	#define array_push     			rjd_array_push
+	#define array_pop      			rjd_array_pop
 
-	#define arr_first				rjd_array_first
-	#define arr_last				rjd_array_last
-	#define arr_contains			rjd_array_contains
-	#define arr_filter				rjd_array_filter
-	#define arr_map					rjd_array_map
-	#define	arr_reduce				rjd_array_reduce
-	#define arr_sum					rjd_array_sum
+	#define array_first				rjd_array_first
+	#define array_last				rjd_array_last
+	#define array_contains			rjd_array_contains
+	#define array_filter				rjd_array_filter
+	#define array_map					rjd_array_map
+	#define	array_reduce				rjd_array_reduce
+	#define array_sum					rjd_array_sum
 
-	#define arr_sample				rjd_array_sample
-	#define arr_shuffle				rjd_array_shuffle
+	#define array_sample				rjd_array_sample
+	#define array_shuffle				rjd_array_shuffle
 #endif
 
 struct rjd_rng;
 
 void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_alloc_context* context, size_t sizeof_type);
-void rjd_array_free_impl(void* buffer);
-uint32_t* rjd_array_capacity_impl(void* buffer);
-uint32_t* rjd_array_count_impl(void* buffer);
-void* rjd_array_resize_impl(void* buffer, uint32_t newsize, size_t sizeof_type);
+void rjd_array_free_impl(const void* buffer);
+uint32_t* rjd_array_capacity_impl(const void* buffer);
+uint32_t* rjd_array_count_impl(const void* buffer);
+void* rjd_array_resize_impl(const void* buffer, uint32_t newsize, size_t sizeof_type);
 void rjd_array_erase_impl(void* buffer, uint32_t index, size_t sizeof_type);
 void rjd_array_erase_unordered_impl(void* buffer, uint32_t index, size_t sizeof_type);
 void* rjd_array_grow_impl(void* buffer, size_t sizeof_type);
@@ -583,37 +711,37 @@ static struct rjd_alloc_context* rjd_array_getcontext_impl(void* buffer)
 	return *context;
 }
 
-void rjd_array_free_impl(void* buffer)
+void rjd_array_free_impl(const void* buffer)
 {
 	if (!buffer) {
 		return;
 	}
 
-	struct rjd_alloc_context* context = rjd_array_getcontext_impl(buffer);
+	struct rjd_alloc_context* context = rjd_array_getcontext_impl((void*)buffer);
 
-	char* raw = buffer;
+	char* raw = (char*)buffer;
 	size_t headersize = sizeof(struct rjd_alloc_context*) + sizeof(uint32_t) + sizeof(uint32_t);
 
 	rjd_free(raw - headersize, context);
 }
 
-uint32_t* rjd_array_capacity_impl(void* buffer)
+uint32_t* rjd_array_capacity_impl(const void* buffer)
 {
 	RJD_ASSERT(buffer);
 
-	char* raw = buffer;
+	char* raw = (char*)buffer;
 	return (uint32_t*)(raw - sizeof(uint32_t) - sizeof(uint32_t));
 }
 
-uint32_t* rjd_array_count_impl(void* buffer)
+uint32_t* rjd_array_count_impl(const void* buffer)
 {
 	RJD_ASSERT(buffer);
 
-	char* raw = buffer;
+	char* raw = (char*)buffer;
 	return (uint32_t*)(raw - sizeof(uint32_t));
 }
 
-void* rjd_array_resize_impl(void* buffer, uint32_t newsize, size_t sizeof_type)
+void* rjd_array_resize_impl(const void* buffer, uint32_t newsize, size_t sizeof_type)
 {
 	RJD_ASSERT(buffer);
 	RJD_ASSERT(sizeof_type > 0);
@@ -624,7 +752,7 @@ void* rjd_array_resize_impl(void* buffer, uint32_t newsize, size_t sizeof_type)
 	uint32_t* capacity = rjd_array_capacity_impl(buffer);
 
 	if (*capacity < newcapacity) {
-		struct rjd_alloc_context* context = rjd_array_getcontext_impl(buffer);
+		struct rjd_alloc_context* context = rjd_array_getcontext_impl((void*)buffer);
 		void* newbuf = rjd_array_alloc_impl(newcapacity, context, sizeof_type);
 
 		uint32_t oldcount = *count;
@@ -639,7 +767,7 @@ void* rjd_array_resize_impl(void* buffer, uint32_t newsize, size_t sizeof_type)
 	}
 
 	*count = newsize;
-	return buffer;
+	return (void*)buffer;
 }
 
 void rjd_array_erase_impl(void* buffer, uint32_t index, size_t sizeof_type)
@@ -1358,7 +1486,7 @@ static inline bool rjd_math_vec3_ge(rjd_math_vec3 a, rjd_math_vec3 b) {
 	return (_mm_movemask_ps(_mm_cmpge_ps(a.v, b.v)) & 7) == 7;
 }
 static inline float* rjd_math_vec3_write(rjd_math_vec3 v, float* out) {
-	RJD_FORCEALIGN(float, 16) tmp[4];
+	RJD_FORCE_ALIGN(float, 16) tmp[4];
 	_mm_stream_ps(tmp, v.v);
 	memcpy(out, tmp, sizeof(float) * 3);
 	return out + 3;
@@ -1784,9 +1912,9 @@ typedef struct {
 
 rjd_geo_rect rjd_geo_rect_minmax(float minx, float miny, float maxx, float maxy);
 rjd_geo_circle rjd_geo_circle_xyr(float x, float y, float r);
-rjd_geo_box rjd_geo_box_minmax( rjd_math_vec3 min,  rjd_math_vec3 max);
+rjd_geo_box rjd_geo_box_minmax(rjd_math_vec3 min,  rjd_math_vec3 max);
 rjd_geo_sphere rjd_geo_sphere_xyzr(float x, float y, float z, float r);
-rjd_geo_ray rjd_geo_ray_pd( rjd_math_vec3 p,  rjd_math_vec3 d);
+rjd_geo_ray rjd_geo_ray_pd(rjd_math_vec3 p,  rjd_math_vec3 d);
 
 bool rjd_geo_point_rect(rjd_math_vec3 p, rjd_geo_rect r);
 bool rjd_geo_point_box(rjd_math_vec3 p, rjd_geo_box b);
@@ -1835,6 +1963,8 @@ bool rjd_geo_ray_boxfast(rjd_math_vec3 ray_pos, rjd_math_vec3 ray_inv_dir, rjd_g
 #if RJD_IMPL
 
 rjd_geo_rect rjd_geo_rect_minmax(float minx, float miny, float maxx, float maxy) {
+	RJD_ASSERT(minx <= maxx);
+	RJD_ASSERT(miny <= maxy);
 	rjd_geo_rect r = { rjd_math_vec4_xyzw(minx, miny, maxx, maxy) };
 	return r;
 }
@@ -1887,7 +2017,8 @@ bool rjd_geo_point_sphere(rjd_math_vec3 p, rjd_geo_sphere s) {
 
 bool rjd_geo_circle_circle(rjd_geo_circle c1, rjd_geo_circle c2) {
 	rjd_math_vec3 v = rjd_math_vec3_setz(rjd_math_vec3_sub(c1.xyr, c2.xyr), 0);
-	rjd_math_vec3 squared = rjd_math_vec3_mul(c1.xyr, c2.xyr);
+	rjd_math_vec3 added = rjd_math_vec3_add(c1.xyr, c2.xyr);
+	rjd_math_vec3 squared = rjd_math_vec3_mul(added, added);
 	return rjd_math_vec3_lengthsq(v) <= rjd_math_vec3_z(squared);
 }
 
@@ -2058,6 +2189,7 @@ static inline float rjd_ease_inout_boun(float t);
 
 #ifdef RJD_ENABLE_SHORTNAMES
 	#define ease            rjd_ease
+	#define ease_func		rjd_ease_func
 	#define ease_between	rjd_ease_between
 	#define ease_line       rjd_ease_line
 	#define ease_in_sine    rjd_ease_in_sine
@@ -2089,7 +2221,7 @@ static inline float rjd_ease_inout_boun(float t);
 	#define ease_inout_circ rjd_ease_inout_circ
 	#define ease_inout_back rjd_ease_inout_back
 	#define ease_inout_elas rjd_ease_inout_elas
-	#define ease_inout_boun rjd_ease_inout_boun#endif
+	#define ease_inout_boun rjd_ease_inout_boun
 
 	#define EASE_TYPE_LINE RJD_EASE_TYPE_LINE
 	#define EASE_TYPE_SINE RJD_EASE_TYPE_SINE
@@ -2182,7 +2314,7 @@ static inline float rjd_ease_line(float t) {
 }
 
 static inline float rjd_ease_in_sine(float t) {
-	return cosf(t*RJD_MATH_PI/2.0f);
+	return sinf((t - 1) * RJD_MATH_PI/2.0f) + 1;
 }
 
 static inline float rjd_ease_in_quad(float t) {
@@ -2202,7 +2334,7 @@ static inline float rjd_ease_in_quin(float t) {
 }
 
 static inline float rjd_ease_in_expo(float t) {
-	return t == 0 ? t : powf(2, -10*(t - 1));
+	return t == 0 ? t : powf(2, 10*(t - 1));
 }
 
 static inline float rjd_ease_in_circ(float t) {
@@ -2256,11 +2388,11 @@ static inline float rjd_ease_out_circ(float t) {
 
 static inline float rjd_ease_out_back(float t) {
 	float tt = 1 - t;
-	return tt*tt*tt - tt*sinf(tt*RJD_MATH_PI);
+	return 1 - (tt*tt*tt - tt*sinf(tt*RJD_MATH_PI));
 }
 
 static inline float rjd_ease_out_elas(float t) {
-	return sin(-13.0f * RJD_MATH_PI / 2.0f * (t + 1)) * pow(2, -10 * t + 1);
+	return sinf(-13.0f * RJD_MATH_PI / 2.0f * (t + 1)) * pow(2, -10 * t) + 1;
 }
 
 static inline float rjd_ease_out_boun(float t) {
@@ -2280,50 +2412,49 @@ static inline float rjd_ease_inout_sine(float t) {
 }
 
 static inline float rjd_ease_inout_quad(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_quad(t) : rjd_ease_out_quad(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_quad(tt) : rjd_ease_out_quad(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_cube(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_cube(t) : rjd_ease_out_cube(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_cube(tt) : rjd_ease_out_cube(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_quar(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_quar(t) : rjd_ease_out_quar(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_quar(tt) : rjd_ease_out_quar(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_quin(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_quin(t) : rjd_ease_out_quin(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_quin(tt) : rjd_ease_out_quin(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_expo(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_expo(t) : rjd_ease_out_expo(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_expo(tt) : rjd_ease_out_expo(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_circ(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_circ(t) : rjd_ease_out_circ(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_circ(tt) : rjd_ease_out_circ(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_back(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_back(t) : rjd_ease_out_back(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_back(tt) : rjd_ease_out_back(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_elas(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_elas(t) : rjd_ease_out_elas(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_elas(tt) : rjd_ease_out_elas(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_boun(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_boun(t) : rjd_ease_out_boun(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_boun(tt) : rjd_ease_out_boun(tt - 1) + 1) / 2;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // rjd_strbuf.h
@@ -2356,7 +2487,9 @@ void rjd_strbuf_free(struct rjd_strbuf* buf);
 
 #if RJD_ENABLE_SHORTNAMES
 	#define strbuf_init		rjd_strbuf_init
+	#define strbuf_str		rjd_strbuf_str
 	#define strbuf_append	rjd_strbuf_append
+	#define strbuf_free		rjd_strbuf_free
 #endif
 
 #if RJD_IMPL
@@ -3088,5 +3221,137 @@ static int32_t rjd_dict_findindex(const char** keys, const char* key, enum rjd_d
 }
 
 #endif
+
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_fio.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#define RJD_FILEIO 1
+
+#define RJD_FIO_ERR_ENUM(macro) \
+	macro(RJD_FIO_ERR_OK)		\
+	macro(RJD_FIO_ERR_IO)		\
+	macro(RJD_FIO_ERR_NOMEM)
+RJD_ENUM_DECLARE(rjd_fio_err, RJD_FIO_ERR_ENUM)
+
+#define RJD_FIO_WRITEMODE_ENUM(macro)	\
+	macro(RJD_FIO_WRITEMODE_REPLACE)	\
+	macro(RJD_FIO_WRITEMODE_APPEND)
+RJD_ENUM_DECLARE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM)
+
+// use rjd_array_free() to free *buffer after use
+enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_alloc_context* context);
+enum rjd_fio_err rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode);
+enum rjd_fio_err rjd_fio_size(const char* path, size_t* out_size);
+enum rjd_fio_err rjd_fio_delete(const char* path);
+
+#if RJD_ENABLE_SHORTNAMES
+	#define fio_err					rjd_fio_err
+	#define fio_writemode			rjd_fio_writemode
+
+	#define fio_read				rjd_fio_read
+	#define	fio_write				rjd_fio_write
+	#define fio_size				rjd_fio_size
+	#define fio_delete				rjd_fio_delete
+
+	#define FIO_ERR_OK				RJD_FIO_ERR_OK
+	#define FIO_ERR_IO				RJD_FIO_ERR_IO
+	#define FIO_ERR_NOMEM			RJD_FIO_ERR_NOMEM
+	#define FIO_WRITEMODE_REPLACE	RJD_FIO_WRITEMODE_REPLACE
+	#define FIO_WRITEMODE_APPEND	RJD_FIO_WRITEMODE_APPEND
+#endif
+
+#if RJD_IMPL
+
+RJD_ENUM_DEFINE(rjd_fio_err, RJD_FIO_ERR_ENUM)
+RJD_ENUM_DEFINE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM)
+
+enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_alloc_context* context)
+{
+	FILE* file = fopen(path, "rb");
+	if (!file) {
+		return RJD_FIO_ERR_IO;
+	}
+
+	if (fseek(file, 0, SEEK_END)) {
+		fclose(file);
+		return RJD_FIO_ERR_IO;
+	}
+
+	long int length = ftell(file);
+	if (length < 0) {
+		length = 0;
+	}
+
+	rewind(file);
+
+	*buffer = rjd_array_alloc(char, length, context);
+	if (!*buffer) {
+		return RJD_FIO_ERR_NOMEM;
+	}
+	rjd_array_resize(*buffer, length);
+
+	size_t read_length = fread(*buffer, 1, length, file);
+	fclose(file);
+
+	if (read_length < (size_t)length) {
+		rjd_array_free(*buffer);
+		*buffer = NULL;
+		return RJD_FIO_ERR_IO;
+	}
+
+	return RJD_FIO_ERR_OK;
+}
+
+enum rjd_fio_err rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode)
+{
+	const char* m = (mode == RJD_FIO_WRITEMODE_REPLACE) ? "wb" : "ab";
+	FILE* file = fopen(path, m);
+
+	size_t written = fwrite(data, 1, length, file);
+
+	fclose(file);
+
+	if (written == 0) {
+		return RJD_FIO_ERR_IO;
+	} else if (written < length) {
+		return RJD_FIO_ERR_IO;
+	} else {
+		return RJD_FIO_ERR_OK;
+	}
+}
+
+enum rjd_fio_err rjd_fio_size(const char* path, size_t* out_size)
+{
+	FILE* file = fopen(path, "rb");
+	if (!file) {
+		return RJD_FIO_ERR_IO;
+	}
+
+	if (fseek(file, 0, SEEK_END)) {
+		fclose(file);
+		return RJD_FIO_ERR_IO;
+	}
+
+	long int length = ftell(file);
+	fclose(file);
+
+	*out_size = (size_t) length;
+	return RJD_FIO_ERR_OK;
+}
+
+enum rjd_fio_err rjd_fio_delete(const char* path)
+{
+	if (remove(path)) {
+		return RJD_FIO_ERR_IO;
+	}
+
+	return RJD_FIO_ERR_OK;
+}
+
+#endif // RJD_IMPL
 
 

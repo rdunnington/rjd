@@ -489,6 +489,193 @@ void test_math(void)
 	// matrix
 }
 
+void test_geo()
+{
+	// point-rect
+	{
+		vec3 p1 = vec3_xyz(0,0,0);
+		vec3 p2 = vec3_xyz(10,1,0);
+		vec3 p3 = vec3_xyz(2,2,10);
+
+		rect r1 = rect_minmax(-1,-1,4,4);
+		rect r2 = rect_minmax(0,0,20,1);
+		rect r3 = rect_minmax(1,1,2,2);
+
+		expect_true(point_rect(p1, r1));
+		expect_true(point_rect(p1, r2));
+		expect_false(point_rect(p1, r3));
+
+		expect_false(point_rect(p2, r1));
+		expect_true(point_rect(p2, r2));
+		expect_false(point_rect(p2, r3));
+
+		expect_true(point_rect(p3, r1));
+		expect_false(point_rect(p3, r2));
+		expect_true(point_rect(p3, r3));
+	}
+
+	// point-box
+	{
+		vec3 p1 = vec3_xyz(0,0,0);
+		vec3 p2 = vec3_xyz(-1,1,0);
+		vec3 p3 = vec3_xyz(0,1,-1);
+		vec3 p4 = vec3_xyz(1,0,1);
+
+		box b1 = box_minmax(vec3_xyz(-1,-1,-1), vec3_xyz(1,1,1));
+		box b2 = box_minmax(vec3_xyz(0,0,0), vec3_xyz(1,1,1));
+		box b3 = box_minmax(vec3_xyz(-1,-1,-1), vec3_xyz(0,0,0));
+		box b4 = box_minmax(vec3_xyz(-1,0,-1), vec3_xyz(1,1,0));
+
+		expect_true(point_box(p1, b1));
+		expect_true(point_box(p1, b2));
+		expect_true(point_box(p1, b3));
+		expect_true(point_box(p1, b4));
+
+		expect_true(point_box(p2, b1));
+		expect_false(point_box(p2, b2));
+		expect_false(point_box(p2, b3));
+		expect_true(point_box(p2, b4));
+
+		expect_true(point_box(p3, b1));
+		expect_false(point_box(p3, b2));
+		expect_false(point_box(p3, b3));
+		expect_true(point_box(p3, b4));
+
+		expect_true(point_box(p4, b1));
+		expect_true(point_box(p4, b2));
+		expect_false(point_box(p4, b3));
+		expect_false(point_box(p4, b4));
+	}
+
+	// point-circle
+	{
+		vec3 p1 = vec3_xyz(0,0,0);
+		vec3 p2 = vec3_xyz(5,1,0);
+		vec3 p3 = vec3_xyz(-3,2,0);
+		vec3 p4 = vec3_xyz(-2,-2,0);
+
+		circle c1 = circle_xyr(0,0,1);
+		circle c2 = circle_xyr(4,0,4);
+		circle c3 = circle_xyr(-1,-1,2);
+
+		expect_true(point_circle(p1, c1));
+		expect_true(point_circle(p1, c2));
+		expect_true(point_circle(p1, c3));
+
+		expect_false(point_circle(p2, c1));
+		expect_true(point_circle(p2, c2));
+		expect_false(point_circle(p2, c3));
+
+		expect_false(point_circle(p3, c1));
+		expect_false(point_circle(p3, c2));
+		expect_false(point_circle(p3, c3));
+
+		expect_false(point_circle(p4, c1));
+		expect_false(point_circle(p4, c2));
+		expect_true(point_circle(p4, c3));
+	}
+
+	// point-sphere
+	{
+		vec3 p1 = vec3_xyz(0,0,0);
+		vec3 p2 = vec3_xyz(1,2,3);
+		vec3 p3 = vec3_xyz(-2,2,7);
+		vec3 p4 = vec3_xyz(1,-2,-3);
+
+		sphere s1 = sphere_xyzr(0,0,0,4);
+		sphere s2 = sphere_xyzr(2,2,4,5);
+		sphere s3 = sphere_xyzr(-1,-4,0,3);
+
+		expect_true(point_sphere(p1, s1));
+		expect_true(point_sphere(p1, s2));
+		expect_false(point_sphere(p1, s3));
+
+		expect_true(point_sphere(p2, s1));
+		expect_true(point_sphere(p2, s2));
+		expect_false(point_sphere(p2, s3));
+
+		expect_false(point_sphere(p3, s1));
+		expect_true(point_sphere(p3, s2));
+		expect_false(point_sphere(p3, s3));
+
+		expect_true(point_sphere(p4, s1));
+		expect_false(point_sphere(p4, s2));
+		expect_false(point_sphere(p4, s3));
+	}
+
+	// circle-circle
+	{
+		circle c1 = circle_xyr(0,0,1);
+		circle c2 = circle_xyr(-2,-1,2);
+		circle c3 = circle_xyr(3,0,5);
+		circle c4 = circle_xyr(-4,-1,1);
+
+		expect_true(circle_circle(c1, c1));
+		expect_true(circle_circle(c1, c2));
+		expect_true(circle_circle(c1, c3));
+		expect_false(circle_circle(c1, c4));
+
+		expect_true(circle_circle(c2, c3));
+		expect_true(circle_circle(c2, c4));
+
+		expect_false(circle_circle(c3, c4));
+	}
+
+	// circle-rect
+	{
+		circle c1 = circle_xyr(0,0,1);
+
+		rect r1 = rect_minmax(-1,-1,1,1);
+		//rect r2 = rect_minmax(.5,0,5,1);
+
+		expect_true(circle_rect(c1, r1));
+		//expect_true(circle_rect(c1, r2));
+	}
+
+}
+
+void expect_ease(ease_func f, float f1, float f2, float f3)
+{
+	expect_float(f1, f(0.25f));
+	expect_float(f2, f(0.5f));
+	expect_float(f3, f(0.75f));
+}
+
+void test_easing()
+{
+	expect_ease(ease_line,        0.250000f,  0.500000f,  0.750000f);
+	expect_ease(ease_in_sine,     0.076120f,  0.292893f,  0.617317f);
+	expect_ease(ease_in_quad,     0.062500f,  0.250000f,  0.562500f);
+	expect_ease(ease_in_cube,     0.015625f,  0.125000f,  0.421875f);
+	expect_ease(ease_in_quar,     0.003906f,  0.062500f,  0.316406f);
+	expect_ease(ease_in_quin,     0.000977f,  0.031250f,  0.237305f);
+	expect_ease(ease_in_expo,     0.005524f,  0.031250f,  0.176777f);
+	expect_ease(ease_in_circ,     0.031754f,  0.133975f,  0.338562f);
+	expect_ease(ease_in_back,    -0.161152f, -0.375000f, -0.108455f);
+	expect_ease(ease_in_elas,    -0.005104f, -0.022097f,  0.067650f);
+	expect_ease(ease_in_boun,     0.041136f,  0.281250f,  0.527344f);
+	expect_ease(ease_out_sine,    0.382683f,  0.707107f,  0.923880f);
+	expect_ease(ease_out_quad,    0.437500f,  0.750000f,  0.937500f);
+	expect_ease(ease_out_cube,    0.578125f,  0.875000f,  0.984375f);
+	expect_ease(ease_out_quar,    0.683594f,  0.937500f,  0.996094f);
+	expect_ease(ease_out_quin,    0.762695f,  0.968750f,  0.999023f);
+	expect_ease(ease_out_expo,    0.823223f,  0.968750f,  0.994476f);
+	expect_ease(ease_out_circ,    0.661438f,  0.866025f,  0.968246f);
+	expect_ease(ease_out_back,    1.108455f,  1.375000f,  1.161152f);
+	expect_ease(ease_out_elas,    0.932351f,  1.022097f,  1.005104f);
+	expect_ease(ease_out_boun,    0.472656f,  0.718750f,  0.958864f);
+	expect_ease(ease_inout_sine,  0.146447f,  0.500000f,  0.853553f);
+	expect_ease(ease_inout_quad,  0.125000f,  0.500000f,  0.875000f);
+	expect_ease(ease_inout_cube,  0.062500f,  0.500000f,  0.937500f);
+	expect_ease(ease_inout_quar,  0.031250f,  0.500000f,  0.968750f);
+	expect_ease(ease_inout_quin,  0.015625f,  0.500000f,  0.984375f);
+	expect_ease(ease_inout_expo,  0.015625f,  0.500000f,  0.984375f);
+	expect_ease(ease_inout_circ,  0.066987f,  0.500000f,  0.933013f);
+	expect_ease(ease_inout_back, -0.187500f,  0.500000f,  1.187500f);
+	expect_ease(ease_inout_elas, -0.011049f,  0.500000f,  1.011049f);
+	expect_ease(ease_inout_boun,  0.140625f,  0.500000f,  0.859375f);
+}
+
 void test_strbuf(void)
 {	
 	struct rjd_alloc_context context = alloc_initdefault();
@@ -705,6 +892,7 @@ int main(void)
 	test_rng();
 	test_array();
 	test_math();
+	test_easing();
 	test_strbuf();
 	test_profiler();
 	test_cmd();

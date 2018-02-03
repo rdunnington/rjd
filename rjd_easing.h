@@ -64,6 +64,7 @@ static inline float rjd_ease_inout_boun(float t);
 
 #ifdef RJD_ENABLE_SHORTNAMES
 	#define ease            rjd_ease
+	#define ease_func		rjd_ease_func
 	#define ease_between	rjd_ease_between
 	#define ease_line       rjd_ease_line
 	#define ease_in_sine    rjd_ease_in_sine
@@ -95,7 +96,7 @@ static inline float rjd_ease_inout_boun(float t);
 	#define ease_inout_circ rjd_ease_inout_circ
 	#define ease_inout_back rjd_ease_inout_back
 	#define ease_inout_elas rjd_ease_inout_elas
-	#define ease_inout_boun rjd_ease_inout_boun#endif
+	#define ease_inout_boun rjd_ease_inout_boun
 
 	#define EASE_TYPE_LINE RJD_EASE_TYPE_LINE
 	#define EASE_TYPE_SINE RJD_EASE_TYPE_SINE
@@ -188,7 +189,7 @@ static inline float rjd_ease_line(float t) {
 }
 
 static inline float rjd_ease_in_sine(float t) {
-	return cosf(t*RJD_MATH_PI/2.0f);
+	return sinf((t - 1) * RJD_MATH_PI/2.0f) + 1;
 }
 
 static inline float rjd_ease_in_quad(float t) {
@@ -208,7 +209,7 @@ static inline float rjd_ease_in_quin(float t) {
 }
 
 static inline float rjd_ease_in_expo(float t) {
-	return t == 0 ? t : powf(2, -10*(t - 1));
+	return t == 0 ? t : powf(2, 10*(t - 1));
 }
 
 static inline float rjd_ease_in_circ(float t) {
@@ -262,11 +263,11 @@ static inline float rjd_ease_out_circ(float t) {
 
 static inline float rjd_ease_out_back(float t) {
 	float tt = 1 - t;
-	return tt*tt*tt - tt*sinf(tt*RJD_MATH_PI);
+	return 1 - (tt*tt*tt - tt*sinf(tt*RJD_MATH_PI));
 }
 
 static inline float rjd_ease_out_elas(float t) {
-	return sin(-13.0f * RJD_MATH_PI / 2.0f * (t + 1)) * pow(2, -10 * t + 1);
+	return sinf(-13.0f * RJD_MATH_PI / 2.0f * (t + 1)) * pow(2, -10 * t) + 1;
 }
 
 static inline float rjd_ease_out_boun(float t) {
@@ -286,47 +287,46 @@ static inline float rjd_ease_inout_sine(float t) {
 }
 
 static inline float rjd_ease_inout_quad(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_quad(t) : rjd_ease_out_quad(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_quad(tt) : rjd_ease_out_quad(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_cube(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_cube(t) : rjd_ease_out_cube(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_cube(tt) : rjd_ease_out_cube(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_quar(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_quar(t) : rjd_ease_out_quar(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_quar(tt) : rjd_ease_out_quar(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_quin(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_quin(t) : rjd_ease_out_quin(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_quin(tt) : rjd_ease_out_quin(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_expo(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_expo(t) : rjd_ease_out_expo(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_expo(tt) : rjd_ease_out_expo(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_circ(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_circ(t) : rjd_ease_out_circ(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_circ(tt) : rjd_ease_out_circ(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_back(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_back(t) : rjd_ease_out_back(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_back(tt) : rjd_ease_out_back(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_elas(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_elas(t) : rjd_ease_out_elas(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_elas(tt) : rjd_ease_out_elas(tt - 1) + 1) / 2;
 }
 
 static inline float rjd_ease_inout_boun(float t) {
-	float tt = rjd_math_remapf(t,0,1,0,2);
-	return (tt < 1) ? rjd_ease_in_boun(t) : rjd_ease_out_boun(t - 1);
+	float tt = t * 2.0f;
+	return ((tt < 1) ? rjd_ease_in_boun(tt) : rjd_ease_out_boun(tt - 1) + 1) / 2;
 }
-

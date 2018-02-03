@@ -24,9 +24,9 @@ typedef struct {
 
 rjd_geo_rect rjd_geo_rect_minmax(float minx, float miny, float maxx, float maxy);
 rjd_geo_circle rjd_geo_circle_xyr(float x, float y, float r);
-rjd_geo_box rjd_geo_box_minmax( rjd_math_vec3 min,  rjd_math_vec3 max);
+rjd_geo_box rjd_geo_box_minmax(rjd_math_vec3 min,  rjd_math_vec3 max);
 rjd_geo_sphere rjd_geo_sphere_xyzr(float x, float y, float z, float r);
-rjd_geo_ray rjd_geo_ray_pd( rjd_math_vec3 p,  rjd_math_vec3 d);
+rjd_geo_ray rjd_geo_ray_pd(rjd_math_vec3 p,  rjd_math_vec3 d);
 
 bool rjd_geo_point_rect(rjd_math_vec3 p, rjd_geo_rect r);
 bool rjd_geo_point_box(rjd_math_vec3 p, rjd_geo_box b);
@@ -75,6 +75,8 @@ bool rjd_geo_ray_boxfast(rjd_math_vec3 ray_pos, rjd_math_vec3 ray_inv_dir, rjd_g
 #if RJD_IMPL
 
 rjd_geo_rect rjd_geo_rect_minmax(float minx, float miny, float maxx, float maxy) {
+	RJD_ASSERT(minx <= maxx);
+	RJD_ASSERT(miny <= maxy);
 	rjd_geo_rect r = { rjd_math_vec4_xyzw(minx, miny, maxx, maxy) };
 	return r;
 }
@@ -127,7 +129,8 @@ bool rjd_geo_point_sphere(rjd_math_vec3 p, rjd_geo_sphere s) {
 
 bool rjd_geo_circle_circle(rjd_geo_circle c1, rjd_geo_circle c2) {
 	rjd_math_vec3 v = rjd_math_vec3_setz(rjd_math_vec3_sub(c1.xyr, c2.xyr), 0);
-	rjd_math_vec3 squared = rjd_math_vec3_mul(c1.xyr, c2.xyr);
+	rjd_math_vec3 added = rjd_math_vec3_add(c1.xyr, c2.xyr);
+	rjd_math_vec3 squared = rjd_math_vec3_mul(added, added);
 	return rjd_math_vec3_lengthsq(v) <= rjd_math_vec3_z(squared);
 }
 

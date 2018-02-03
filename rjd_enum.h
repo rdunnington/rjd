@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_FILEIO
+#define RJD_ENUM 1
 
 // TODO support RJD_ENABLE_ENUM_TYPEDEF
 
