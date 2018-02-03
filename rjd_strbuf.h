@@ -25,7 +25,9 @@ void rjd_strbuf_free(struct rjd_strbuf* buf);
 
 #if RJD_ENABLE_SHORTNAMES
 	#define strbuf_init		rjd_strbuf_init
+	#define strbuf_str		rjd_strbuf_str
 	#define strbuf_append	rjd_strbuf_append
+	#define strbuf_free		rjd_strbuf_free
 #endif
 
 #if RJD_IMPL
