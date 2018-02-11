@@ -178,6 +178,21 @@ void test_enum()
 	expect_true(e2_parse("NOTOK", &e2_value) && e2_value == e2_notok);
 }
 
+void test_hash()
+{
+	const uint8_t* data1 = (const uint8_t*)"test1";
+	const uint8_t* data2 = (const uint8_t*)"a longer string that has a bunch of characters in it!!$%^&*(";
+	const uint8_t* data3 = NULL;
+
+	expect_uint32(rjd_hash32_data(data1, strlen((const char*)data1)).value, rjd_hash32_data(data1, -1).value);
+	expect_uint32(rjd_hash32_data(data2, strlen((const char*)data2)).value, rjd_hash32_data(data2, -1).value);
+	expect_uint32(rjd_hash32_data(data3, strlen((const char*)data3)).value, rjd_hash32_data(data3, -1).value);
+
+	expect_uint64(rjd_hash64_data(data1, strlen((const char*)data1)).value, rjd_hash64_data(data1, -1).value);
+	expect_uint64(rjd_hash64_data(data2, strlen((const char*)data2)).value, rjd_hash64_data(data2, -1).value);
+	expect_uint64(rjd_hash64_data(data3, strlen((const char*)data3)).value, rjd_hash64_data(data3, -1).value);
+}
+
 void test_alloc()
 {
 	// default allocator
@@ -888,6 +903,7 @@ int main(void)
 {
 	test_logging();
 	test_enum();
+	test_hash();
 	test_alloc();
 	test_rng();
 	test_array();

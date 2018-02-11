@@ -18,6 +18,7 @@ files = [
     "rjd_platform.h",
     "rjd_debug.h",
     "rjd_enum.h",
+    "rjd_hash.h",
     "rjd_alloc.h",
     "rjd_rng.h",
     "rjd_array.h",
