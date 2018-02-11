@@ -502,6 +502,7 @@ void test_math(void)
 	expect_vec3(vec3_xyz(1,2,4), vec3_lerp(vec3_zero(), vec3_xyz(2, 4, 8), .5));
 
 	// matrix
+	// TODO
 }
 
 void test_geo()
@@ -630,23 +631,91 @@ void test_geo()
 		expect_true(circle_circle(c1, c3));
 		expect_false(circle_circle(c1, c4));
 
+		expect_true(circle_circle(c2, c1));
+		expect_true(circle_circle(c2, c2));
 		expect_true(circle_circle(c2, c3));
 		expect_true(circle_circle(c2, c4));
 
+		expect_true(circle_circle(c3, c1));
+		expect_true(circle_circle(c3, c2));
+		expect_true(circle_circle(c3, c3));
 		expect_false(circle_circle(c3, c4));
+
+		expect_false(circle_circle(c4, c1));
+		expect_true(circle_circle(c4, c2));
+		expect_false(circle_circle(c4, c3));
+		expect_true(circle_circle(c4, c4));
 	}
 
 	// circle-rect
 	{
 		circle c1 = circle_xyr(0,0,1);
+		circle c2 = circle_xyr(2,1,.5);
+		circle c3 = circle_xyr(3,-3,2);
 
 		rect r1 = rect_minmax(-1,-1,1,1);
-		//rect r2 = rect_minmax(.5,0,5,1);
+		rect r2 = rect_minmax(-2,-2,2,2);
+		rect r3 = rect_minmax(0,1,2,3);
+		rect r4 = rect_minmax(-2, 1,-1,2);
 
 		expect_true(circle_rect(c1, r1));
-		//expect_true(circle_rect(c1, r2));
+		expect_true(circle_rect(c1, r2));
+		expect_false(circle_rect(c1, r3));
+		expect_false(circle_rect(c1, r4));
+
+		expect_false(circle_rect(c2, r1));
+		expect_true(circle_rect(c2, r2));
+		expect_true(circle_rect(c2, r3));
+		expect_false(circle_rect(c2, r4));
+
+		expect_false(circle_rect(c3, r1));
+		expect_true(circle_rect(c3, r2));
+		expect_false(circle_rect(c3, r3));
+		expect_false(circle_rect(c3, r4));
 	}
 
+	// rect-rect
+	{
+		rect r1 = rect_minmax(-3,-1,3,1);
+		rect r2 = rect_minmax(1,-3,2,2);
+		rect r3 = rect_minmax(-1,-4,1,-2);
+		rect r4 = rect_minmax(.5,-2.5,1.5,-.5);
+		rect r5 = rect_minmax(-2,0,-1,2);
+
+		expect_true(rect_rect(r1, r1));
+		expect_true(rect_rect(r1, r2));
+		expect_false(rect_rect(r1, r3));
+		expect_true(rect_rect(r1, r4));
+		expect_true(rect_rect(r1, r5));
+
+		expect_true(rect_rect(r2, r1));
+		expect_true(rect_rect(r2, r2));
+		expect_false(rect_rect(r2, r3));
+		expect_true(rect_rect(r2, r4));
+		expect_false(rect_rect(r2, r5));
+
+		expect_false(rect_rect(r3, r1));
+		expect_false(rect_rect(r3, r2));
+		expect_true(rect_rect(r3, r3));
+		expect_true(rect_rect(r3, r4));
+		expect_false(rect_rect(r3, r5));
+
+		expect_true(rect_rect(r4, r1));
+		expect_true(rect_rect(r4, r2));
+		expect_true(rect_rect(r4, r3));
+		expect_true(rect_rect(r4, r4));
+		expect_false(rect_rect(r4, r5));
+
+		expect_true(rect_rect(r5, r1));
+		expect_false(rect_rect(r5, r2));
+		expect_false(rect_rect(r5, r3));
+		expect_false(rect_rect(r5, r4));
+		expect_true(rect_rect(r5, r5));	
+	}
+
+	// sphere-sphere
+	{
+	}
 }
 
 void expect_ease(ease_func f, float f1, float f2, float f3)
