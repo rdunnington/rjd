@@ -2,10 +2,6 @@
 
 #define RJD_CMD 1
 
-// DEPENDENCIES
-// rjd_assert.h
-// rjd_array.h
-
 struct rjd_alloc_context;
 
 struct rjd_cmd_argv

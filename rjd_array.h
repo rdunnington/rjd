@@ -2,11 +2,6 @@
 
 #define RJD_ARRAY 1
 
-// DEPENDENCIES
-// rjd_alloc.h
-// rjd_debug.h
-// string.h
-
 struct rjd_alloc_context;
 
 #if RJD_COMPILER_MSVC
@@ -44,10 +39,8 @@ struct rjd_alloc_context;
 #define rjd_array_reduce(buf, acc, pred)	for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = pred(acc, ((buf)[_i])); }
 #define rjd_array_sum(buf, acc)				for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = rjd_array_sum_pred((acc), ((buf)[_i])); }
 
-#if RJD_RNG
-	#define rjd_array_sample(buf, rng)		((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
-	#define rjd_array_shuffle(buf, rng)		rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
-#endif
+#define rjd_array_sample(buf, rng)		((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
+#define rjd_array_shuffle(buf, rng)		rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
 
 #if RJD_ENABLE_SHORTNAMES
 	#define countof					rjd_countof
@@ -59,7 +52,7 @@ struct rjd_alloc_context;
 	#define array_clear				rjd_array_clear
 	#define array_resize   			rjd_array_resize
 	#define array_erase    			rjd_array_erase
-	#define array_erase_unordered		rjd_array_erase_unordered
+	#define array_erase_unordered	rjd_array_erase_unordered
 	#define array_empty    			rjd_array_empty
 	#define array_full     			rjd_array_full
 	#define array_push     			rjd_array_push
@@ -68,13 +61,13 @@ struct rjd_alloc_context;
 	#define array_first				rjd_array_first
 	#define array_last				rjd_array_last
 	#define array_contains			rjd_array_contains
-	#define array_filter				rjd_array_filter
-	#define array_map					rjd_array_map
-	#define	array_reduce				rjd_array_reduce
-	#define array_sum					rjd_array_sum
+	#define array_filter			rjd_array_filter
+	#define array_map				rjd_array_map
+	#define	array_reduce			rjd_array_reduce
+	#define array_sum				rjd_array_sum
 
-	#define array_sample				rjd_array_sample
-	#define array_shuffle				rjd_array_shuffle
+	#define array_sample			rjd_array_sample
+	#define array_shuffle			rjd_array_shuffle
 #endif
 
 struct rjd_rng;
@@ -245,30 +238,28 @@ bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeof_type, size
 	return false;
 }
 
-#if RJD_RNG
-	void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_type)
-	{
-		char tmp[512];
-		RJD_ASSERTMSG(sizeof_type <= sizeof(tmp), 
-			"tmp (%u bytes) must be greater than or equal to sizeof_type (%u bytes)", 
-			(unsigned) sizeof(tmp), (unsigned) sizeof_type);
+void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_type)
+{
+	char tmp[512];
+	RJD_ASSERTMSG(sizeof_type <= sizeof(tmp), 
+		"tmp (%u bytes) must be greater than or equal to sizeof_type (%u bytes)", 
+		(unsigned) sizeof(tmp), (unsigned) sizeof_type);
 
-		char* raw = (char*)buffer;
-		for (uint32_t i = 0; i < rjd_array_count(buffer); ++i) {
-			uint32_t k = rjd_rng_range32(rng, 0, rjd_array_count(buffer));
-			if (i == k) {
-				continue;
-			}
-
-			char* a = raw + (i * sizeof_type);
-			char* b = raw + (k * sizeof_type);
-
-			memcpy(tmp, a, sizeof_type);
-			memcpy(a, b, sizeof_type);
-			memcpy(b, tmp, sizeof_type);
+	char* raw = (char*)buffer;
+	for (uint32_t i = 0; i < rjd_array_count(buffer); ++i) {
+		uint32_t k = rjd_rng_range32(rng, 0, rjd_array_count(buffer));
+		if (i == k) {
+			continue;
 		}
+
+		char* a = raw + (i * sizeof_type);
+		char* b = raw + (k * sizeof_type);
+
+		memcpy(tmp, a, sizeof_type);
+		memcpy(a, b, sizeof_type);
+		memcpy(b, tmp, sizeof_type);
 	}
-#endif // RJD_RNG
+}
 
 #endif //RJD_IMPL
 

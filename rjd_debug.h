@@ -2,12 +2,6 @@
 
 #define RJD_DEBUG 1
 
-// DEPENDENCIES:
-// stdio.h
-// stdbool.h
-// stdarg.h
-// stdint.h
-
 enum rjd_log_verbosity
 {
 	RJD_LOG_VERBOSITY_LOW,

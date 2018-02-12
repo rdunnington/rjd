@@ -2,10 +2,6 @@
 
 #define RJD_ALLOC 1
 
-// DEPENDENCIES: 
-// stdlib.h (malloc/free)
-// rjd_debug.h
-
 // TODO realloc
 typedef void* (*rjd_func_alloc)(size_t size);
 typedef void* (*rjd_func_alloc_scoped)(size_t size, void* allocator);
