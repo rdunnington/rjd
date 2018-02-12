@@ -19,7 +19,7 @@ struct rjd_strbuf
 };
 
 struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator);
-const char* rjd_strbuf_str(struct rjd_strbuf* buf);
+const char* rjd_strbuf_str(const struct rjd_strbuf* buf);
 void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...);
 void rjd_strbuf_free(struct rjd_strbuf* buf);
 
@@ -45,7 +45,7 @@ struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator)
 	return buf;
 }
 
-const char* rjd_strbuf_str(struct rjd_strbuf* buf)
+const char* rjd_strbuf_str(const struct rjd_strbuf* buf)
 {
 	return buf->heap ? buf->heap : buf->stack;
 }
@@ -94,6 +94,8 @@ void rjd_strbuf_free(struct rjd_strbuf* buf)
 
 static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 {
+	RJD_ASSERT(buf && buf->allocator);
+
 	uint32_t current = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
 	uint32_t min = current + format_length;
 	uint32_t next = rjd_math_next_pow2(min);
