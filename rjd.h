@@ -8,14 +8,15 @@
 #include <float.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include <xmmintrin.h>
-#include <pmmintrin.h>
+#include <math.h>
+#include <string.h>
+#include <xmmintrin.h> // SSE2
+#include <pmmintrin.h> // SSE3
 
 #if RJD_IMPL
 	#include <stdlib.h>
 	#include <stdarg.h>
 	#include <stdio.h>
-	#include <string.h>
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1595,7 +1596,7 @@ static inline rjd_math_mat4 rjd_math_mat4_identity(void) {
 	m.m[3] = rjd_math_vec4_xyzw(0,0,0,1);
 	return m;
 }
-static inline rjd_math_mat4 rjd_math_mat4_translation(vec3 trans) {
+static inline rjd_math_mat4 rjd_math_mat4_translation(rjd_math_vec3 trans) {
 	rjd_math_mat4 m;
 	m.m[0] = rjd_math_vec4_xyzw(1,0,0,0);
 	m.m[1] = rjd_math_vec4_xyzw(0,1,0,0);
@@ -1695,7 +1696,7 @@ static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) 
 static inline rjd_math_mat4 rjd_math_mat4_mul(rjd_math_mat4 a, rjd_math_mat4 b) {
 	rjd_math_mat4 t = rjd_math_mat4_transpose(b);
 	rjd_math_mat4 m;
-	for (size_t i = 0; i < countof(m.m); ++i) {
+	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
 		m.m[i] = rjd_math_mat4_mulv4(t, a.m[i]);
 	}
 	return m;
@@ -1873,7 +1874,7 @@ static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
 	rjd_math_vec4 det_reciprocal = {_mm_rcp_ps(det.v)};
 
 	rjd_math_mat4 out;
-	for (size_t i = 0; i < countof(out.m); ++i) {
+	for (size_t i = 0; i < rjd_countof(out.m); ++i) {
 		out.m[i] = rjd_math_vec4_mul(det_reciprocal, inv.m[i]);
 	}
 
@@ -2682,7 +2683,7 @@ double rjd_timer_global(void);
 #define RJD_PROFILE_SCOPE(name, scope) {									\
 		struct rjd_timer _timer##name = rjd_timer_init(); 					\
 		{scope}																\
-		LOG("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&_timer##name));	\
+		RJD_LOG("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&_timer##name));	\
 	}
 
 #if RJD_ENABLE_SHORTNAMES
@@ -2726,7 +2727,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 			LARGE_INTEGER frequency = {.QuadPart = 1};
 			if (!QueryPerformanceFrequency(&frequency))
 			{
-				LOG("Failed to get QueryPerformanceFrequency: %d", GetLastError());
+				RJD_LOG("Failed to get QueryPerformanceFrequency: %d", GetLastError());
 			}
 			RJD_QPC_FREQUENCY = (double)frequency.QuadPart;
 		}
@@ -2734,7 +2735,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 		LARGE_INTEGER time = { .QuadPart = 0 };
 		if (!QueryPerformanceCounter(&time))
 		{
-			LOG("Failed to get QueryPerformanceCounter. Time will be incorrect. Error: %d", GetLastError());
+			RJD_LOG("Failed to get QueryPerformanceCounter. Time will be incorrect. Error: %d", GetLastError());
 		}
 
 		return (time.QuadPart * 1000LL) / RJD_QPC_FREQUENCY;
@@ -2751,7 +2752,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 		if (RJD_MACH_TIMEBASE_INFO.denom == 0) {
 			int ok = mach_timebase_info(&RJD_MACH_TIMEBASE_INFO);
 			if (ok != KERN_SUCCESS) {
-				LOG("Failed to get mach timebase info: %d", ok);
+				RJD_LOG("Failed to get mach timebase info: %d", ok);
 			}
 		}
 

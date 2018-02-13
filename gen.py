@@ -3,15 +3,16 @@ includes = [
     "<float.h>",
     "<stddef.h>",
     "<stdbool.h>",
-    "<xmmintrin.h>", # SSE2
-    "<pmmintrin.h>"  # SSE3
+    "<math.h>",
+    "<string.h>",
+    "<xmmintrin.h> // SSE2",
+    "<pmmintrin.h> // SSE3"
 ]
 
 includes_impl = [
     "<stdlib.h>",
     "<stdarg.h>",
     "<stdio.h>",
-    "<string.h>",
 ]
 
 files = [ 

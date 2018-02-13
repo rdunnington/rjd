@@ -642,7 +642,7 @@ static inline rjd_math_mat4 rjd_math_mat4_identity(void) {
 	m.m[3] = rjd_math_vec4_xyzw(0,0,0,1);
 	return m;
 }
-static inline rjd_math_mat4 rjd_math_mat4_translation(vec3 trans) {
+static inline rjd_math_mat4 rjd_math_mat4_translation(rjd_math_vec3 trans) {
 	rjd_math_mat4 m;
 	m.m[0] = rjd_math_vec4_xyzw(1,0,0,0);
 	m.m[1] = rjd_math_vec4_xyzw(0,1,0,0);
@@ -742,7 +742,7 @@ static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) 
 static inline rjd_math_mat4 rjd_math_mat4_mul(rjd_math_mat4 a, rjd_math_mat4 b) {
 	rjd_math_mat4 t = rjd_math_mat4_transpose(b);
 	rjd_math_mat4 m;
-	for (size_t i = 0; i < countof(m.m); ++i) {
+	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
 		m.m[i] = rjd_math_mat4_mulv4(t, a.m[i]);
 	}
 	return m;
@@ -920,7 +920,7 @@ static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
 	rjd_math_vec4 det_reciprocal = {_mm_rcp_ps(det.v)};
 
 	rjd_math_mat4 out;
-	for (size_t i = 0; i < countof(out.m); ++i) {
+	for (size_t i = 0; i < rjd_countof(out.m); ++i) {
 		out.m[i] = rjd_math_vec4_mul(det_reciprocal, inv.m[i]);
 	}
 

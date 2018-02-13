@@ -4,12 +4,13 @@
 #include <float.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include <xmmintrin.h>
-#include <pmmintrin.h>
+#include <math.h>
+#include <string.h>
+#include <xmmintrin.h> // SSE2
+#include <pmmintrin.h> // SSE3
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <string.h>
 
 #include "rjd_platform.h"
 #include "rjd_debug.h"

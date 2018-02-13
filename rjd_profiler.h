@@ -15,7 +15,7 @@ double rjd_timer_global(void);
 #define RJD_PROFILE_SCOPE(name, scope) {									\
 		struct rjd_timer _timer##name = rjd_timer_init(); 					\
 		{scope}																\
-		LOG("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&_timer##name));	\
+		RJD_LOG("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&_timer##name));	\
 	}
 
 #if RJD_ENABLE_SHORTNAMES
@@ -59,7 +59,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 			LARGE_INTEGER frequency = {.QuadPart = 1};
 			if (!QueryPerformanceFrequency(&frequency))
 			{
-				LOG("Failed to get QueryPerformanceFrequency: %d", GetLastError());
+				RJD_LOG("Failed to get QueryPerformanceFrequency: %d", GetLastError());
 			}
 			RJD_QPC_FREQUENCY = (double)frequency.QuadPart;
 		}
@@ -67,7 +67,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 		LARGE_INTEGER time = { .QuadPart = 0 };
 		if (!QueryPerformanceCounter(&time))
 		{
-			LOG("Failed to get QueryPerformanceCounter. Time will be incorrect. Error: %d", GetLastError());
+			RJD_LOG("Failed to get QueryPerformanceCounter. Time will be incorrect. Error: %d", GetLastError());
 		}
 
 		return (time.QuadPart * 1000LL) / RJD_QPC_FREQUENCY;
@@ -84,7 +84,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 		if (RJD_MACH_TIMEBASE_INFO.denom == 0) {
 			int ok = mach_timebase_info(&RJD_MACH_TIMEBASE_INFO);
 			if (ok != KERN_SUCCESS) {
-				LOG("Failed to get mach timebase info: %d", ok);
+				RJD_LOG("Failed to get mach timebase info: %d", ok);
 			}
 		}
 
