@@ -36,10 +36,9 @@ bool rjd_hash64_valid(rjd_hash64 hash);
 
 rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 {
-	RJD_ASSERT(key);
 	RJD_ASSERT(length >= -1);
 
-	if (length == 0 || (length == -1 && *key == '\0')) {
+	if (key == NULL || length == 0 || (length == -1 && *key == '\0')) {
 		rjd_hash32 hash = {0};
 		return hash;
 	}
@@ -64,10 +63,9 @@ rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 
 rjd_hash64 rjd_hash64_data(const uint8_t* key, int length)
 {
-	RJD_ASSERT(key);
 	RJD_ASSERT(length >= -1);
 
-	if (length == 0 || (length == -1 && *key == '\0')) {
+	if (key == NULL || length == 0 || (length == -1 && *key == '\0')) {
 		rjd_hash64 hash = {0};
 		return hash;
 	}
