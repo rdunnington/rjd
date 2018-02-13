@@ -976,6 +976,45 @@ void test_fio()
 	expect_fio(FIO_ERR_OK, err);
 }
 
+void test_strpool()
+{
+	struct rjd_alloc_context allocator = alloc_initdefault();
+
+	struct strpool pool = strpool_init(&allocator, 2);
+
+	const char* test1 = "test1";
+	const char* test2 = "some words on a page";
+	const char* test3 = "a really really super long string that has an end lalalalalalalala";
+	const char* test4 = " ";
+
+	struct strref* ref1 = strpool_add(&pool, test1);
+	struct strref* ref2 = strpool_add(&pool, test2);
+	struct strref* ref3 = strpool_add(&pool, test3);
+	struct strref* ref4 = strpool_add(&pool, test4);
+
+	expect_true(ref1 == strpool_add(&pool, test1));
+	expect_true(ref2 == strpool_add(&pool, test2));
+	expect_true(ref3 == strpool_add(&pool, test3));
+	expect_true(ref4 == strpool_add(&pool, test4));
+
+	expect_str(ref1->str, test1);
+	expect_str(ref2->str, test2);
+	expect_str(ref3->str, test3);
+	expect_str(ref4->str, test4);
+
+	strref_release(ref1);
+	strref_release(ref2);
+	strref_release(ref3);
+	strref_release(ref4);
+
+	expect_str(ref1->str, test1);
+	expect_str(ref2->str, test2);
+	expect_str(ref3->str, test3);
+	expect_str(ref4->str, test4);
+
+	strpool_free(&pool);
+}
+
 int main(void) 
 {
 	test_logging();
@@ -991,6 +1030,7 @@ int main(void)
 	test_cmd();
 	test_dict();
 	test_fio();
+	test_strpool();
 
 	return 0;
 }

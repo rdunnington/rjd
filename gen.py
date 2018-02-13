@@ -29,7 +29,8 @@ files = [
     "rjd_profiler.h",
     "rjd_cmd.h",
     "rjd_dict.h",
-    "rjd_fio.h"
+    "rjd_fio.h",
+    "rjd_strpool.h"
 ]
 
 concat = "#pragma once\n\n"

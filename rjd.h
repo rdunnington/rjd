@@ -91,12 +91,6 @@
 
 #define RJD_DEBUG 1
 
-// DEPENDENCIES:
-// stdio.h
-// stdbool.h
-// stdarg.h
-// stdint.h
-
 enum rjd_log_verbosity
 {
 	RJD_LOG_VERBOSITY_LOW,
@@ -393,10 +387,9 @@ bool rjd_hash64_valid(rjd_hash64 hash);
 
 rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 {
-	RJD_ASSERT(key);
 	RJD_ASSERT(length >= -1);
 
-	if (length == 0 || (length == -1 && *key == '\0')) {
+	if (key == NULL || length == 0 || (length == -1 && *key == '\0')) {
 		rjd_hash32 hash = {0};
 		return hash;
 	}
@@ -421,10 +414,9 @@ rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 
 rjd_hash64 rjd_hash64_data(const uint8_t* key, int length)
 {
-	RJD_ASSERT(key);
 	RJD_ASSERT(length >= -1);
 
-	if (length == 0 || (length == -1 && *key == '\0')) {
+	if (key == NULL || length == 0 || (length == -1 && *key == '\0')) {
 		rjd_hash64 hash = {0};
 		return hash;
 	}
@@ -467,10 +459,6 @@ bool rjd_hash64_valid(rjd_hash64 hash)
 #pragma once
 
 #define RJD_ALLOC 1
-
-// DEPENDENCIES: 
-// stdlib.h (malloc/free)
-// rjd_debug.h
 
 // TODO realloc
 typedef void* (*rjd_func_alloc)(size_t size);
@@ -697,11 +685,6 @@ int32_t rjd_rng_range32(struct rjd_rng* rng, int32_t min_inclusive, int32_t max_
 
 #define RJD_ARRAY 1
 
-// DEPENDENCIES
-// rjd_alloc.h
-// rjd_debug.h
-// string.h
-
 struct rjd_alloc_context;
 
 #if RJD_COMPILER_MSVC
@@ -739,10 +722,8 @@ struct rjd_alloc_context;
 #define rjd_array_reduce(buf, acc, pred)	for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = pred(acc, ((buf)[_i])); }
 #define rjd_array_sum(buf, acc)				for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = rjd_array_sum_pred((acc), ((buf)[_i])); }
 
-#if RJD_RNG
-	#define rjd_array_sample(buf, rng)		((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
-	#define rjd_array_shuffle(buf, rng)		rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
-#endif
+#define rjd_array_sample(buf, rng)		((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
+#define rjd_array_shuffle(buf, rng)		rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
 
 #if RJD_ENABLE_SHORTNAMES
 	#define countof					rjd_countof
@@ -754,7 +735,7 @@ struct rjd_alloc_context;
 	#define array_clear				rjd_array_clear
 	#define array_resize   			rjd_array_resize
 	#define array_erase    			rjd_array_erase
-	#define array_erase_unordered		rjd_array_erase_unordered
+	#define array_erase_unordered	rjd_array_erase_unordered
 	#define array_empty    			rjd_array_empty
 	#define array_full     			rjd_array_full
 	#define array_push     			rjd_array_push
@@ -763,13 +744,13 @@ struct rjd_alloc_context;
 	#define array_first				rjd_array_first
 	#define array_last				rjd_array_last
 	#define array_contains			rjd_array_contains
-	#define array_filter				rjd_array_filter
-	#define array_map					rjd_array_map
-	#define	array_reduce				rjd_array_reduce
-	#define array_sum					rjd_array_sum
+	#define array_filter			rjd_array_filter
+	#define array_map				rjd_array_map
+	#define	array_reduce			rjd_array_reduce
+	#define array_sum				rjd_array_sum
 
-	#define array_sample				rjd_array_sample
-	#define array_shuffle				rjd_array_shuffle
+	#define array_sample			rjd_array_sample
+	#define array_shuffle			rjd_array_shuffle
 #endif
 
 struct rjd_rng;
@@ -940,30 +921,28 @@ bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeof_type, size
 	return false;
 }
 
-#if RJD_RNG
-	void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_type)
-	{
-		char tmp[512];
-		RJD_ASSERTMSG(sizeof_type <= sizeof(tmp), 
-			"tmp (%u bytes) must be greater than or equal to sizeof_type (%u bytes)", 
-			(unsigned) sizeof(tmp), (unsigned) sizeof_type);
+void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_type)
+{
+	char tmp[512];
+	RJD_ASSERTMSG(sizeof_type <= sizeof(tmp), 
+		"tmp (%u bytes) must be greater than or equal to sizeof_type (%u bytes)", 
+		(unsigned) sizeof(tmp), (unsigned) sizeof_type);
 
-		char* raw = (char*)buffer;
-		for (uint32_t i = 0; i < rjd_array_count(buffer); ++i) {
-			uint32_t k = rjd_rng_range32(rng, 0, rjd_array_count(buffer));
-			if (i == k) {
-				continue;
-			}
-
-			char* a = raw + (i * sizeof_type);
-			char* b = raw + (k * sizeof_type);
-
-			memcpy(tmp, a, sizeof_type);
-			memcpy(a, b, sizeof_type);
-			memcpy(b, tmp, sizeof_type);
+	char* raw = (char*)buffer;
+	for (uint32_t i = 0; i < rjd_array_count(buffer); ++i) {
+		uint32_t k = rjd_rng_range32(rng, 0, rjd_array_count(buffer));
+		if (i == k) {
+			continue;
 		}
+
+		char* a = raw + (i * sizeof_type);
+		char* b = raw + (k * sizeof_type);
+
+		memcpy(tmp, a, sizeof_type);
+		memcpy(a, b, sizeof_type);
+		memcpy(b, tmp, sizeof_type);
 	}
-#endif // RJD_RNG
+}
 
 #endif //RJD_IMPL
 
@@ -2590,7 +2569,7 @@ struct rjd_strbuf
 };
 
 struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator);
-const char* rjd_strbuf_str(struct rjd_strbuf* buf);
+const char* rjd_strbuf_str(const struct rjd_strbuf* buf);
 void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...);
 void rjd_strbuf_free(struct rjd_strbuf* buf);
 
@@ -2616,7 +2595,7 @@ struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator)
 	return buf;
 }
 
-const char* rjd_strbuf_str(struct rjd_strbuf* buf)
+const char* rjd_strbuf_str(const struct rjd_strbuf* buf)
 {
 	return buf->heap ? buf->heap : buf->stack;
 }
@@ -2665,6 +2644,8 @@ void rjd_strbuf_free(struct rjd_strbuf* buf)
 
 static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 {
+	RJD_ASSERT(buf && buf->allocator);
+
 	uint32_t current = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
 	uint32_t min = current + format_length;
 	uint32_t next = rjd_math_next_pow2(min);
@@ -2789,10 +2770,6 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 #pragma once
 
 #define RJD_CMD 1
-
-// DEPENDENCIES
-// rjd_assert.h
-// rjd_array.h
 
 struct rjd_alloc_context;
 
@@ -3156,11 +3133,13 @@ struct rjd_dict rjd_dict_init(struct rjd_alloc_context* allocator, size_t initia
 void rjd_dict_insert(struct rjd_dict* dict, rjd_hash64 hash, void* item);
 void* rjd_dict_erase(struct rjd_dict* dict, rjd_hash64 hash);
 void* rjd_dict_get(const struct rjd_dict* dict, rjd_hash64 hash);
+bool rjd_dict_has(const struct rjd_dict* dict, rjd_hash64 hash);
 void rjd_dict_free(struct rjd_dict* dict);
 
 static inline void rjd_dict_insert_hashstr(struct rjd_dict* dict, const char* key, void* item);
 static inline void* rjd_dict_erase_hashstr(struct rjd_dict* dict, const char* key);
 static inline void* rjd_dict_get_hashstr(const struct rjd_dict* dict, const char* key);
+static inline bool rjd_dict_has_hashstr(const struct rjd_dict* dict, const char* key);
 
 #if RJD_ENABLE_SHORTNAMES
 	#define dict_init	rjd_dict_init
@@ -3172,6 +3151,7 @@ static inline void* rjd_dict_get_hashstr(const struct rjd_dict* dict, const char
 	#define	dict_insert_hashstr	rjd_dict_insert_hashstr
 	#define dict_erase_hashstr	rjd_dict_erase_hashstr
 	#define dict_get_hashstr	rjd_dict_get_hashstr
+	#define dict_has_hashstr	rjd_dict_has_hashstr
 #endif
 
 static inline void rjd_dict_insert_hashstr(struct rjd_dict* dict, const char* key, void* item)
@@ -3187,6 +3167,11 @@ static inline void* rjd_dict_erase_hashstr(struct rjd_dict* dict, const char* ke
 static inline void* rjd_dict_get_hashstr(const struct rjd_dict* dict, const char* key)
 {
 	return rjd_dict_get(dict, rjd_hash64_data((uint8_t*)key, -1));
+}
+
+static inline bool rjd_dict_has_hashstr(const struct rjd_dict* dict, const char* key)
+{
+	return rjd_dict_has(dict, rjd_hash64_data((uint8_t*)key, -1));
 }
 
 #if RJD_IMPL
@@ -3216,6 +3201,7 @@ struct rjd_dict rjd_dict_init(struct rjd_alloc_context* allocator, size_t initia
 void rjd_dict_insert(struct rjd_dict* dict, rjd_hash64 hash, void* value)
 {
 	RJD_ASSERT(dict);
+	RJD_ASSERT(rjd_hash64_valid(hash));
 
 	const float load = dict->hashes ? (dict->count + 1) / (float)rjd_array_capacity(dict->hashes) : 1;
 	if (load > 0.6) {
@@ -3225,7 +3211,7 @@ void rjd_dict_insert(struct rjd_dict* dict, rjd_hash64 hash, void* value)
 
 	int32_t i = rjd_dict_findindex(dict->hashes, hash, RJD_DICT_FINDMODE_INSERTION);
 	RJD_ASSERT(i >= 0);
-	RJD_ASSERT(rjd_hash64_valid(dict->hashes[i]));
+	RJD_ASSERT(!rjd_hash64_valid(dict->hashes[i]));
 
 	dict->hashes[i] = hash;
 	dict->values[i] = value;
@@ -3262,8 +3248,26 @@ void* rjd_dict_get(const struct rjd_dict* dict, rjd_hash64 hash)
 	return dict->values[index];
 }
 
+bool rjd_dict_has(const struct rjd_dict* dict, rjd_hash64 hash)
+{
+	RJD_ASSERT(dict);
+
+	if (!rjd_hash64_valid(hash)) {
+		return false;
+	}
+
+	int32_t index = rjd_dict_findindex(dict->hashes, hash, RJD_DICT_FINDMODE_EXISTING);
+	if (index >= 0) {
+		return rjd_hash64_valid(dict->hashes[index]);
+	}
+
+	return false;
+}
+
 void rjd_dict_free(struct rjd_dict* dict)
 {
+	RJD_ASSERT(dict);
+
 	rjd_array_free(dict->hashes);
 	rjd_array_free(dict->values);
 	dict->hashes = NULL;
@@ -3274,6 +3278,7 @@ void rjd_dict_free(struct rjd_dict* dict)
 static void rjd_dict_grow(struct rjd_dict* dict, size_t capacity)
 {
 	RJD_ASSERT(capacity > 0);
+	RJD_ASSERT(dict);
 
 	rjd_hash64* hashes = rjd_array_alloc(rjd_hash64, capacity, dict->allocator);
 	void** values = rjd_array_alloc(void*, capacity, dict->allocator);
@@ -3449,6 +3454,116 @@ enum rjd_fio_err rjd_fio_delete(const char* path)
 	}
 
 	return RJD_FIO_ERR_OK;
+}
+
+#endif // RJD_IMPL
+
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_strpool.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+struct rjd_strpool
+{
+	struct rjd_dict storage;
+};
+
+struct rjd_strref;
+
+struct rjd_strpool rjd_strpool_init(struct rjd_alloc_context* allocator, size_t initial_capacity);
+void rjd_strpool_free(struct rjd_strpool* pool);
+struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* str);
+void rjd_strref_release(struct rjd_strref* ref);
+const char* rjd_strref_str(const struct rjd_strref* ref);
+
+#if RJD_ENABLE_SHORTNAMES
+	#define strpool			rjd_strpool
+	#define strref			rjd_strref
+
+	#define strpool_init	rjd_strpool_init
+	#define strpool_free	rjd_strpool_free
+	#define strpool_add		rjd_strpool_add
+	#define strref_release	rjd_strref_release
+	#define	strref_str		rjd_strref_str
+#endif
+
+#if RJD_IMPL
+
+struct rjd_strref
+{
+	const char* str;
+	int32_t refcount;
+	struct rjd_strpool* owner;
+};
+
+struct rjd_strpool rjd_strpool_init(struct rjd_alloc_context* allocator, size_t initial_capacity)
+{
+	RJD_ASSERT(allocator);
+
+	struct rjd_strpool pool = { rjd_dict_init(allocator, initial_capacity * 2) };
+	return pool;
+}
+
+void rjd_strpool_free(struct rjd_strpool* pool)
+{
+	RJD_ASSERT(pool);
+
+	void** refs = pool->storage.values;
+	for (uint32_t i = 0; i < rjd_array_count(refs); ++i) {
+		if (refs[i]) {
+			struct rjd_strref* ref = refs[i];
+			rjd_free(ref->str, pool->storage.allocator);
+			rjd_free(ref, pool->storage.allocator);
+		}
+	}
+	rjd_dict_free(&pool->storage);
+}
+
+struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* str)
+{
+	RJD_ASSERT(pool);
+	RJD_ASSERT(str);
+
+	rjd_hash64 hash = rjd_hash64_data((const uint8_t*)str, -1);
+	struct rjd_strref* ref = rjd_dict_get(&pool->storage, hash);
+	if (!ref) {
+		char* copied_str = rjd_malloc_array(char, strlen(str) + 1, pool->storage.allocator);
+		strcpy(copied_str, str);
+
+		ref = rjd_malloc(struct rjd_strref, pool->storage.allocator);
+		ref->str = copied_str;
+		ref->refcount = 0;
+		ref->owner = pool;
+
+		rjd_dict_insert(&pool->storage, hash, ref);
+	}
+	++ref->refcount;
+	return ref;
+}
+
+void rjd_strref_release(struct rjd_strref* ref)
+{
+	RJD_ASSERT(ref);
+
+	struct rjd_strpool* pool = ref->owner;
+
+	rjd_hash64 hash = rjd_hash64_data((const uint8_t*)ref->str, -1);
+	RJD_ASSERTMSG(rjd_dict_get(&pool->storage, hash) == ref, "ref was not contained in string pool");
+
+	--ref->refcount;
+	if (ref->refcount <= 0) {
+		rjd_free(ref->str, pool->storage.allocator);
+		rjd_free(ref, pool->storage.allocator);
+		rjd_dict_erase(&pool->storage, hash);
+	}
+}
+
+const char* rjd_strref_str(const struct rjd_strref* ref)
+{
+	RJD_ASSERT(ref);
+	return ref->str;
 }
 
 #endif // RJD_IMPL

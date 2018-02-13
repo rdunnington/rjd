@@ -26,3 +26,4 @@
 #include "rjd_cmd.h"
 #include "rjd_dict.h"
 #include "rjd_fio.h"
+#include "rjd_strpool.h"
