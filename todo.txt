@@ -1,3 +1,11 @@
+- rjd_array sort
+- rjd_array sorted insert
+- binary search for rjd_array
+- cleanup rjd_array header
+- rjd_free shouldn't need allocator to dealloc
+- dict shortname for rjd_dict
+
+rjd_path.h
 rjd_pagedarray.h
 rjd_ringbuffer.h
 rjd_filewatcher.h

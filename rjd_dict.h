@@ -16,11 +16,13 @@ struct rjd_dict rjd_dict_init(struct rjd_alloc_context* allocator, size_t initia
 void rjd_dict_insert(struct rjd_dict* dict, rjd_hash64 hash, void* item);
 void* rjd_dict_erase(struct rjd_dict* dict, rjd_hash64 hash);
 void* rjd_dict_get(const struct rjd_dict* dict, rjd_hash64 hash);
+bool rjd_dict_has(const struct rjd_dict* dict, rjd_hash64 hash);
 void rjd_dict_free(struct rjd_dict* dict);
 
 static inline void rjd_dict_insert_hashstr(struct rjd_dict* dict, const char* key, void* item);
 static inline void* rjd_dict_erase_hashstr(struct rjd_dict* dict, const char* key);
 static inline void* rjd_dict_get_hashstr(const struct rjd_dict* dict, const char* key);
+static inline bool rjd_dict_has_hashstr(const struct rjd_dict* dict, const char* key);
 
 #if RJD_ENABLE_SHORTNAMES
 	#define dict_init	rjd_dict_init
@@ -32,6 +34,7 @@ static inline void* rjd_dict_get_hashstr(const struct rjd_dict* dict, const char
 	#define	dict_insert_hashstr	rjd_dict_insert_hashstr
 	#define dict_erase_hashstr	rjd_dict_erase_hashstr
 	#define dict_get_hashstr	rjd_dict_get_hashstr
+	#define dict_has_hashstr	rjd_dict_has_hashstr
 #endif
 
 static inline void rjd_dict_insert_hashstr(struct rjd_dict* dict, const char* key, void* item)
@@ -47,6 +50,11 @@ static inline void* rjd_dict_erase_hashstr(struct rjd_dict* dict, const char* ke
 static inline void* rjd_dict_get_hashstr(const struct rjd_dict* dict, const char* key)
 {
 	return rjd_dict_get(dict, rjd_hash64_data((uint8_t*)key, -1));
+}
+
+static inline bool rjd_dict_has_hashstr(const struct rjd_dict* dict, const char* key)
+{
+	return rjd_dict_has(dict, rjd_hash64_data((uint8_t*)key, -1));
 }
 
 #if RJD_IMPL
@@ -76,6 +84,7 @@ struct rjd_dict rjd_dict_init(struct rjd_alloc_context* allocator, size_t initia
 void rjd_dict_insert(struct rjd_dict* dict, rjd_hash64 hash, void* value)
 {
 	RJD_ASSERT(dict);
+	RJD_ASSERT(rjd_hash64_valid(hash));
 
 	const float load = dict->hashes ? (dict->count + 1) / (float)rjd_array_capacity(dict->hashes) : 1;
 	if (load > 0.6) {
@@ -85,7 +94,7 @@ void rjd_dict_insert(struct rjd_dict* dict, rjd_hash64 hash, void* value)
 
 	int32_t i = rjd_dict_findindex(dict->hashes, hash, RJD_DICT_FINDMODE_INSERTION);
 	RJD_ASSERT(i >= 0);
-	RJD_ASSERT(rjd_hash64_valid(dict->hashes[i]));
+	RJD_ASSERT(!rjd_hash64_valid(dict->hashes[i]));
 
 	dict->hashes[i] = hash;
 	dict->values[i] = value;
@@ -122,8 +131,26 @@ void* rjd_dict_get(const struct rjd_dict* dict, rjd_hash64 hash)
 	return dict->values[index];
 }
 
+bool rjd_dict_has(const struct rjd_dict* dict, rjd_hash64 hash)
+{
+	RJD_ASSERT(dict);
+
+	if (!rjd_hash64_valid(hash)) {
+		return false;
+	}
+
+	int32_t index = rjd_dict_findindex(dict->hashes, hash, RJD_DICT_FINDMODE_EXISTING);
+	if (index >= 0) {
+		return rjd_hash64_valid(dict->hashes[index]);
+	}
+
+	return false;
+}
+
 void rjd_dict_free(struct rjd_dict* dict)
 {
+	RJD_ASSERT(dict);
+
 	rjd_array_free(dict->hashes);
 	rjd_array_free(dict->values);
 	dict->hashes = NULL;
@@ -134,6 +161,7 @@ void rjd_dict_free(struct rjd_dict* dict)
 static void rjd_dict_grow(struct rjd_dict* dict, size_t capacity)
 {
 	RJD_ASSERT(capacity > 0);
+	RJD_ASSERT(dict);
 
 	rjd_hash64* hashes = rjd_array_alloc(rjd_hash64, capacity, dict->allocator);
 	void** values = rjd_array_alloc(void*, capacity, dict->allocator);

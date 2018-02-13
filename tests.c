@@ -186,11 +186,11 @@ void test_hash()
 
 	expect_uint32(rjd_hash32_data(data1, strlen((const char*)data1)).value, rjd_hash32_data(data1, -1).value);
 	expect_uint32(rjd_hash32_data(data2, strlen((const char*)data2)).value, rjd_hash32_data(data2, -1).value);
-	expect_uint32(rjd_hash32_data(data3, strlen((const char*)data3)).value, rjd_hash32_data(data3, -1).value);
+	expect_uint32(rjd_hash32_data(data3, 0).value, rjd_hash32_data(data3, -1).value);
 
 	expect_uint64(rjd_hash64_data(data1, strlen((const char*)data1)).value, rjd_hash64_data(data1, -1).value);
 	expect_uint64(rjd_hash64_data(data2, strlen((const char*)data2)).value, rjd_hash64_data(data2, -1).value);
-	expect_uint64(rjd_hash64_data(data3, strlen((const char*)data3)).value, rjd_hash64_data(data3, -1).value);
+	expect_uint64(rjd_hash64_data(data3, 0).value, rjd_hash64_data(data3, -1).value);
 }
 
 void test_alloc()
@@ -900,6 +900,13 @@ void test_dict()
 	expect_str("ok4", (const char*)dict_get_hashstr(&dict, "key4"));
 	expect_str(NULL,  (const char*)dict_get_hashstr(&dict, "key5"));
 
+	expect_true(dict_has_hashstr(&dict, "key1"));
+	expect_true(dict_has_hashstr(&dict, "key2"));
+	expect_true(dict_has_hashstr(&dict, "key3"));
+	expect_true(dict_has_hashstr(&dict, "key4"));
+	expect_true(dict_has_hashstr(&dict, "key5"));
+	expect_false(dict_has_hashstr(&dict, "does_not_exist"));
+
 	expect_str("ok2", (const char*)dict_erase_hashstr(&dict, "key2"));
 	expect_str(NULL,  (const char*)dict_get_hashstr(&dict, "key2"));
 
@@ -914,6 +921,7 @@ void test_dict()
 	for (size_t i = 0; i < countof(data); ++i) {
 		char key[32] = {0};
 		sprintf(key, "k%zu", i);
+		expect_true(dict_has_hashstr(&dict, key));
 		expect_int32(i, *(int32_t*)dict_get_hashstr(&dict, key));
 	}
 
