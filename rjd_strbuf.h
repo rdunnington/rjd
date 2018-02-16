@@ -21,6 +21,7 @@ struct rjd_strbuf
 struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator);
 const char* rjd_strbuf_str(const struct rjd_strbuf* buf);
 void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...);
+void rjd_strbuf_vappend(struct rjd_strbuf* buf, const char* format, const va_list args);
 void rjd_strbuf_free(struct rjd_strbuf* buf);
 
 #if RJD_ENABLE_SHORTNAMES
@@ -58,6 +59,14 @@ void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...)
 		return;
 	}
 
+	va_list args;
+	va_start(args, format);
+		rjd_strbuf_vappend(buf, format, args);
+	va_end(args);
+}
+
+void rjd_strbuf_vappend(struct rjd_strbuf* buf, const char* format, const va_list args)
+{
 	uint32_t capacity = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
 	uint32_t remaining = capacity - buf->length;
 	uint32_t format_length = strlen(format);
@@ -67,19 +76,13 @@ void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...)
 		remaining = rjd_array_capacity(buf->heap) - buf->length;
 	}
 
-	va_list args;
-	va_start(args, format);
-
 	char* str = buf->heap ? buf->heap : buf->stack;
 	int written = vsnprintf(str + buf->length, remaining, format, args);
 	while (written < 0) {
 		rjd_strbuf_grow(buf, 1);
 		str = buf->heap;
-		va_start(args, format);
 		written = vsnprintf(str + buf->length, remaining, format, args);
 	}
-
-	va_end(args);
 
 	buf->length += written;
 }

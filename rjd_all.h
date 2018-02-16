@@ -6,10 +6,10 @@
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
+#include <stdarg.h>
 #include <xmmintrin.h> // SSE2
 #include <pmmintrin.h> // SSE3
 #include <stdlib.h>
-#include <stdarg.h>
 #include <stdio.h>
 
 #include "rjd_platform.h"

@@ -5,13 +5,13 @@ includes = [
     "<stdbool.h>",
     "<math.h>",
     "<string.h>",
+    "<stdarg.h>",
     "<xmmintrin.h> // SSE2",
     "<pmmintrin.h> // SSE3"
 ]
 
 includes_impl = [
     "<stdlib.h>",
-    "<stdarg.h>",
     "<stdio.h>",
 ]
 
