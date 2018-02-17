@@ -2570,10 +2570,19 @@ struct rjd_strbuf
 };
 
 struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator);
+size_t rjd_strbuf_length(const struct rjd_strbuf* buf);
 const char* rjd_strbuf_str(const struct rjd_strbuf* buf);
 void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...);
-void rjd_strbuf_vappend(struct rjd_strbuf* buf, const char* format, const va_list args);
+void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_list args);
+void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* str, size_t length);
 void rjd_strbuf_free(struct rjd_strbuf* buf);
+
+#define RJD_STRBUF_SCOPED(buffername, allocator, scope)				\
+	{																\
+		struct rjd_strbuf buffername = rjd_strbuf_init(allocator);	\
+		{scope}														\
+		rjd_strbuf_free(&buffername);								\
+	}
 
 #if RJD_ENABLE_SHORTNAMES
 	#define strbuf_init		rjd_strbuf_init
@@ -2599,6 +2608,7 @@ struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator)
 
 const char* rjd_strbuf_str(const struct rjd_strbuf* buf)
 {
+	RJD_ASSERT(buf);
 	return buf->heap ? buf->heap : buf->stack;
 }
 
@@ -2612,12 +2622,18 @@ void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...)
 
 	va_list args;
 	va_start(args, format);
-		rjd_strbuf_vappend(buf, format, args);
+		rjd_strbuf_appendv(buf, format, args);
 	va_end(args);
 }
 
-void rjd_strbuf_vappend(struct rjd_strbuf* buf, const char* format, const va_list args)
+void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_list args)
 {
+	RJD_ASSERT(buf);
+
+	if (!format || *format == '\0') {
+		return;
+	}
+
 	uint32_t capacity = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
 	uint32_t remaining = capacity - buf->length;
 	uint32_t format_length = strlen(format);
@@ -2638,8 +2654,33 @@ void rjd_strbuf_vappend(struct rjd_strbuf* buf, const char* format, const va_lis
 	buf->length += written;
 }
 
+void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* format, size_t length)
+{
+	RJD_ASSERT(buf);
+	RJD_ASSERT(format + length <= format + strlen(format));
+
+	if (format == NULL || *format == '\0') {
+		return;
+	}
+
+	uint32_t capacity = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
+	uint32_t remaining = capacity - buf->length;
+
+	if (remaining < length) {
+		rjd_strbuf_grow(buf, length);
+		remaining = rjd_array_capacity(buf->heap) - buf->length;
+	}
+
+	char* str = buf->heap ? buf->heap : buf->stack;
+	memcpy(str + buf->length, format, length);
+	buf->length += length;
+	str[buf->length] = '\0';
+}
+
 void rjd_strbuf_free(struct rjd_strbuf* buf)
 {
+	RJD_ASSERT(buf);
+
 	rjd_array_free(buf->heap);
 	buf->length = 0;
 	buf->heap = 0;
@@ -2651,7 +2692,7 @@ static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 	RJD_ASSERT(buf && buf->allocator);
 
 	uint32_t current = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
-	uint32_t min = current + format_length;
+	uint32_t min = current + format_length + 1;
 	uint32_t next = rjd_math_next_pow2(min);
 
 	if (!buf->heap) {
@@ -3478,7 +3519,9 @@ struct rjd_strref;
 
 struct rjd_strpool rjd_strpool_init(struct rjd_alloc_context* allocator, size_t initial_capacity);
 void rjd_strpool_free(struct rjd_strpool* pool);
-struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* str);
+struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* fmt, ...);
+struct rjd_strref* rjd_strpool_addv(struct rjd_strpool* pool, const char* fmt, va_list args); 
+struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* str, size_t length);
 void rjd_strref_release(struct rjd_strref* ref);
 const char* rjd_strref_str(const struct rjd_strref* ref);
 
@@ -3489,6 +3532,8 @@ const char* rjd_strref_str(const struct rjd_strref* ref);
 	#define strpool_init	rjd_strpool_init
 	#define strpool_free	rjd_strpool_free
 	#define strpool_add		rjd_strpool_add
+	#define strpool_addv	rjd_strpool_addv
+	#define strpool_addl	rjd_strpool_addl
 	#define strref_release	rjd_strref_release
 	#define	strref_str		rjd_strref_str
 #endif
@@ -3501,6 +3546,8 @@ struct rjd_strref
 	int32_t refcount;
 	struct rjd_strpool* owner;
 };
+
+static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const char* str);
 
 struct rjd_strpool rjd_strpool_init(struct rjd_alloc_context* allocator, size_t initial_capacity)
 {
@@ -3525,25 +3572,48 @@ void rjd_strpool_free(struct rjd_strpool* pool)
 	rjd_dict_free(&pool->storage);
 }
 
-struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* str)
+struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* format, ...)
 {
 	RJD_ASSERT(pool);
-	RJD_ASSERT(str);
+	RJD_ASSERT(format);
 
-	rjd_hash64 hash = rjd_hash64_data((const uint8_t*)str, -1);
-	struct rjd_strref* ref = rjd_dict_get(&pool->storage, hash);
-	if (!ref) {
-		char* copied_str = rjd_malloc_array(char, strlen(str) + 1, pool->storage.allocator);
-		strcpy(copied_str, str);
+	struct rjd_strref* ref = NULL;
 
-		ref = rjd_malloc(struct rjd_strref, pool->storage.allocator);
-		ref->str = copied_str;
-		ref->refcount = 0;
-		ref->owner = pool;
+	va_list args;
+	va_start(args, format);
+		ref = rjd_strpool_addv(pool, format, args);
+	va_end(args);
 
-		rjd_dict_insert(&pool->storage, hash, ref);
-	}
-	++ref->refcount;
+	return ref;
+}
+
+struct rjd_strref* rjd_strpool_addv(struct rjd_strpool* pool, const char* format, va_list args)
+{
+	RJD_ASSERT(pool);
+	RJD_ASSERT(format);
+
+	struct rjd_strref* ref = NULL;
+
+	RJD_STRBUF_SCOPED(buffer, pool->storage.allocator, {
+		rjd_strbuf_appendv(&buffer, format, args);
+		ref = rjd_strpool_addimpl(pool, rjd_strbuf_str(&buffer));
+	});
+
+	return ref;
+}
+
+struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* format, size_t length)
+{
+	RJD_ASSERT(pool);
+	RJD_ASSERT(format);
+
+	struct rjd_strref* ref = NULL;
+
+	RJD_STRBUF_SCOPED(buffer, pool->storage.allocator, {
+		rjd_strbuf_appendl(&buffer, format, length);
+		ref = rjd_strpool_addimpl(pool, rjd_strbuf_str(&buffer));
+	});
+
 	return ref;
 }
 
@@ -3568,6 +3638,31 @@ const char* rjd_strref_str(const struct rjd_strref* ref)
 {
 	RJD_ASSERT(ref);
 	return ref->str;
+}
+
+static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const char* str) 
+{
+	RJD_ASSERT(pool);
+	RJD_ASSERT(str);
+
+	rjd_hash64 hash = rjd_hash64_data((const uint8_t*)str, -1);
+	struct rjd_strref* ref = rjd_dict_get(&pool->storage, hash);
+	if (!ref) {
+		uint8_t* mem = rjd_malloc_array(uint8_t, sizeof(struct rjd_strref) + strlen(str) + 1, pool->storage.allocator);
+		ref = (struct rjd_strref*)mem;
+
+		char* copied_str = (char*)(mem + sizeof(struct rjd_strref));
+		strcpy(copied_str, str);
+
+		ref->str = copied_str;
+		ref->refcount = 0;
+		ref->owner = pool;
+
+		rjd_dict_insert(&pool->storage, hash, ref);
+	}
+	++ref->refcount;
+
+	return ref;
 }
 
 #endif // RJD_IMPL
