@@ -766,6 +766,7 @@ void test_strbuf(void)
 
 	struct rjd_strbuf builder = rjd_strbuf_init(&context);
 
+	// regular append
 	rjd_strbuf_append(&builder, "test");
 	expect_str("test", rjd_strbuf_str(&builder));
 
@@ -775,6 +776,7 @@ void test_strbuf(void)
 
 	rjd_strbuf_free(&builder);
 
+	// formatting
 	rjd_strbuf_append(&builder, "forma%d%ded", 1, 1);
 	expect_str("forma11ed", rjd_strbuf_str(&builder));
 
@@ -783,10 +785,19 @@ void test_strbuf(void)
 	expect_str("forma11ed1234567890123456789012345678901234567890", rjd_strbuf_str(&builder));
 
 	rjd_strbuf_free(&builder);
-	rjd_strbuf_append(&builder, "12345678901234567890123456789010");
-	expect_str("12345678901234567890123456789010", rjd_strbuf_str(&builder));
+
+	// stack to heap switch
+	rjd_strbuf_append(&builder, "123456789012345678901234567890");
+	rjd_strbuf_append(&builder, "1");
+	rjd_strbuf_append(&builder, "2");
+	rjd_strbuf_append(&builder, "3");
+	expect_str("123456789012345678901234567890123", rjd_strbuf_str(&builder));
 
 	rjd_strbuf_free(&builder);
+
+	// append substring
+	rjd_strbuf_appendl(&builder, "only see this, no comma", strlen("only see this"));
+	expect_str("only see this", rjd_strbuf_str(&builder));
 }
 
 void test_profiler(void)
@@ -980,37 +991,43 @@ void test_strpool()
 {
 	struct rjd_alloc_context allocator = alloc_initdefault();
 
-	struct strpool pool = strpool_init(&allocator, 2);
-
 	const char* test1 = "test1";
-	const char* test2 = "some words on a page";
-	const char* test3 = "a really really super long string that has an end lalalalalalalala";
-	const char* test4 = " ";
+	const char* test2 = "a really really super long string that has an end lalalalalalalala";
+	const char* test3 = " ";
+	const char* test4 = "forma7 7e57";
+	const char* test5 = "substring";
+
+	struct strpool pool = strpool_init(&allocator, 2);
 
 	struct strref* ref1 = strpool_add(&pool, test1);
 	struct strref* ref2 = strpool_add(&pool, test2);
 	struct strref* ref3 = strpool_add(&pool, test3);
-	struct strref* ref4 = strpool_add(&pool, test4);
+	struct strref* ref4 = strpool_add(&pool, "forma%d %de%d%d",7,7,5,7);
+	struct strref* ref5 = strpool_addl(&pool, "substring test", strlen(test5));
 
 	expect_true(ref1 == strpool_add(&pool, test1));
 	expect_true(ref2 == strpool_add(&pool, test2));
 	expect_true(ref3 == strpool_add(&pool, test3));
 	expect_true(ref4 == strpool_add(&pool, test4));
+	expect_true(ref5 == strpool_add(&pool, test5));
 
 	expect_str(ref1->str, test1);
 	expect_str(ref2->str, test2);
 	expect_str(ref3->str, test3);
 	expect_str(ref4->str, test4);
+	expect_str(ref5->str, test5);
 
 	strref_release(ref1);
 	strref_release(ref2);
 	strref_release(ref3);
 	strref_release(ref4);
+	strref_release(ref5);
 
 	expect_str(ref1->str, test1);
 	expect_str(ref2->str, test2);
 	expect_str(ref3->str, test3);
 	expect_str(ref4->str, test4);
+	expect_str(ref5->str, test5);
 
 	strpool_free(&pool);
 }
