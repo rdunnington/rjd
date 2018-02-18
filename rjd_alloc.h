@@ -32,18 +32,20 @@ struct rjd_alloc_context rjd_alloc_initscoped(rjd_func_alloc_scoped a, rjd_func_
 struct rjd_alloc_context rjd_alloc_initlinearheap(void* mem, size_t heapsize);
 void* rjd_malloc_impl(size_t size, struct rjd_alloc_context* context);
 void rjd_free(const void* mem, struct rjd_alloc_context* context);
+void rjd_memswap(void* restrict mem1, void* restrict mem2, size_t size);
 
 #define rjd_malloc(type, context) ((type*)rjd_malloc_impl(sizeof(type), context))
 #define rjd_malloc_array(type, count, context) ((type*)rjd_malloc_impl(sizeof(type) * count, context))
 
 #if RJD_ENABLE_SHORTNAMES
-	#define alloc_initdefault    rjd_alloc_initdefault
-	#define alloc_initglobal     rjd_alloc_initglobal
-	#define alloc_initscoped     rjd_alloc_initscoped
-	#define alloc_initlinearheap rjd_alloc_initlinearheap
-	#define rmalloc rjd_malloc
-	#define rmalloc_array rjd_malloc_array
-	#define rfree rjd_free
+	#define alloc_initdefault   	rjd_alloc_initdefault
+	#define alloc_initglobal    	rjd_alloc_initglobal
+	#define alloc_initscoped    	rjd_alloc_initscoped
+	#define alloc_initlinearheap	rjd_alloc_initlinearheap
+	#define rmalloc					rjd_malloc
+	#define rmalloc_array			rjd_malloc_array
+	#define rfree					rjd_free
+	#define memswap					rjd_memswap
 #endif
 
 #ifdef RJD_IMPL
@@ -104,6 +106,16 @@ void rjd_free(const void* mem, struct rjd_alloc_context* context)
 	} else {
 		context->free_scoped((void*)mem, context->scope);
 	}
+}
+
+void rjd_memswap(void* restrict mem1, void* restrict mem2, size_t size)
+{
+	uint8_t tmp[1024];
+	RJD_ASSERTMSG(size < sizeof(tmp), "Increase size of static tmp buffer to at least %z", size);
+
+	memcpy(tmp, mem1, size);
+	memcpy(mem1, mem2, size);
+	memcpy(mem2, tmp, size);
 }
 
 static struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size)

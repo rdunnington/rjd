@@ -215,6 +215,14 @@ void test_alloc()
 		rfree(p2, &ctx);
 	}
 
+	{
+		char test1[] = { 'm','y','t','e','s','t','\0' };
+		char test2[] = { 'o','h','n','o','e','s','\0' };
+		memswap(test1, test2, sizeof(test1));
+		expect_str("ohnoes", test1);
+		expect_str("mytest", test2);
+	}
+
 	// TODO linear allocator
 	{
 		//char stackmem[1024 * 1024];
