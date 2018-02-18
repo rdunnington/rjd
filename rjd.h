@@ -242,8 +242,8 @@ void rjd_log_resetglobal()
 //	#define MY_ENUM_LIST(macro)
 //		macro(RESULT_FAIL)
 //		macro(RESULT_SUCCESS)
-//	RJD_ENUM_DECLARE(Result, MY_ENUM_LIST)
-//	RJD_ENUM_DEFINE(Result, MY_ENUM_LIST)
+//	RJD_ENUM_DECLARE(Result, MY_ENUM_LIST);
+//	RJD_ENUM_DEFINE(Result, MY_ENUM_LIST);
 //
 //	The generated interface for the Result enum above would be:
 //		enum Result { RESULT_FAIL, RESULT_SUCCESS };
@@ -258,8 +258,8 @@ void rjd_log_resetglobal()
 //		macro(MY_ENUM_LIST2_V1, "CustomStringRep1")
 //		macro(MY_ENUM_LIST2_V2, "CustomStringRep2")
 //		macro(MY_ENUM_LIST2_V3, "CustomStringRep3")
-//	RJD_ENUM_DECLARE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST)
-//	RJD_ENUM_DEFINE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST)
+//	RJD_ENUM_DECLARE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST);
+//	RJD_ENUM_DEFINE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST);
 //
 
 #define RJD_ENUM_IMPL_TOSTRING(name) name ## _tostring
@@ -284,7 +284,7 @@ void rjd_log_resetglobal()
 	enum { RJD_ENUM_IMPL_COUNT(name) = macrolist(RJD_ENUM_IMPL_SUM) 0 };			\
 	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v);							\
 	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out);					\
-	extern const char* RJD_ENUM_IMPL_STRINGS(name)[];
+	extern const char* RJD_ENUM_IMPL_STRINGS(name)[]
 
 #define RJD_ENUM_DEFINE(name, macrolist)											\
 	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v) {							\
@@ -305,7 +305,7 @@ void rjd_log_resetglobal()
 	}																				\
 	const char* RJD_ENUM_IMPL_STRINGS(name)[] = {									\
 		macrolist(RJD_ENUM_IMPL_TOSTRING_ITEM)										\
-	};
+	}
 
 #define RJD_ENUM_DECLARE_WITH_STRINGS(name, macrolist)								\
 	enum name {																		\
@@ -314,7 +314,7 @@ void rjd_log_resetglobal()
 	enum { RJD_ENUM_IMPL_COUNT(name) = macrolist(RJD_ENUM_IMPL_SUM_WITH_STRING) 0 };\
 	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v);							\
 	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out);					\
-	extern const char* RJD_ENUM_IMPL_STRINGS(name)[];
+	extern const char* RJD_ENUM_IMPL_STRINGS(name)[]
 
 #define RJD_ENUM_DEFINE_WITH_STRINGS(name, macrolist)								\
 	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v) {							\
@@ -335,7 +335,7 @@ void rjd_log_resetglobal()
 	}																				\
 	const char* RJD_ENUM_IMPL_STRINGS(name)[] = {									\
 		macrolist(RJD_ENUM_IMPL_WITH_STRING_ITEM)									\
-	};
+	}
 
 #ifdef RJD_ENABLE_SHORTNAMES
 	#define	ENUM_DECLARE	RJD_ENUM_DECLARE 
@@ -3384,12 +3384,12 @@ static int32_t rjd_dict_findindex(const rjd_hash64* hashes, rjd_hash64 hash, enu
 	macro(RJD_FIO_ERR_OK)		\
 	macro(RJD_FIO_ERR_IO)		\
 	macro(RJD_FIO_ERR_NOMEM)
-RJD_ENUM_DECLARE(rjd_fio_err, RJD_FIO_ERR_ENUM)
+RJD_ENUM_DECLARE(rjd_fio_err, RJD_FIO_ERR_ENUM);
 
 #define RJD_FIO_WRITEMODE_ENUM(macro)	\
 	macro(RJD_FIO_WRITEMODE_REPLACE)	\
 	macro(RJD_FIO_WRITEMODE_APPEND)
-RJD_ENUM_DECLARE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM)
+RJD_ENUM_DECLARE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM);
 
 // use rjd_array_free() to free *buffer after use
 enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_alloc_context* context);
@@ -3415,8 +3415,8 @@ enum rjd_fio_err rjd_fio_delete(const char* path);
 
 #if RJD_IMPL
 
-RJD_ENUM_DEFINE(rjd_fio_err, RJD_FIO_ERR_ENUM)
-RJD_ENUM_DEFINE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM)
+RJD_ENUM_DEFINE(rjd_fio_err, RJD_FIO_ERR_ENUM);
+RJD_ENUM_DEFINE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM);
 
 enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_alloc_context* context)
 {

@@ -18,8 +18,8 @@
 //	#define MY_ENUM_LIST(macro)
 //		macro(RESULT_FAIL)
 //		macro(RESULT_SUCCESS)
-//	RJD_ENUM_DECLARE(Result, MY_ENUM_LIST)
-//	RJD_ENUM_DEFINE(Result, MY_ENUM_LIST)
+//	RJD_ENUM_DECLARE(Result, MY_ENUM_LIST);
+//	RJD_ENUM_DEFINE(Result, MY_ENUM_LIST);
 //
 //	The generated interface for the Result enum above would be:
 //		enum Result { RESULT_FAIL, RESULT_SUCCESS };
@@ -34,8 +34,8 @@
 //		macro(MY_ENUM_LIST2_V1, "CustomStringRep1")
 //		macro(MY_ENUM_LIST2_V2, "CustomStringRep2")
 //		macro(MY_ENUM_LIST2_V3, "CustomStringRep3")
-//	RJD_ENUM_DECLARE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST)
-//	RJD_ENUM_DEFINE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST)
+//	RJD_ENUM_DECLARE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST);
+//	RJD_ENUM_DEFINE_WITH_STRINGS(CoolEnum, MY_ENUM_LIST);
 //
 
 #define RJD_ENUM_IMPL_TOSTRING(name) name ## _tostring
@@ -60,7 +60,7 @@
 	enum { RJD_ENUM_IMPL_COUNT(name) = macrolist(RJD_ENUM_IMPL_SUM) 0 };			\
 	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v);							\
 	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out);					\
-	extern const char* RJD_ENUM_IMPL_STRINGS(name)[];
+	extern const char* RJD_ENUM_IMPL_STRINGS(name)[]
 
 #define RJD_ENUM_DEFINE(name, macrolist)											\
 	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v) {							\
@@ -81,7 +81,7 @@
 	}																				\
 	const char* RJD_ENUM_IMPL_STRINGS(name)[] = {									\
 		macrolist(RJD_ENUM_IMPL_TOSTRING_ITEM)										\
-	};
+	}
 
 #define RJD_ENUM_DECLARE_WITH_STRINGS(name, macrolist)								\
 	enum name {																		\
@@ -90,7 +90,7 @@
 	enum { RJD_ENUM_IMPL_COUNT(name) = macrolist(RJD_ENUM_IMPL_SUM_WITH_STRING) 0 };\
 	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v);							\
 	bool RJD_ENUM_IMPL_PARSE(name)(const char* s, enum name* out);					\
-	extern const char* RJD_ENUM_IMPL_STRINGS(name)[];
+	extern const char* RJD_ENUM_IMPL_STRINGS(name)[]
 
 #define RJD_ENUM_DEFINE_WITH_STRINGS(name, macrolist)								\
 	const char* RJD_ENUM_IMPL_TOSTRING(name)(enum name v) {							\
@@ -111,7 +111,7 @@
 	}																				\
 	const char* RJD_ENUM_IMPL_STRINGS(name)[] = {									\
 		macrolist(RJD_ENUM_IMPL_WITH_STRING_ITEM)									\
-	};
+	}
 
 #ifdef RJD_ENABLE_SHORTNAMES
 	#define	ENUM_DECLARE	RJD_ENUM_DECLARE 

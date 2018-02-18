@@ -6,12 +6,12 @@
 	macro(RJD_FIO_ERR_OK)		\
 	macro(RJD_FIO_ERR_IO)		\
 	macro(RJD_FIO_ERR_NOMEM)
-RJD_ENUM_DECLARE(rjd_fio_err, RJD_FIO_ERR_ENUM)
+RJD_ENUM_DECLARE(rjd_fio_err, RJD_FIO_ERR_ENUM);
 
 #define RJD_FIO_WRITEMODE_ENUM(macro)	\
 	macro(RJD_FIO_WRITEMODE_REPLACE)	\
 	macro(RJD_FIO_WRITEMODE_APPEND)
-RJD_ENUM_DECLARE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM)
+RJD_ENUM_DECLARE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM);
 
 // use rjd_array_free() to free *buffer after use
 enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_alloc_context* context);
@@ -37,8 +37,8 @@ enum rjd_fio_err rjd_fio_delete(const char* path);
 
 #if RJD_IMPL
 
-RJD_ENUM_DEFINE(rjd_fio_err, RJD_FIO_ERR_ENUM)
-RJD_ENUM_DEFINE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM)
+RJD_ENUM_DEFINE(rjd_fio_err, RJD_FIO_ERR_ENUM);
+RJD_ENUM_DEFINE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM);
 
 enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_alloc_context* context)
 {
