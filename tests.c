@@ -330,10 +330,12 @@ void test_array()
 			array_push(b, i);
 		}
 
+		// filter
 		#define testfilter(element) (element < 8)
 		array_filter(b, testfilter);
 		expect_uint32(8, array_count(b));
 
+		// reduce / sum
 		#define testsum(acc, element) (acc + element)
 		int32_t sum1 = 0;
 		array_reduce(b, sum1, testsum);
@@ -343,6 +345,7 @@ void test_array()
 		array_sum(b, sum2);
 		expect_int32(sum1, sum2);
 
+		// contains
 		int32_t two = 2;
 		bool has2 = array_contains(b, two);
 		expect_true(has2);
@@ -350,6 +353,32 @@ void test_array()
 		int32_t ten = 10;
 		bool has10 = array_contains(b, ten);
 		expect_false(has10);
+
+		// map
+		array_clear(b);
+		array_push(b, 0);
+		array_push(b, 1);
+		array_push(b, 2);
+		array_push(b, 3);
+		array_push(b, 4);
+
+		#define TEST_PRED(v) (v * 2)
+		int32_t* mapped = array_alloc(int32_t, 16, &context);
+		array_map(b, mapped, TEST_PRED);
+		#undef TEST_PRED
+		expect_int32(0, mapped[0]);
+		expect_int32(2, mapped[1]);
+		expect_int32(4, mapped[2]);
+		expect_int32(6, mapped[3]);
+		expect_int32(8, mapped[4]);
+	
+		// reverse
+		array_reverse(b);
+		expect_int32(4, b[0]);
+		expect_int32(3, b[1]);
+		expect_int32(2, b[2]);
+		expect_int32(1, b[3]);
+		expect_int32(0, b[4]);
 
 		array_free(b);
 	}
