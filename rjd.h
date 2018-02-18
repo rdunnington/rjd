@@ -50,6 +50,7 @@
 #if RJD_COMPILER_MSVC
 	#define RJD_FORCE_INLINE __forceinline
 	#define RJD_FORCE_ALIGN(type, alignment) __declspec(align(alignment)) type
+	#define restrict __restrict
 #elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
 	#define RJD_FORCE_INLINE static inline __attribute__((always_inline))
 	#define RJD_FORCE_ALIGN(type, alignment) type __attribute__((aligned(alignment)))
@@ -491,18 +492,20 @@ struct rjd_alloc_context rjd_alloc_initscoped(rjd_func_alloc_scoped a, rjd_func_
 struct rjd_alloc_context rjd_alloc_initlinearheap(void* mem, size_t heapsize);
 void* rjd_malloc_impl(size_t size, struct rjd_alloc_context* context);
 void rjd_free(const void* mem, struct rjd_alloc_context* context);
+void rjd_memswap(void* restrict mem1, void* restrict mem2, size_t size);
 
 #define rjd_malloc(type, context) ((type*)rjd_malloc_impl(sizeof(type), context))
 #define rjd_malloc_array(type, count, context) ((type*)rjd_malloc_impl(sizeof(type) * count, context))
 
 #if RJD_ENABLE_SHORTNAMES
-	#define alloc_initdefault    rjd_alloc_initdefault
-	#define alloc_initglobal     rjd_alloc_initglobal
-	#define alloc_initscoped     rjd_alloc_initscoped
-	#define alloc_initlinearheap rjd_alloc_initlinearheap
-	#define rmalloc rjd_malloc
-	#define rmalloc_array rjd_malloc_array
-	#define rfree rjd_free
+	#define alloc_initdefault   	rjd_alloc_initdefault
+	#define alloc_initglobal    	rjd_alloc_initglobal
+	#define alloc_initscoped    	rjd_alloc_initscoped
+	#define alloc_initlinearheap	rjd_alloc_initlinearheap
+	#define rmalloc					rjd_malloc
+	#define rmalloc_array			rjd_malloc_array
+	#define rfree					rjd_free
+	#define memswap					rjd_memswap
 #endif
 
 #ifdef RJD_IMPL
@@ -563,6 +566,16 @@ void rjd_free(const void* mem, struct rjd_alloc_context* context)
 	} else {
 		context->free_scoped((void*)mem, context->scope);
 	}
+}
+
+void rjd_memswap(void* restrict mem1, void* restrict mem2, size_t size)
+{
+	uint8_t tmp[1024];
+	RJD_ASSERTMSG(size < sizeof(tmp), "Increase size of static tmp buffer to at least %z", size);
+
+	memcpy(tmp, mem1, size);
+	memcpy(mem1, mem2, size);
+	memcpy(mem2, tmp, size);
 }
 
 static struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size)
@@ -719,9 +732,10 @@ struct rjd_alloc_context;
 #define rjd_array_last(buf, _default)		(((buf) && rjd_array_count(buf) > 0) ? ((buf)[rjd_array_count(buf) - 1]) : (_default))
 #define rjd_array_contains(buf, value)		rjd_array_contains_impl((buf), &(value), sizeof(*buf), sizeof(value))
 #define rjd_array_filter(buf, pred)			for(int _i = (int)rjd_array_count(buf) - 1; _i >= 0; --_i) { if (!(pred((buf)[_i]))) { rjd_array_erase((buf), _i); } }
-#define rjd_array_map(in, out, pred)		rjd_array_resize((out), rjd_array_count(in)), for (size_t _i = 0; _i < rjd_array_count(in); ++_i) { out[_i] = pred(in[_i]); }
+#define rjd_array_map(in, out, pred)		rjd_array_resize((out), rjd_array_count(in)); for (size_t _i = 0; _i < rjd_array_count(in); ++_i) { out[_i] = pred(in[_i]); }
 #define rjd_array_reduce(buf, acc, pred)	for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = pred(acc, ((buf)[_i])); }
 #define rjd_array_sum(buf, acc)				for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = rjd_array_sum_pred((acc), ((buf)[_i])); }
+#define rjd_array_reverse(buf)				rjd_array_reverse_impl(buf, sizeof(*buf))
 
 #define rjd_array_sample(buf, rng)		((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
 #define rjd_array_shuffle(buf, rng)		rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
@@ -749,6 +763,7 @@ struct rjd_alloc_context;
 	#define array_map				rjd_array_map
 	#define	array_reduce			rjd_array_reduce
 	#define array_sum				rjd_array_sum
+	#define array_reverse			rjd_array_reverse
 
 	#define array_sample			rjd_array_sample
 	#define array_shuffle			rjd_array_shuffle
@@ -766,6 +781,7 @@ void rjd_array_erase_unordered_impl(void* buffer, uint32_t index, size_t sizeof_
 void* rjd_array_grow_impl(void* buffer, size_t sizeof_type);
 bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeof_type, size_t sizeof_value);
 void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_type);
+void rjd_array_reverse_impl(void* buffer, size_t sizeof_type);
 
 #if RJD_IMPL
 
@@ -913,6 +929,10 @@ bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeof_type, size
 {
 	RJD_ASSERT(sizeof_type == sizeof_value);
 
+	if (!buffer) {
+		return false;
+	}
+
 	char* raw = (char*)buffer;
 	for (uint32_t i = 0; i < rjd_array_count(buffer); ++i) {
 		if (!memcmp(raw + i * sizeof_type, value, sizeof_type)) {
@@ -924,6 +944,10 @@ bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeof_type, size
 
 void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_type)
 {
+	if (!buffer) {
+		return;
+	}
+
 	char tmp[512];
 	RJD_ASSERTMSG(sizeof_type <= sizeof(tmp), 
 		"tmp (%u bytes) must be greater than or equal to sizeof_type (%u bytes)", 
@@ -942,6 +966,21 @@ void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_typ
 		memcpy(tmp, a, sizeof_type);
 		memcpy(a, b, sizeof_type);
 		memcpy(b, tmp, sizeof_type);
+	}
+}
+
+void rjd_array_reverse_impl(void* buffer, size_t sizeof_type)
+{
+	if (!buffer) {
+		return;
+	}
+
+	uint8_t* raw = buffer;
+	for (uint8_t* begin = raw, *end = raw + (int32_t)sizeof_type * ((int32_t)rjd_array_count(buffer) - 1); 
+		begin < end; 
+		begin += sizeof_type, end -= sizeof_type)
+	{
+		rjd_memswap(begin, end, sizeof_type);
 	}
 }
 
@@ -3565,8 +3604,7 @@ void rjd_strpool_free(struct rjd_strpool* pool)
 	for (uint32_t i = 0; i < rjd_array_count(refs); ++i) {
 		if (refs[i]) {
 			struct rjd_strref* ref = refs[i];
-			rjd_free(ref->str, pool->storage.allocator);
-			rjd_free(ref, pool->storage.allocator);
+			rjd_free(ref, pool->storage.allocator); // struct and string are part of the same allocation block
 		}
 	}
 	rjd_dict_free(&pool->storage);
@@ -3628,8 +3666,7 @@ void rjd_strref_release(struct rjd_strref* ref)
 
 	--ref->refcount;
 	if (ref->refcount <= 0) {
-		rjd_free(ref->str, pool->storage.allocator);
-		rjd_free(ref, pool->storage.allocator);
+		rjd_free(ref, pool->storage.allocator); // struct and string are part of the same allocation block
 		rjd_dict_erase(&pool->storage, hash);
 	}
 }
