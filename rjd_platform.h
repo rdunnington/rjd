@@ -25,6 +25,7 @@
 #if RJD_COMPILER_MSVC
 	#define RJD_FORCE_INLINE __forceinline
 	#define RJD_FORCE_ALIGN(type, alignment) __declspec(align(alignment)) type
+	#define restrict __restrict
 #elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
 	#define RJD_FORCE_INLINE static inline __attribute__((always_inline))
 	#define RJD_FORCE_ALIGN(type, alignment) type __attribute__((aligned(alignment)))
