@@ -16,7 +16,7 @@
 #include "rjd_debug.h"
 #include "rjd_enum.h"
 #include "rjd_hash.h"
-#include "rjd_alloc.h"
+#include "rjd_mem.h"
 #include "rjd_rng.h"
 #include "rjd_array.h"
 #include "rjd_math.h"

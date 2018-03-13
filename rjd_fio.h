@@ -14,7 +14,7 @@ RJD_ENUM_DECLARE(rjd_fio_err, RJD_FIO_ERR_ENUM);
 RJD_ENUM_DECLARE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM);
 
 // use rjd_array_free() to free *buffer after use
-enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_alloc_context* context);
+enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* context);
 enum rjd_fio_err rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode);
 enum rjd_fio_err rjd_fio_size(const char* path, size_t* out_size);
 enum rjd_fio_err rjd_fio_delete(const char* path);
@@ -40,7 +40,7 @@ enum rjd_fio_err rjd_fio_delete(const char* path);
 RJD_ENUM_DEFINE(rjd_fio_err, RJD_FIO_ERR_ENUM);
 RJD_ENUM_DEFINE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM);
 
-enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_alloc_context* context)
+enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* context)
 {
 	FILE* file = fopen(path, "rb");
 	if (!file) {

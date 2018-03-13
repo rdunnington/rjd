@@ -8,17 +8,17 @@
 
 RJD_STATIC_ASSERT(RJD_STRBUF_STATIC_SIZE > 0);
 
-struct rjd_alloc_context;
+struct rjd_mem_allocator;
 
 struct rjd_strbuf
 {
-	struct rjd_alloc_context* allocator;
+	struct rjd_mem_allocator* allocator;
 	size_t length;
 	char* heap;
 	char stack[RJD_STRBUF_STATIC_SIZE];
 };
 
-struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator);
+struct rjd_strbuf rjd_strbuf_init(struct rjd_mem_allocator* allocator);
 size_t rjd_strbuf_length(const struct rjd_strbuf* buf);
 const char* rjd_strbuf_str(const struct rjd_strbuf* buf);
 void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...);
@@ -44,7 +44,7 @@ void rjd_strbuf_free(struct rjd_strbuf* buf);
 
 static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length);
 
-struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator)
+struct rjd_strbuf rjd_strbuf_init(struct rjd_mem_allocator* allocator)
 {
 	struct rjd_strbuf buf;
 	buf.length = 0;

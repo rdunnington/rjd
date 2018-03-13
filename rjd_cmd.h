@@ -2,7 +2,7 @@
 
 #define RJD_CMD 1
 
-struct rjd_alloc_context;
+struct rjd_mem_allocator;
 
 struct rjd_cmd_argv
 {
@@ -20,10 +20,10 @@ struct rjd_cmd
 	struct rjd_cmd_argv* opts;
 	struct rjd_cmd_argv* reqs;
 
-	struct rjd_alloc_context* allocator;
+	struct rjd_mem_allocator* allocator;
 };
 
-struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_alloc_context* allocator);
+struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_mem_allocator* allocator);
 void rjd_cmd_free(struct rjd_cmd* cmd);
 void rjd_cmd_add_opt(struct rjd_cmd* cmd, const char* shortname, const char* longname, const char* argname, const char* description);
 void rjd_cmd_add_req(struct rjd_cmd* cmd, const char* argname, const char* description);
@@ -55,7 +55,7 @@ const char* rjd_cmd_str(const struct rjd_cmd* cmd, const char* shortname);
 
 #if RJD_IMPL
 
-struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_alloc_context* allocator)
+struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_mem_allocator* allocator)
 {
 	struct rjd_cmd cmd = {argc, argv, NULL, NULL, allocator};
 	cmd.opts = rjd_array_alloc(struct rjd_cmd_argv, 8, allocator);

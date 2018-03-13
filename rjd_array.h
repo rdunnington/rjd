@@ -2,7 +2,7 @@
 
 #define RJD_ARRAY 1
 
-struct rjd_alloc_context;
+struct rjd_mem_allocator;
 
 #if RJD_COMPILER_MSVC
 	#define rjd_countof(buf) _countof(buf)
@@ -74,7 +74,7 @@ struct rjd_alloc_context;
 
 struct rjd_rng;
 
-void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_alloc_context* allocator, size_t sizeof_type);
+void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocator, size_t sizeof_type);
 void rjd_array_free_impl(const void* array);
 uint32_t* rjd_array_capacity_impl(const void* array);
 uint32_t* rjd_array_count_impl(const void* array);
@@ -90,7 +90,7 @@ void rjd_array_reverse_impl(void* array, size_t sizeof_type);
 
 struct rjd_array_header
 {
-	struct rjd_alloc_context* allocator;
+	struct rjd_mem_allocator* allocator;
 	uint32_t capacity;
 	uint32_t count;
 	uint32_t debug_sentinel;
@@ -99,17 +99,17 @@ struct rjd_array_header
 #define RJD_ARRAY_DEBUG_SENTINEL (0xA7A7A7A7)
 
 static struct rjd_array_header* rjd_array_getheader(void* array);
-static struct rjd_alloc_context* rjd_array_allocator(void* array);
+static struct rjd_mem_allocator* rjd_array_allocator(void* array);
 static inline void rjd_array_validate(const void* array);
 
-void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_alloc_context* allocator, size_t sizeof_type)
+void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocator, size_t sizeof_type)
 {
 	RJD_ASSERT(capacity > 0);
 	RJD_ASSERT(allocator);
 	RJD_ASSERT(sizeof_type > 0);
 
 	size_t rawsize = sizeof(struct rjd_array_header) + (sizeof_type * capacity);
-	char* raw = rjd_malloc_array(char, rawsize, allocator);
+	char* raw = rjd_mem_alloc_array(char, rawsize, allocator);
 
 	struct rjd_array_header* header = (struct rjd_array_header*)raw;
 	header->allocator = allocator;
@@ -130,10 +130,10 @@ void rjd_array_free_impl(const void* array)
 	}
 	rjd_array_validate(array);
 
-	struct rjd_alloc_context* allocator = rjd_array_allocator((void*)array);
+	struct rjd_mem_allocator* allocator = rjd_array_allocator((void*)array);
 
 	char* raw = (char*)array;
-	rjd_free(raw - sizeof(struct rjd_array_header), allocator);
+	rjd_mem_free(raw - sizeof(struct rjd_array_header), allocator);
 }
 
 uint32_t* rjd_array_capacity_impl(const void* array)
@@ -171,7 +171,7 @@ void* rjd_array_resize_impl(void* array, uint32_t newsize, size_t sizeof_type)
 	uint32_t* capacity = rjd_array_capacity_impl(array);
 
 	if (*capacity < newcapacity) {
-		struct rjd_alloc_context* allocator = rjd_array_allocator(array);
+		struct rjd_mem_allocator* allocator = rjd_array_allocator(array);
 		void* newbuf = rjd_array_alloc_impl(newcapacity, allocator, sizeof_type);
 
 		uint32_t oldcount = *count;
@@ -303,7 +303,7 @@ void rjd_array_reverse_impl(void* array, size_t sizeof_type)
 		begin < end; 
 		begin += sizeof_type, end -= sizeof_type)
 	{
-		rjd_memswap(begin, end, sizeof_type);
+		rjd_mem_swap(begin, end, sizeof_type);
 	}
 }
 
@@ -319,7 +319,7 @@ static struct rjd_array_header* rjd_array_getheader(void* array)
 	return (struct rjd_array_header*) raw_header;
 }
 
-static struct rjd_alloc_context* rjd_array_allocator(void* array)
+static struct rjd_mem_allocator* rjd_array_allocator(void* array)
 {
 	RJD_ASSERT(array);
 	return rjd_array_getheader(array)->allocator;

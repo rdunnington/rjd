@@ -455,103 +455,103 @@ bool rjd_hash64_valid(rjd_hash64 hash)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// rjd_alloc.h
+// rjd_mem.h
 ////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
 
-#define RJD_ALLOC 1
+#define RJD_MEM 1
 
 // TODO realloc
-typedef void* (*rjd_func_alloc)(size_t size);
-typedef void* (*rjd_func_alloc_scoped)(size_t size, void* allocator);
+typedef void* (*rjd_mem_allocfunc)(size_t size);
+typedef void* (*rjd_mem_allocfunc_scoped)(size_t size, void* allocator);
 
-typedef void (*rjd_func_free)(void* memory);
-typedef void (*rjd_func_free_scoped)(void* memory, void* heap);
+typedef void (*rjd_mem_freefunc)(void* memory);
+typedef void (*rjd_mem_freefunc_scoped)(void* memory, void* heap);
 
-struct rjd_alloc_context
+struct rjd_mem_allocator
 {
-	rjd_func_alloc alloc_global;
-	rjd_func_free free_global;
+	rjd_mem_allocfunc alloc_global;
+	rjd_mem_freefunc free_global;
 	
-	rjd_func_alloc_scoped alloc_scoped;
-	rjd_func_free_scoped free_scoped;
+	rjd_mem_allocfunc_scoped alloc_scoped;
+	rjd_mem_freefunc_scoped free_scoped;
 	void* scope;
 };
 
-struct rjd_linearheap
+struct rjd_mem_heap_linear
 {
 	void* base;
 	void* next;
 	size_t size;
 };
 
-struct rjd_alloc_context rjd_alloc_initdefault(void);
-struct rjd_alloc_context rjd_alloc_initglobal(rjd_func_alloc a, rjd_func_free f);
-struct rjd_alloc_context rjd_alloc_initscoped(rjd_func_alloc_scoped a, rjd_func_free_scoped f, void* allocator);
-struct rjd_alloc_context rjd_alloc_initlinearheap(void* mem, size_t heapsize);
-void* rjd_malloc_impl(size_t size, struct rjd_alloc_context* context);
-void rjd_free(const void* mem, struct rjd_alloc_context* context);
-void rjd_memswap(void* restrict mem1, void* restrict mem2, size_t size);
+struct rjd_mem_allocator rjd_mem_allocator_initdefault(void);
+struct rjd_mem_allocator rjd_mem_allocator_initglobal(rjd_mem_allocfunc a, rjd_mem_freefunc f);
+struct rjd_mem_allocator rjd_mem_allocator_initscoped(rjd_mem_allocfunc_scoped a, rjd_mem_freefunc_scoped f, void* allocator);
+struct rjd_mem_allocator rjd_mem_allocator_initlinearheap(void* mem, size_t heapsize);
+void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* context);
+void rjd_mem_free(const void* mem, struct rjd_mem_allocator* context);
+void rjd_mem_swap(void* restrict mem1, void* restrict mem2, size_t size);
 
-#define rjd_malloc(type, context) ((type*)rjd_malloc_impl(sizeof(type), context))
-#define rjd_malloc_array(type, count, context) ((type*)rjd_malloc_impl(sizeof(type) * count, context))
+#define rjd_mem_alloc(type, context) ((type*)rjd_mem_alloc_impl(sizeof(type), context))
+#define rjd_mem_alloc_array(type, count, context) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, context))
 
 #if RJD_ENABLE_SHORTNAMES
-	#define alloc_initdefault   	rjd_alloc_initdefault
-	#define alloc_initglobal    	rjd_alloc_initglobal
-	#define alloc_initscoped    	rjd_alloc_initscoped
-	#define alloc_initlinearheap	rjd_alloc_initlinearheap
-	#define rmalloc					rjd_malloc
-	#define rmalloc_array			rjd_malloc_array
-	#define rfree					rjd_free
-	#define memswap					rjd_memswap
+	#define mem_allocator_initdefault   	rjd_mem_allocator_initdefault
+	#define mem_allocator_initglobal    	rjd_mem_allocator_initglobal
+	#define mem_allocator_initscoped    	rjd_mem_allocator_initscoped
+	#define mem_allocator_initlinearheap	rjd_mem_allocator_initlinearheap
+	#define mem_alloc						rjd_mem_alloc
+	#define mem_alloc_array					rjd_mem_alloc_array
+	#define mem_free						rjd_mem_free
+	#define mem_swap						rjd_mem_swap
 #endif
 
 #ifdef RJD_IMPL
 
 // detail functions
-static struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size);
-static void* rjd_linearheap_malloc(size_t size, void* heap);
-static void rjd_free_scoped_noop(void* mem, void* heap);
+static struct rjd_mem_heap_linear rjd_mem_linearheap_init(void* mem, size_t size);
+static void* rjd_mem_linearheap_alloc(size_t size, void* heap);
+static void rjd_mem_free_scoped_noop(void* mem, void* heap);
 
 #if RJD_COMPILER_MSVC
-	static void* rjd_malloc_global_wrapper(size_t size);
-	static void rjd_free_global_wrapper(void* mem);
+	static void* rjd_mem_alloc_global_wrapper(size_t size);
+	static void rjd_mem_free_global_wrapper(void* mem);
 #endif
 
-struct rjd_alloc_context rjd_alloc_initglobal(rjd_func_alloc a, rjd_func_free f)
+struct rjd_mem_allocator rjd_mem_allocator_initglobal(rjd_mem_allocfunc a, rjd_mem_freefunc f)
 {
-	struct rjd_alloc_context context = { a, f, NULL, NULL, NULL };
+	struct rjd_mem_allocator context = { a, f, NULL, NULL, NULL };
 	return context;
 }
 
-struct rjd_alloc_context rjd_alloc_initscoped(rjd_func_alloc_scoped a, rjd_func_free_scoped f, void* heap)
+struct rjd_mem_allocator rjd_mem_allocator_initscoped(rjd_mem_allocfunc_scoped a, rjd_mem_freefunc_scoped f, void* heap)
 {
-	struct rjd_alloc_context context = { NULL, NULL, a, f, heap };
+	struct rjd_mem_allocator context = { NULL, NULL, a, f, heap };
 	return context;
 }
 
-struct rjd_alloc_context rjd_alloc_initdefault()
+struct rjd_mem_allocator rjd_mem_allocator_initdefault()
 {
 	#if RJD_COMPILER_MSVC
-		return rjd_alloc_initglobal(rjd_malloc_global_wrapper, rjd_free_global_wrapper);
+		return rjd_mem_allocator_initglobal(rjd_mem_alloc_global_wrapper, rjd_mem_free_global_wrapper);
 	#else
-		return rjd_alloc_initglobal(malloc, free);
+		return rjd_mem_allocator_initglobal(malloc, free);
 	#endif
 }
 
-struct rjd_alloc_context rjd_alloc_initlinearheap(void* mem, size_t heapsize)
+struct rjd_mem_allocator rjd_mem_allocator_initlinearheap(void* mem, size_t heapsize)
 {
 	char* bytes = (char*)mem;
-	const size_t structsize = sizeof(struct rjd_linearheap);
-	struct rjd_linearheap* heap = (struct rjd_linearheap*)bytes + heapsize - structsize;
-	*heap = rjd_linearheap_init(mem, heapsize - structsize);
+	const size_t structsize = sizeof(struct rjd_mem_heap_linear);
+	struct rjd_mem_heap_linear* heap = (struct rjd_mem_heap_linear*)bytes + heapsize - structsize;
+	*heap = rjd_mem_linearheap_init(mem, heapsize - structsize);
 
-	return rjd_alloc_initscoped(rjd_linearheap_malloc, rjd_free_scoped_noop, heap);
+	return rjd_mem_allocator_initscoped(rjd_mem_linearheap_alloc, rjd_mem_free_scoped_noop, heap);
 }
 
-void* rjd_malloc_impl(size_t size, struct rjd_alloc_context* context)
+void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* context)
 {
 	if (context->alloc_global) {
 		return context->alloc_global(size);
@@ -559,7 +559,7 @@ void* rjd_malloc_impl(size_t size, struct rjd_alloc_context* context)
 	return context->alloc_scoped(size, context->scope);
 }
 
-void rjd_free(const void* mem, struct rjd_alloc_context* context)
+void rjd_mem_free(const void* mem, struct rjd_mem_allocator* context)
 {
 	if (context->free_global) {
 		context->free_global((void*)mem);
@@ -568,7 +568,7 @@ void rjd_free(const void* mem, struct rjd_alloc_context* context)
 	}
 }
 
-void rjd_memswap(void* restrict mem1, void* restrict mem2, size_t size)
+void rjd_mem_swap(void* restrict mem1, void* restrict mem2, size_t size)
 {
 	uint8_t tmp[1024];
 	RJD_ASSERTMSG(size < sizeof(tmp), "Increase size of static tmp buffer to at least %z", size);
@@ -578,20 +578,20 @@ void rjd_memswap(void* restrict mem1, void* restrict mem2, size_t size)
 	memcpy(mem2, tmp, size);
 }
 
-static struct rjd_linearheap rjd_linearheap_init(void* mem, size_t size)
+static struct rjd_mem_heap_linear rjd_mem_linearheap_init(void* mem, size_t size)
 {
-	struct rjd_linearheap heap = { mem, mem, size };
+	struct rjd_mem_heap_linear heap = { mem, mem, size };
 	return heap;
 }
 
-static void* rjd_linearheap_malloc(size_t size, void* userheap)
+static void* rjd_mem_linearheap_alloc(size_t size, void* userheap)
 {
 	size_t align_diff = size % 8;
 	if (align_diff != 0) {
 		size += align_diff;
 	}
 
-	struct rjd_linearheap* heap = (struct rjd_linearheap*)userheap;
+	struct rjd_mem_heap_linear* heap = (struct rjd_mem_heap_linear*)userheap;
 	
 	if ((char*)heap->next + size <= (char*)heap->base + heap->size) 
 	{
@@ -604,19 +604,19 @@ static void* rjd_linearheap_malloc(size_t size, void* userheap)
 	return NULL;
 }
 
-static void rjd_free_scoped_noop(void* mem, void* heap)
+static void rjd_mem_free_scoped_noop(void* mem, void* heap)
 {
 	RJD_UNUSED_PARAM(mem);
 	RJD_UNUSED_PARAM(heap);
 }
 
 #if RJD_COMPILER_MSVC
-	static void* rjd_malloc_global_wrapper(size_t size)
+	static void* rjd_mem_alloc_global_wrapper(size_t size)
 	{
 		return malloc(size);
 	}
 	
-	static void rjd_free_global_wrapper(void* mem)
+	static void rjd_mem_free_global_wrapper(void* mem)
 	{
 		free(mem);
 	}
@@ -699,7 +699,7 @@ int32_t rjd_rng_range32(struct rjd_rng* rng, int32_t min_inclusive, int32_t max_
 
 #define RJD_ARRAY 1
 
-struct rjd_alloc_context;
+struct rjd_mem_allocator;
 
 #if RJD_COMPILER_MSVC
 	#define rjd_countof(buf) _countof(buf)
@@ -771,135 +771,148 @@ struct rjd_alloc_context;
 
 struct rjd_rng;
 
-void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_alloc_context* context, size_t sizeof_type);
-void rjd_array_free_impl(const void* buffer);
-uint32_t* rjd_array_capacity_impl(const void* buffer);
-uint32_t* rjd_array_count_impl(const void* buffer);
-void* rjd_array_resize_impl(const void* buffer, uint32_t newsize, size_t sizeof_type);
-void rjd_array_erase_impl(void* buffer, uint32_t index, size_t sizeof_type);
-void rjd_array_erase_unordered_impl(void* buffer, uint32_t index, size_t sizeof_type);
-void* rjd_array_grow_impl(void* buffer, size_t sizeof_type);
-bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeof_type, size_t sizeof_value);
-void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_type);
-void rjd_array_reverse_impl(void* buffer, size_t sizeof_type);
+void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocator, size_t sizeof_type);
+void rjd_array_free_impl(const void* array);
+uint32_t* rjd_array_capacity_impl(const void* array);
+uint32_t* rjd_array_count_impl(const void* array);
+void* rjd_array_resize_impl(void* array, uint32_t newsize, size_t sizeof_type);
+void rjd_array_erase_impl(void* array, uint32_t index, size_t sizeof_type);
+void rjd_array_erase_unordered_impl(void* array, uint32_t index, size_t sizeof_type);
+void* rjd_array_grow_impl(void* array, size_t sizeof_type);
+bool rjd_array_contains_impl(void* array, void* value, size_t sizeof_type, size_t sizeof_value);
+void rjd_array_shuffle_impl(void* array, struct rjd_rng* rng, size_t sizeof_type);
+void rjd_array_reverse_impl(void* array, size_t sizeof_type);
 
 #if RJD_IMPL
 
-void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_alloc_context* context, size_t sizeof_type)
+struct rjd_array_header
+{
+	struct rjd_mem_allocator* allocator;
+	uint32_t capacity;
+	uint32_t count;
+	uint32_t debug_sentinel;
+};
+
+#define RJD_ARRAY_DEBUG_SENTINEL (0xA7A7A7A7)
+
+static struct rjd_array_header* rjd_array_getheader(void* array);
+static struct rjd_mem_allocator* rjd_array_allocator(void* array);
+static inline void rjd_array_validate(const void* array);
+
+void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocator, size_t sizeof_type)
 {
 	RJD_ASSERT(capacity > 0);
-	RJD_ASSERT(context);
+	RJD_ASSERT(allocator);
 	RJD_ASSERT(sizeof_type > 0);
 
-	size_t rawsize = sizeof(struct rjd_alloc_context*) + (sizeof(uint32_t) * 2) + (sizeof_type * capacity);
-	char* raw = (char*)rjd_malloc_impl(rawsize, context);
+	size_t rawsize = sizeof(struct rjd_array_header) + (sizeof_type * capacity);
+	char* raw = rjd_mem_alloc_array(char, rawsize, allocator);
 
-	struct rjd_alloc_context** contextCache = (struct rjd_alloc_context**)raw;
-	*contextCache = context;
-	uint32_t* pcapacity = (uint32_t*)(raw + sizeof(struct rjd_alloc_context*));
-	uint32_t* pcount = (uint32_t*)(raw + sizeof(struct rjd_alloc_context*) + sizeof(uint32_t));
-	char* buf = (char*)(raw + sizeof(struct rjd_alloc_context*) + sizeof(uint32_t) + sizeof(uint32_t));
+	struct rjd_array_header* header = (struct rjd_array_header*)raw;
+	header->allocator = allocator;
+	header->capacity = capacity;
+	header->count = 0;
+	header->debug_sentinel = RJD_ARRAY_DEBUG_SENTINEL; 
 
+	char* buf = raw + sizeof(struct rjd_array_header);
 	memset(buf, 0, sizeof_type * capacity);
-
-	*pcapacity = capacity;
-	*pcount = 0;
 
 	return buf;
 }
 
-static struct rjd_alloc_context* rjd_array_getcontext_impl(void* buffer)
+void rjd_array_free_impl(const void* array)
 {
-	RJD_ASSERT(buffer);
-
-	char* raw = buffer;
-	size_t headersize = sizeof(struct rjd_alloc_context*) + sizeof(uint32_t) + sizeof(uint32_t);
-	struct rjd_alloc_context** context = (struct rjd_alloc_context**)(raw - headersize);
-	return *context;
-}
-
-void rjd_array_free_impl(const void* buffer)
-{
-	if (!buffer) {
+	if (!array) {
 		return;
 	}
+	rjd_array_validate(array);
 
-	struct rjd_alloc_context* context = rjd_array_getcontext_impl((void*)buffer);
+	struct rjd_mem_allocator* allocator = rjd_array_allocator((void*)array);
 
-	char* raw = (char*)buffer;
-	size_t headersize = sizeof(struct rjd_alloc_context*) + sizeof(uint32_t) + sizeof(uint32_t);
-
-	rjd_free(raw - headersize, context);
+	char* raw = (char*)array;
+	rjd_mem_free(raw - sizeof(struct rjd_array_header), allocator);
 }
 
-uint32_t* rjd_array_capacity_impl(const void* buffer)
+uint32_t* rjd_array_capacity_impl(const void* array)
 {
-	RJD_ASSERT(buffer);
+	if (!array) {
+		return 0;
+	}
+	rjd_array_validate(array);
 
-	char* raw = (char*)buffer;
-	return (uint32_t*)(raw - sizeof(uint32_t) - sizeof(uint32_t));
+	struct rjd_array_header* header = rjd_array_getheader((void*)array);
+	return &header->capacity;
 }
 
-uint32_t* rjd_array_count_impl(const void* buffer)
+uint32_t* rjd_array_count_impl(const void* array)
 {
-	RJD_ASSERT(buffer);
+	if (!array) {
+		return 0;
+	}
+	rjd_array_validate(array);
 
-	char* raw = (char*)buffer;
-	return (uint32_t*)(raw - sizeof(uint32_t));
+	struct rjd_array_header* header = rjd_array_getheader((void*)array);
+	return &header->count;
 }
 
-void* rjd_array_resize_impl(const void* buffer, uint32_t newsize, size_t sizeof_type)
+void* rjd_array_resize_impl(void* array, uint32_t newsize, size_t sizeof_type)
 {
-	RJD_ASSERT(buffer);
+	RJD_ASSERT(array);
 	RJD_ASSERT(sizeof_type > 0);
+
+	rjd_array_validate(array);
 
 	uint32_t newcapacity = newsize > 0 ? newsize : 1;
 
-	uint32_t* count = rjd_array_count_impl(buffer);
-	uint32_t* capacity = rjd_array_capacity_impl(buffer);
+	uint32_t* count = rjd_array_count_impl(array);
+	uint32_t* capacity = rjd_array_capacity_impl(array);
 
 	if (*capacity < newcapacity) {
-		struct rjd_alloc_context* context = rjd_array_getcontext_impl((void*)buffer);
-		void* newbuf = rjd_array_alloc_impl(newcapacity, context, sizeof_type);
+		struct rjd_mem_allocator* allocator = rjd_array_allocator(array);
+		void* newbuf = rjd_array_alloc_impl(newcapacity, allocator, sizeof_type);
 
 		uint32_t oldcount = *count;
-		memcpy(newbuf, buffer, oldcount * sizeof_type);
+		memcpy(newbuf, array, oldcount * sizeof_type);
 		count = rjd_array_count_impl(newbuf);
 		
 		uint32_t diff = newcapacity - *capacity;
 		memset(newbuf, 0, diff * sizeof_type);
 
-		rjd_array_free(buffer);
-		buffer = newbuf;
+		rjd_array_free(array);
+		array = newbuf;
 	}
 
 	*count = newsize;
-	return (void*)buffer;
+	return (void*)array;
 }
 
-void rjd_array_erase_impl(void* buffer, uint32_t index, size_t sizeof_type)
+void rjd_array_erase_impl(void* array, uint32_t index, size_t sizeof_type)
 {
-	RJD_ASSERT(buffer);
-	RJD_ASSERT(index < rjd_array_count(buffer));
+	RJD_ASSERT(array);
+	RJD_ASSERT(index < rjd_array_count(array));
 	RJD_ASSERT(sizeof_type > 0);
 
-	char* raw = buffer;
-	size_t toshift = rjd_array_count(buffer) - index - 1;
+	rjd_array_validate(array);
+
+	char* raw = array;
+	size_t toshift = rjd_array_count(array) - index - 1;
 	if (toshift > 0) {
 		memmove(raw + index * sizeof_type, raw + (index + 1) * sizeof_type, toshift * sizeof_type);
 	}
-	--*rjd_array_count_impl(buffer);
+	--*rjd_array_count_impl(array);
 }
 
-void rjd_array_erase_unordered_impl(void* buffer, uint32_t index, size_t sizeof_type)
+void rjd_array_erase_unordered_impl(void* array, uint32_t index, size_t sizeof_type)
 {
-	RJD_ASSERT(buffer);
-	RJD_ASSERT(index < rjd_array_count(buffer));
+	RJD_ASSERT(array);
+	RJD_ASSERT(index < rjd_array_count(array));
 	RJD_ASSERT(sizeof_type > 0);
 
-	char* raw = buffer;
+	rjd_array_validate(array);
 
-	uint32_t* count = rjd_array_count_impl(buffer);
+	char* raw = array;
+
+	uint32_t* count = rjd_array_count_impl(array);
 
 	if (*count > 1) {
 		char* erase = raw + index * sizeof_type;
@@ -908,33 +921,37 @@ void rjd_array_erase_unordered_impl(void* buffer, uint32_t index, size_t sizeof_
 	}
 
 	if (*count > 0) {
-		--*rjd_array_count_impl(buffer);
+		--*rjd_array_count_impl(array);
 	}
 }
 
-void* rjd_array_grow_impl(void* buffer, size_t sizeof_type) {
-	RJD_ASSERT(buffer);
+void* rjd_array_grow_impl(void* array, size_t sizeof_type) {
+	RJD_ASSERT(array);
 	RJD_ASSERT(sizeof_type > 0);
 
-	uint32_t capacity = rjd_array_capacity(buffer);
-	if (capacity == rjd_array_count(buffer)) {
-		buffer = rjd_array_resize_impl(buffer, capacity * 2, sizeof_type);
+	rjd_array_validate(array);
+
+	uint32_t capacity = rjd_array_capacity(array);
+	if (capacity == rjd_array_count(array)) {
+		array = rjd_array_resize_impl(array, capacity * 2, sizeof_type);
 	}
 
-	*rjd_array_count_impl(buffer) += 1;
-	return buffer;
+	*rjd_array_count_impl(array) += 1;
+	return array;
 }
 
-bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeof_type, size_t sizeof_value)
+bool rjd_array_contains_impl(void* array, void* value, size_t sizeof_type, size_t sizeof_value)
 {
 	RJD_ASSERT(sizeof_type == sizeof_value);
 
-	if (!buffer) {
+	rjd_array_validate(array);
+
+	if (!array) {
 		return false;
 	}
 
-	char* raw = (char*)buffer;
-	for (uint32_t i = 0; i < rjd_array_count(buffer); ++i) {
+	char* raw = (char*)array;
+	for (uint32_t i = 0; i < rjd_array_count(array); ++i) {
 		if (!memcmp(raw + i * sizeof_type, value, sizeof_type)) {
 			return true;
 		}
@@ -942,20 +959,22 @@ bool rjd_array_contains_impl(void* buffer, void* value, size_t sizeof_type, size
 	return false;
 }
 
-void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_type)
+void rjd_array_shuffle_impl(void* array, struct rjd_rng* rng, size_t sizeof_type)
 {
-	if (!buffer) {
+	if (!array) {
 		return;
 	}
+
+	rjd_array_validate(array);
 
 	char tmp[512];
 	RJD_ASSERTMSG(sizeof_type <= sizeof(tmp), 
 		"tmp (%u bytes) must be greater than or equal to sizeof_type (%u bytes)", 
 		(unsigned) sizeof(tmp), (unsigned) sizeof_type);
 
-	char* raw = (char*)buffer;
-	for (uint32_t i = 0; i < rjd_array_count(buffer); ++i) {
-		uint32_t k = rjd_rng_range32(rng, 0, rjd_array_count(buffer));
+	char* raw = (char*)array;
+	for (uint32_t i = 0; i < rjd_array_count(array); ++i) {
+		uint32_t k = rjd_rng_range32(rng, 0, rjd_array_count(array));
 		if (i == k) {
 			continue;
 		}
@@ -969,19 +988,48 @@ void rjd_array_shuffle_impl(void* buffer, struct rjd_rng* rng, size_t sizeof_typ
 	}
 }
 
-void rjd_array_reverse_impl(void* buffer, size_t sizeof_type)
+void rjd_array_reverse_impl(void* array, size_t sizeof_type)
 {
-	if (!buffer) {
+	if (!array) {
 		return;
 	}
+	rjd_array_validate(array);
 
-	uint8_t* raw = buffer;
-	for (uint8_t* begin = raw, *end = raw + (int32_t)sizeof_type * ((int32_t)rjd_array_count(buffer) - 1); 
+	uint8_t* raw = array;
+	for (uint8_t* begin = raw, *end = raw + (int32_t)sizeof_type * ((int32_t)rjd_array_count(array) - 1); 
 		begin < end; 
 		begin += sizeof_type, end -= sizeof_type)
 	{
-		rjd_memswap(begin, end, sizeof_type);
+		rjd_mem_swap(begin, end, sizeof_type);
 	}
+}
+
+static struct rjd_array_header* rjd_array_getheader(void* array)
+{
+	if (!array) {
+		return NULL;
+	}
+	rjd_array_validate(array);
+
+	char* raw = array;
+	char* raw_header = raw - sizeof(struct rjd_array_header);
+	return (struct rjd_array_header*) raw_header;
+}
+
+static struct rjd_mem_allocator* rjd_array_allocator(void* array)
+{
+	RJD_ASSERT(array);
+	return rjd_array_getheader(array)->allocator;
+}
+
+static inline void rjd_array_validate(const void* array)
+{
+	RJD_ASSERT(array);
+	const char* raw = array;
+	const struct rjd_array_header* header = (struct rjd_array_header*)(raw - sizeof(struct rjd_array_header));
+	RJD_ASSERTMSG(header->debug_sentinel == RJD_ARRAY_DEBUG_SENTINEL, 
+		"Debug sentinel was either corrupted by an underrun or this is not an rjd_array.");
+	RJD_UNUSED_PARAM(header);
 }
 
 #endif //RJD_IMPL
@@ -2598,17 +2646,17 @@ static inline float rjd_ease_inout_boun(float t) {
 
 RJD_STATIC_ASSERT(RJD_STRBUF_STATIC_SIZE > 0);
 
-struct rjd_alloc_context;
+struct rjd_mem_allocator;
 
 struct rjd_strbuf
 {
-	struct rjd_alloc_context* allocator;
+	struct rjd_mem_allocator* allocator;
 	size_t length;
 	char* heap;
 	char stack[RJD_STRBUF_STATIC_SIZE];
 };
 
-struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator);
+struct rjd_strbuf rjd_strbuf_init(struct rjd_mem_allocator* allocator);
 size_t rjd_strbuf_length(const struct rjd_strbuf* buf);
 const char* rjd_strbuf_str(const struct rjd_strbuf* buf);
 void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...);
@@ -2634,7 +2682,7 @@ void rjd_strbuf_free(struct rjd_strbuf* buf);
 
 static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length);
 
-struct rjd_strbuf rjd_strbuf_init(struct rjd_alloc_context* allocator)
+struct rjd_strbuf rjd_strbuf_init(struct rjd_mem_allocator* allocator)
 {
 	struct rjd_strbuf buf;
 	buf.length = 0;
@@ -2855,7 +2903,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 
 #define RJD_CMD 1
 
-struct rjd_alloc_context;
+struct rjd_mem_allocator;
 
 struct rjd_cmd_argv
 {
@@ -2873,10 +2921,10 @@ struct rjd_cmd
 	struct rjd_cmd_argv* opts;
 	struct rjd_cmd_argv* reqs;
 
-	struct rjd_alloc_context* allocator;
+	struct rjd_mem_allocator* allocator;
 };
 
-struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_alloc_context* allocator);
+struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_mem_allocator* allocator);
 void rjd_cmd_free(struct rjd_cmd* cmd);
 void rjd_cmd_add_opt(struct rjd_cmd* cmd, const char* shortname, const char* longname, const char* argname, const char* description);
 void rjd_cmd_add_req(struct rjd_cmd* cmd, const char* argname, const char* description);
@@ -2908,7 +2956,7 @@ const char* rjd_cmd_str(const struct rjd_cmd* cmd, const char* shortname);
 
 #if RJD_IMPL
 
-struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_alloc_context* allocator)
+struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_mem_allocator* allocator)
 {
 	struct rjd_cmd cmd = {argc, argv, NULL, NULL, allocator};
 	cmd.opts = rjd_array_alloc(struct rjd_cmd_argv, 8, allocator);
@@ -3203,17 +3251,17 @@ static const char* rjd_cmd_findreq(const struct rjd_cmd* cmd, const char* argnam
 
 #define RJD_DICT 1
 
-struct rjd_alloc_context;
+struct rjd_mem_allocator;
 
 struct rjd_dict
 {
 	uint32_t count;
 	rjd_hash64* hashes;
 	void** values;
-	struct rjd_alloc_context* allocator;
+	struct rjd_mem_allocator* allocator;
 };
 
-struct rjd_dict rjd_dict_init(struct rjd_alloc_context* allocator, size_t initial_capacity);
+struct rjd_dict rjd_dict_init(struct rjd_mem_allocator* allocator, size_t initial_capacity);
 void rjd_dict_insert(struct rjd_dict* dict, rjd_hash64 hash, void* item);
 void* rjd_dict_erase(struct rjd_dict* dict, rjd_hash64 hash);
 void* rjd_dict_get(const struct rjd_dict* dict, rjd_hash64 hash);
@@ -3269,7 +3317,7 @@ enum rjd_dict_findmode
 static void rjd_dict_grow(struct rjd_dict* dict, size_t capacity);
 static int32_t rjd_dict_findindex(const rjd_hash64* hashes, rjd_hash64 hash, enum rjd_dict_findmode mode);
  
-struct rjd_dict rjd_dict_init(struct rjd_alloc_context* allocator, size_t initial_capacity)
+struct rjd_dict rjd_dict_init(struct rjd_mem_allocator* allocator, size_t initial_capacity)
 {
 	RJD_ASSERT(allocator);
 
@@ -3431,7 +3479,7 @@ RJD_ENUM_DECLARE(rjd_fio_err, RJD_FIO_ERR_ENUM);
 RJD_ENUM_DECLARE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM);
 
 // use rjd_array_free() to free *buffer after use
-enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_alloc_context* context);
+enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* context);
 enum rjd_fio_err rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode);
 enum rjd_fio_err rjd_fio_size(const char* path, size_t* out_size);
 enum rjd_fio_err rjd_fio_delete(const char* path);
@@ -3457,7 +3505,7 @@ enum rjd_fio_err rjd_fio_delete(const char* path);
 RJD_ENUM_DEFINE(rjd_fio_err, RJD_FIO_ERR_ENUM);
 RJD_ENUM_DEFINE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM);
 
-enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_alloc_context* context)
+enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* context)
 {
 	FILE* file = fopen(path, "rb");
 	if (!file) {
@@ -3556,7 +3604,7 @@ struct rjd_strpool
 
 struct rjd_strref;
 
-struct rjd_strpool rjd_strpool_init(struct rjd_alloc_context* allocator, size_t initial_capacity);
+struct rjd_strpool rjd_strpool_init(struct rjd_mem_allocator* allocator, size_t initial_capacity);
 void rjd_strpool_free(struct rjd_strpool* pool);
 struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* fmt, ...);
 struct rjd_strref* rjd_strpool_addv(struct rjd_strpool* pool, const char* fmt, va_list args); 
@@ -3588,7 +3636,7 @@ struct rjd_strref
 
 static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const char* str);
 
-struct rjd_strpool rjd_strpool_init(struct rjd_alloc_context* allocator, size_t initial_capacity)
+struct rjd_strpool rjd_strpool_init(struct rjd_mem_allocator* allocator, size_t initial_capacity)
 {
 	RJD_ASSERT(allocator);
 
@@ -3604,7 +3652,7 @@ void rjd_strpool_free(struct rjd_strpool* pool)
 	for (uint32_t i = 0; i < rjd_array_count(refs); ++i) {
 		if (refs[i]) {
 			struct rjd_strref* ref = refs[i];
-			rjd_free(ref, pool->storage.allocator); // struct and string are part of the same allocation block
+			rjd_mem_free(ref, pool->storage.allocator); // struct and string are part of the same allocation block
 		}
 	}
 	rjd_dict_free(&pool->storage);
@@ -3666,7 +3714,7 @@ void rjd_strref_release(struct rjd_strref* ref)
 
 	--ref->refcount;
 	if (ref->refcount <= 0) {
-		rjd_free(ref, pool->storage.allocator); // struct and string are part of the same allocation block
+		rjd_mem_free(ref, pool->storage.allocator); // struct and string are part of the same allocation block
 		rjd_dict_erase(&pool->storage, hash);
 	}
 }
@@ -3685,7 +3733,7 @@ static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const ch
 	rjd_hash64 hash = rjd_hash64_data((const uint8_t*)str, -1);
 	struct rjd_strref* ref = rjd_dict_get(&pool->storage, hash);
 	if (!ref) {
-		uint8_t* mem = rjd_malloc_array(uint8_t, sizeof(struct rjd_strref) + strlen(str) + 1, pool->storage.allocator);
+		uint8_t* mem = rjd_mem_alloc_array(uint8_t, sizeof(struct rjd_strref) + strlen(str) + 1, pool->storage.allocator);
 		ref = (struct rjd_strref*)mem;
 
 		char* copied_str = (char*)(mem + sizeof(struct rjd_strref));

@@ -197,28 +197,28 @@ void test_alloc()
 {
 	// default allocator
 	{
-		struct rjd_alloc_context ctx = alloc_initdefault();
-		int32_t* v = rmalloc(int32_t, &ctx);
+		struct rjd_mem_allocator ctx = mem_allocator_initdefault();
+		int32_t* v = mem_alloc(int32_t, &ctx);
 		*v = 1337;
 		expect_int32(1337, *v);
 
-		char* p1 = rmalloc_array(char, 128, &ctx);
+		char* p1 = mem_alloc_array(char, 128, &ctx);
 		strncpy(p1, "thequickbrownfoxjumpedoverthesuperdeduperlazydog!", 128);
 		p1[127] = 0;
 
-		char* p2 = rmalloc_array(char, 64, &ctx);
+		char* p2 = mem_alloc_array(char, 64, &ctx);
 		strncpy(p2, "this fox wasn't as quick as the last one", 64);
 		p2[63] = 0;
 
-		rfree(v, &ctx);
-		rfree(p1, &ctx);
-		rfree(p2, &ctx);
+		mem_free(v, &ctx);
+		mem_free(p1, &ctx);
+		mem_free(p2, &ctx);
 	}
 
 	{
 		char test1[] = { 'm','y','t','e','s','t','\0' };
 		char test2[] = { 'o','h','n','o','e','s','\0' };
-		memswap(test1, test2, sizeof(test1));
+		mem_swap(test1, test2, sizeof(test1));
 		expect_str("ohnoes", test1);
 		expect_str("mytest", test2);
 	}
@@ -231,7 +231,7 @@ void test_alloc()
 
 void test_array()
 {
-	struct rjd_alloc_context context = alloc_initdefault();
+	struct rjd_mem_allocator context = mem_allocator_initdefault();
 
 	// countof
 	{
@@ -801,7 +801,7 @@ void test_easing()
 
 void test_strbuf(void)
 {	
-	struct rjd_alloc_context context = alloc_initdefault();
+	struct rjd_mem_allocator context = mem_allocator_initdefault();
 
 	struct rjd_strbuf builder = rjd_strbuf_init(&context);
 
@@ -852,7 +852,7 @@ void test_profiler(void)
 
 void test_cmd()
 {
-	struct rjd_alloc_context context = alloc_initdefault();
+	struct rjd_mem_allocator context = mem_allocator_initdefault();
 	
 	const char* argv0[] = { "test.exe", NULL };
 	struct rjd_cmd cmd = cmd_init(countof(argv0), argv0, &context);
@@ -932,7 +932,7 @@ void test_rng()
 
 void test_dict()
 {
-	struct rjd_alloc_context context = alloc_initdefault();
+	struct rjd_mem_allocator context = mem_allocator_initdefault();
 	
 	struct rjd_dict dict = dict_init(&context, 0);
 	expect_str(NULL, (char*)dict_get_hashstr(&dict, "key"));
@@ -987,7 +987,7 @@ void expect_fio(enum fio_err expected, enum fio_err actual)
 
 void test_fio()
 {
-	struct rjd_alloc_context context = alloc_initdefault();
+	struct rjd_mem_allocator context = mem_allocator_initdefault();
 
 	const char expected_contents[] = "this is a test file that has a utf-8 character!";
 
@@ -1028,7 +1028,7 @@ void test_fio()
 
 void test_strpool()
 {
-	struct rjd_alloc_context allocator = alloc_initdefault();
+	struct rjd_mem_allocator allocator = mem_allocator_initdefault();
 
 	const char* test1 = "test1";
 	const char* test2 = "a really really super long string that has an end lalalalalalalala";
