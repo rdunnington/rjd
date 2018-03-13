@@ -33,8 +33,6 @@
 	#error Unhandled compiler
 #endif
 
-#define RJD_ISALIGNED(p, align) (((uintptr_t)(p) & ((align)-1)) == 0)
-
 #if RJD_COMPILER_MSVC
 	#define RJD_COMPILER_MSVC_ONLY(code) code
 	#define RJD_COMPILER_GCC_ONLY(code)
@@ -56,6 +54,5 @@
 #if RJD_ENABLE_SHORTNAMES
 	#define FORCE_INLINE RJD_FORCE_INLINE
 	#define FORCE_ALIGN RJD_FORCE_ALIGN
-	#define ISALIGNED RJD_ISALIGNED
 #endif
 

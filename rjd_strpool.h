@@ -55,7 +55,7 @@ void rjd_strpool_free(struct rjd_strpool* pool)
 	for (uint32_t i = 0; i < rjd_array_count(refs); ++i) {
 		if (refs[i]) {
 			struct rjd_strref* ref = refs[i];
-			rjd_mem_free(ref, pool->storage.allocator); // struct and string are part of the same allocation block
+			rjd_mem_free(ref); // struct and string are part of the same allocation block
 		}
 	}
 	rjd_dict_free(&pool->storage);
@@ -117,7 +117,7 @@ void rjd_strref_release(struct rjd_strref* ref)
 
 	--ref->refcount;
 	if (ref->refcount <= 0) {
-		rjd_mem_free(ref, pool->storage.allocator); // struct and string are part of the same allocation block
+		rjd_mem_free(ref); // struct and string are part of the same allocation block
 		rjd_dict_erase(&pool->storage, hash);
 	}
 }

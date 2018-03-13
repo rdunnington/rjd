@@ -193,8 +193,38 @@ void test_hash()
 	expect_uint64(rjd_hash64_data(data3, 0).value, rjd_hash64_data(data3, -1).value);
 }
 
-void test_alloc()
+void test_mem()
 {
+	//macros
+	{
+		expect_true(MEM_ISALIGNED(0, 4));
+		expect_true(MEM_ISALIGNED(4, 4));
+		expect_true(MEM_ISALIGNED(8, 4));
+		expect_true(MEM_ISALIGNED(8, 8));
+		expect_true(MEM_ISALIGNED(16, 8));
+		expect_true(MEM_ISALIGNED(16, 16));
+		expect_true(MEM_ISALIGNED(32, 16));
+		expect_true(MEM_ISALIGNED(32, 32));
+
+		expect_false(MEM_ISALIGNED(1, 4));
+		expect_false(MEM_ISALIGNED(2, 4));
+		expect_false(MEM_ISALIGNED(3, 4));
+
+		expect_int32(0, MEM_ALIGNSIZE(0, 4));
+		expect_int32(4, MEM_ALIGNSIZE(1, 4));
+		expect_int32(4, MEM_ALIGNSIZE(2, 4));
+		expect_int32(4, MEM_ALIGNSIZE(3, 4));
+		expect_int32(4, MEM_ALIGNSIZE(4, 4));
+		expect_int32(8, MEM_ALIGNSIZE(5, 4));
+		expect_int32(8, MEM_ALIGNSIZE(6, 4));
+		expect_int32(8, MEM_ALIGNSIZE(7, 4));
+		expect_int32(8, MEM_ALIGNSIZE(8, 4));
+		expect_int32(12, MEM_ALIGNSIZE(9, 4));
+		expect_int32(12, MEM_ALIGNSIZE(10, 4));
+		expect_int32(12, MEM_ALIGNSIZE(11, 4));
+		expect_int32(12, MEM_ALIGNSIZE(12, 4));
+	}
+
 	// default allocator
 	{
 		struct rjd_mem_allocator ctx = mem_allocator_initdefault();
@@ -210,9 +240,9 @@ void test_alloc()
 		strncpy(p2, "this fox wasn't as quick as the last one", 64);
 		p2[63] = 0;
 
-		mem_free(v, &ctx);
-		mem_free(p1, &ctx);
-		mem_free(p2, &ctx);
+		mem_free(v);
+		mem_free(p1);
+		mem_free(p2);
 	}
 
 	{
@@ -1076,7 +1106,7 @@ int main(void)
 	test_logging();
 	test_enum();
 	test_hash();
-	test_alloc();
+	test_mem();
 	test_rng();
 	test_array();
 	test_math();

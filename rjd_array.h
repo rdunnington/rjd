@@ -96,8 +96,6 @@ struct rjd_array_header
 	uint32_t debug_sentinel;
 };
 
-#define RJD_ARRAY_DEBUG_SENTINEL (0xA7A7A7A7)
-
 static struct rjd_array_header* rjd_array_getheader(void* array);
 static struct rjd_mem_allocator* rjd_array_allocator(void* array);
 static inline void rjd_array_validate(const void* array);
@@ -115,7 +113,7 @@ void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocato
 	header->allocator = allocator;
 	header->capacity = capacity;
 	header->count = 0;
-	header->debug_sentinel = RJD_ARRAY_DEBUG_SENTINEL; 
+	header->debug_sentinel = RJD_MEM_DEBUG_SENTINEL32; 
 
 	char* buf = raw + sizeof(struct rjd_array_header);
 	memset(buf, 0, sizeof_type * capacity);
@@ -130,10 +128,8 @@ void rjd_array_free_impl(const void* array)
 	}
 	rjd_array_validate(array);
 
-	struct rjd_mem_allocator* allocator = rjd_array_allocator((void*)array);
-
 	char* raw = (char*)array;
-	rjd_mem_free(raw - sizeof(struct rjd_array_header), allocator);
+	rjd_mem_free(raw - sizeof(struct rjd_array_header));
 }
 
 uint32_t* rjd_array_capacity_impl(const void* array)
@@ -330,7 +326,7 @@ static inline void rjd_array_validate(const void* array)
 	RJD_ASSERT(array);
 	const char* raw = array;
 	const struct rjd_array_header* header = (struct rjd_array_header*)(raw - sizeof(struct rjd_array_header));
-	RJD_ASSERTMSG(header->debug_sentinel == RJD_ARRAY_DEBUG_SENTINEL, 
+	RJD_ASSERTMSG(header->debug_sentinel == RJD_MEM_DEBUG_SENTINEL32, 
 		"Debug sentinel was either corrupted by an underrun or this is not an rjd_array.");
 	RJD_UNUSED_PARAM(header);
 }

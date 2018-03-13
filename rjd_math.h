@@ -497,7 +497,7 @@ static inline bool rjd_math_vec4_ge(rjd_math_vec4 a, rjd_math_vec4 b) {
 	return (_mm_movemask_ps(_mm_cmpge_ps(a.v, b.v)) & 0xF) == 0xF;
 }
 static inline float* rjd_math_vec4_write(rjd_math_vec4 v, float* out) {
-	RJD_ASSERT(RJD_ISALIGNED(out, 16));
+	RJD_ASSERT(RJD_MEM_ISALIGNED(out, 16));
 	_mm_stream_ps(out,  v.v);
 	return out + 4;
 }
@@ -627,7 +627,7 @@ static inline float* rjd_math_vec3_write(rjd_math_vec3 v, float* out) {
 	return out + 3;
 }
 static inline float* rjd_math_vec3_writefast(rjd_math_vec3 v, float* out) {
-	RJD_ASSERT(RJD_ISALIGNED(out, 16));
+	RJD_ASSERT(RJD_MEM_ISALIGNED(out, 16));
 	_mm_stream_ps(out, v.v);
 	return out + 3;
 }
@@ -1004,7 +1004,7 @@ static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec
 	return rjd_math_mat4_mul(trans, rjd_math_mat4_transpose(rot));
 }
 static inline float* rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out) {
-	RJD_ASSERT(RJD_ISALIGNED(out, 16));
+	RJD_ASSERT(RJD_MEM_ISALIGNED(out, 16));
 	_mm_stream_ps(out + 0,  m.m[0].v);
 	_mm_stream_ps(out + 4,  m.m[0].v);
 	_mm_stream_ps(out + 8,  m.m[0].v);
