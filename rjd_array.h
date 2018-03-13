@@ -100,6 +100,7 @@ struct rjd_array_header
 
 static struct rjd_array_header* rjd_array_getheader(void* array);
 static struct rjd_alloc_context* rjd_array_allocator(void* array);
+static inline void rjd_array_validate(const void* array);
 
 void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_alloc_context* allocator, size_t sizeof_type)
 {
@@ -127,6 +128,7 @@ void rjd_array_free_impl(const void* array)
 	if (!array) {
 		return;
 	}
+	rjd_array_validate(array);
 
 	struct rjd_alloc_context* allocator = rjd_array_allocator((void*)array);
 
@@ -139,6 +141,7 @@ uint32_t* rjd_array_capacity_impl(const void* array)
 	if (!array) {
 		return 0;
 	}
+	rjd_array_validate(array);
 
 	struct rjd_array_header* header = rjd_array_getheader((void*)array);
 	return &header->capacity;
@@ -149,6 +152,7 @@ uint32_t* rjd_array_count_impl(const void* array)
 	if (!array) {
 		return 0;
 	}
+	rjd_array_validate(array);
 
 	struct rjd_array_header* header = rjd_array_getheader((void*)array);
 	return &header->count;
@@ -158,6 +162,8 @@ void* rjd_array_resize_impl(void* array, uint32_t newsize, size_t sizeof_type)
 {
 	RJD_ASSERT(array);
 	RJD_ASSERT(sizeof_type > 0);
+
+	rjd_array_validate(array);
 
 	uint32_t newcapacity = newsize > 0 ? newsize : 1;
 
@@ -189,6 +195,8 @@ void rjd_array_erase_impl(void* array, uint32_t index, size_t sizeof_type)
 	RJD_ASSERT(index < rjd_array_count(array));
 	RJD_ASSERT(sizeof_type > 0);
 
+	rjd_array_validate(array);
+
 	char* raw = array;
 	size_t toshift = rjd_array_count(array) - index - 1;
 	if (toshift > 0) {
@@ -202,6 +210,8 @@ void rjd_array_erase_unordered_impl(void* array, uint32_t index, size_t sizeof_t
 	RJD_ASSERT(array);
 	RJD_ASSERT(index < rjd_array_count(array));
 	RJD_ASSERT(sizeof_type > 0);
+
+	rjd_array_validate(array);
 
 	char* raw = array;
 
@@ -222,6 +232,8 @@ void* rjd_array_grow_impl(void* array, size_t sizeof_type) {
 	RJD_ASSERT(array);
 	RJD_ASSERT(sizeof_type > 0);
 
+	rjd_array_validate(array);
+
 	uint32_t capacity = rjd_array_capacity(array);
 	if (capacity == rjd_array_count(array)) {
 		array = rjd_array_resize_impl(array, capacity * 2, sizeof_type);
@@ -234,6 +246,8 @@ void* rjd_array_grow_impl(void* array, size_t sizeof_type) {
 bool rjd_array_contains_impl(void* array, void* value, size_t sizeof_type, size_t sizeof_value)
 {
 	RJD_ASSERT(sizeof_type == sizeof_value);
+
+	rjd_array_validate(array);
 
 	if (!array) {
 		return false;
@@ -253,6 +267,8 @@ void rjd_array_shuffle_impl(void* array, struct rjd_rng* rng, size_t sizeof_type
 	if (!array) {
 		return;
 	}
+
+	rjd_array_validate(array);
 
 	char tmp[512];
 	RJD_ASSERTMSG(sizeof_type <= sizeof(tmp), 
@@ -280,6 +296,7 @@ void rjd_array_reverse_impl(void* array, size_t sizeof_type)
 	if (!array) {
 		return;
 	}
+	rjd_array_validate(array);
 
 	uint8_t* raw = array;
 	for (uint8_t* begin = raw, *end = raw + (int32_t)sizeof_type * ((int32_t)rjd_array_count(array) - 1); 
@@ -295,6 +312,8 @@ static struct rjd_array_header* rjd_array_getheader(void* array)
 	if (!array) {
 		return NULL;
 	}
+	rjd_array_validate(array);
+
 	char* raw = array;
 	char* raw_header = raw - sizeof(struct rjd_array_header);
 	return (struct rjd_array_header*) raw_header;
@@ -304,6 +323,16 @@ static struct rjd_alloc_context* rjd_array_allocator(void* array)
 {
 	RJD_ASSERT(array);
 	return rjd_array_getheader(array)->allocator;
+}
+
+static inline void rjd_array_validate(const void* array)
+{
+	RJD_ASSERT(array);
+	const char* raw = array;
+	const struct rjd_array_header* header = (struct rjd_array_header*)(raw - sizeof(struct rjd_array_header));
+	RJD_ASSERTMSG(header->debug_sentinel == RJD_ARRAY_DEBUG_SENTINEL, 
+		"Debug sentinel was either corrupted by an underrun or this is not an rjd_array.");
+	RJD_UNUSED_PARAM(header);
 }
 
 #endif //RJD_IMPL
