@@ -254,10 +254,12 @@ void test_array()
 			int d;
 		};
 		struct test* a = array_alloc(struct test, 32, &context);
-		expect_uint32(array_count(a), 0);
-		expect_uint32(array_capacity(a), 32);
+		expect_uint32(0, array_count(a));
+		expect_uint32(32, array_capacity(a));
 		expect_true(array_empty(a));
 		expect_false(array_full(a));
+		expect_uint32(0, array_count(NULL));
+		expect_uint32(0, array_capacity(NULL));
 
 		array_resize(a, 16);
 		expect_uint32(16, array_count(a));
