@@ -58,8 +58,6 @@
 	#error Unhandled compiler
 #endif
 
-#define RJD_ISALIGNED(p, align) (((uintptr_t)(p) & ((align)-1)) == 0)
-
 #if RJD_COMPILER_MSVC
 	#define RJD_COMPILER_MSVC_ONLY(code) code
 	#define RJD_COMPILER_GCC_ONLY(code)
@@ -81,7 +79,6 @@
 #if RJD_ENABLE_SHORTNAMES
 	#define FORCE_INLINE RJD_FORCE_INLINE
 	#define FORCE_ALIGN RJD_FORCE_ALIGN
-	#define ISALIGNED RJD_ISALIGNED
 #endif
 
 
@@ -477,7 +474,39 @@ struct rjd_mem_allocator
 	rjd_mem_allocfunc_scoped alloc_scoped;
 	rjd_mem_freefunc_scoped free_scoped;
 	void* scope;
+
+	uint32_t debug_sentinel;
 };
+
+struct rjd_mem_allocator rjd_mem_allocator_initdefault(void);
+struct rjd_mem_allocator rjd_mem_allocator_initglobal(rjd_mem_allocfunc a, rjd_mem_freefunc f);
+struct rjd_mem_allocator rjd_mem_allocator_initscoped(rjd_mem_allocfunc_scoped a, rjd_mem_freefunc_scoped f, void* allocator);
+struct rjd_mem_allocator rjd_mem_allocator_initlinear(void* mem, size_t heapsize);
+void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator);
+void rjd_mem_free(const void* mem);
+void rjd_mem_swap(void* restrict mem1, void* restrict mem2, size_t size);
+
+#define rjd_mem_alloc(type, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type), allocator))
+#define rjd_mem_alloc_array(type, count, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator))
+
+#define RJD_MEM_ISALIGNED(p, align) (((uintptr_t)(p) & ((align)-1)) == 0)
+#define RJD_MEM_ALIGNSIZE(size, align) ((size) + (RJD_MEM_ISALIGNED(size, align) ? 0 : ((align) - ((size) & ((align)-1)))))
+
+#if RJD_ENABLE_SHORTNAMES
+	#define mem_allocator_initdefault   	rjd_mem_allocator_initdefault
+	#define mem_allocator_initglobal    	rjd_mem_allocator_initglobal
+	#define mem_allocator_initscoped    	rjd_mem_allocator_initscoped
+	#define mem_allocator_initlinear		rjd_mem_allocator_initlinear
+	#define mem_alloc						rjd_mem_alloc
+	#define mem_alloc_array					rjd_mem_alloc_array
+	#define mem_free						rjd_mem_free
+	#define mem_swap						rjd_mem_swap
+
+	#define MEM_ISALIGNED 					RJD_MEM_ISALIGNED
+	#define MEM_ALIGNSIZE					RJD_MEM_ALIGNSIZE
+#endif
+
+#ifdef RJD_IMPL
 
 struct rjd_mem_heap_linear
 {
@@ -486,33 +515,8 @@ struct rjd_mem_heap_linear
 	size_t size;
 };
 
-struct rjd_mem_allocator rjd_mem_allocator_initdefault(void);
-struct rjd_mem_allocator rjd_mem_allocator_initglobal(rjd_mem_allocfunc a, rjd_mem_freefunc f);
-struct rjd_mem_allocator rjd_mem_allocator_initscoped(rjd_mem_allocfunc_scoped a, rjd_mem_freefunc_scoped f, void* allocator);
-struct rjd_mem_allocator rjd_mem_allocator_initlinearheap(void* mem, size_t heapsize);
-void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* context);
-void rjd_mem_free(const void* mem, struct rjd_mem_allocator* context);
-void rjd_mem_swap(void* restrict mem1, void* restrict mem2, size_t size);
-
-#define rjd_mem_alloc(type, context) ((type*)rjd_mem_alloc_impl(sizeof(type), context))
-#define rjd_mem_alloc_array(type, count, context) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, context))
-
-#if RJD_ENABLE_SHORTNAMES
-	#define mem_allocator_initdefault   	rjd_mem_allocator_initdefault
-	#define mem_allocator_initglobal    	rjd_mem_allocator_initglobal
-	#define mem_allocator_initscoped    	rjd_mem_allocator_initscoped
-	#define mem_allocator_initlinearheap	rjd_mem_allocator_initlinearheap
-	#define mem_alloc						rjd_mem_alloc
-	#define mem_alloc_array					rjd_mem_alloc_array
-	#define mem_free						rjd_mem_free
-	#define mem_swap						rjd_mem_swap
-#endif
-
-#ifdef RJD_IMPL
-
-// detail functions
-static struct rjd_mem_heap_linear rjd_mem_linearheap_init(void* mem, size_t size);
-static void* rjd_mem_linearheap_alloc(size_t size, void* heap);
+static struct rjd_mem_heap_linear rjd_mem_linear_init(void* mem, size_t size);
+static void* rjd_mem_linear_alloc(size_t size, void* heap);
 static void rjd_mem_free_scoped_noop(void* mem, void* heap);
 
 #if RJD_COMPILER_MSVC
@@ -520,16 +524,19 @@ static void rjd_mem_free_scoped_noop(void* mem, void* heap);
 	static void rjd_mem_free_global_wrapper(void* mem);
 #endif
 
+#define RJD_MEM_DEBUG_SENTINEL32 (0xA7A7A7A7u)
+#define RJD_MEM_DEBUG_SENTINEL64 (0xA7A7A7A7A7A7A7A7ull)
+
 struct rjd_mem_allocator rjd_mem_allocator_initglobal(rjd_mem_allocfunc a, rjd_mem_freefunc f)
 {
-	struct rjd_mem_allocator context = { a, f, NULL, NULL, NULL };
-	return context;
+	struct rjd_mem_allocator allocator = { a, f, NULL, NULL, NULL, RJD_MEM_DEBUG_SENTINEL32 };
+	return allocator;
 }
 
 struct rjd_mem_allocator rjd_mem_allocator_initscoped(rjd_mem_allocfunc_scoped a, rjd_mem_freefunc_scoped f, void* heap)
 {
-	struct rjd_mem_allocator context = { NULL, NULL, a, f, heap };
-	return context;
+	struct rjd_mem_allocator allocator = { NULL, NULL, a, f, heap, RJD_MEM_DEBUG_SENTINEL32 };
+	return allocator;
 }
 
 struct rjd_mem_allocator rjd_mem_allocator_initdefault()
@@ -541,30 +548,55 @@ struct rjd_mem_allocator rjd_mem_allocator_initdefault()
 	#endif
 }
 
-struct rjd_mem_allocator rjd_mem_allocator_initlinearheap(void* mem, size_t heapsize)
+struct rjd_mem_allocator rjd_mem_allocator_initlinear(void* mem, size_t heapsize)
 {
 	char* bytes = (char*)mem;
 	const size_t structsize = sizeof(struct rjd_mem_heap_linear);
 	struct rjd_mem_heap_linear* heap = (struct rjd_mem_heap_linear*)bytes + heapsize - structsize;
-	*heap = rjd_mem_linearheap_init(mem, heapsize - structsize);
+	*heap = rjd_mem_linear_init(mem, heapsize - structsize);
 
-	return rjd_mem_allocator_initscoped(rjd_mem_linearheap_alloc, rjd_mem_free_scoped_noop, heap);
+	return rjd_mem_allocator_initscoped(rjd_mem_linear_alloc, rjd_mem_free_scoped_noop, heap);
 }
 
-void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* context)
+void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator)
 {
-	if (context->alloc_global) {
-		return context->alloc_global(size);
+	const size_t aligned_size = RJD_MEM_ALIGNSIZE(sizeof(struct rjd_mem_allocator), 16);
+	if (size == 0) {
+		size = 4;
 	}
-	return context->alloc_scoped(size, context->scope);
+
+	void* mem = NULL;
+	if (allocator->alloc_global) {
+		mem = allocator->alloc_global(size + aligned_size);
+	} else {
+		mem = allocator->alloc_scoped(size + aligned_size, allocator->scope);
+	}
+
+	struct rjd_mem_allocator** ptr = mem;
+	*ptr = allocator;
+
+	char* raw = mem;
+	return (void*)(raw + aligned_size);
 }
 
-void rjd_mem_free(const void* mem, struct rjd_mem_allocator* context)
+void rjd_mem_free(const void* mem)
 {
-	if (context->free_global) {
-		context->free_global((void*)mem);
+	if (!mem) {
+		return;
+	}
+
+	const size_t aligned_size = RJD_MEM_ALIGNSIZE(sizeof(struct rjd_mem_allocator), 16);
+
+	char* raw = (void*)mem;
+	char* begin = raw - aligned_size;
+	struct rjd_mem_allocator** ptr = (struct rjd_mem_allocator**)begin;
+	struct rjd_mem_allocator* allocator = *ptr;
+	RJD_ASSERTMSG(allocator->debug_sentinel == RJD_MEM_DEBUG_SENTINEL32, "This memory was not allocated with rjd_mem_alloc.");
+
+	if (allocator->free_global) {
+		allocator->free_global(begin);
 	} else {
-		context->free_scoped((void*)mem, context->scope);
+		allocator->free_scoped(begin, allocator->scope);
 	}
 }
 
@@ -578,13 +610,13 @@ void rjd_mem_swap(void* restrict mem1, void* restrict mem2, size_t size)
 	memcpy(mem2, tmp, size);
 }
 
-static struct rjd_mem_heap_linear rjd_mem_linearheap_init(void* mem, size_t size)
+static struct rjd_mem_heap_linear rjd_mem_linear_init(void* mem, size_t size)
 {
 	struct rjd_mem_heap_linear heap = { mem, mem, size };
 	return heap;
 }
 
-static void* rjd_mem_linearheap_alloc(size_t size, void* userheap)
+static void* rjd_mem_linear_alloc(size_t size, void* userheap)
 {
 	size_t align_diff = size % 8;
 	if (align_diff != 0) {
@@ -793,8 +825,6 @@ struct rjd_array_header
 	uint32_t debug_sentinel;
 };
 
-#define RJD_ARRAY_DEBUG_SENTINEL (0xA7A7A7A7)
-
 static struct rjd_array_header* rjd_array_getheader(void* array);
 static struct rjd_mem_allocator* rjd_array_allocator(void* array);
 static inline void rjd_array_validate(const void* array);
@@ -812,7 +842,7 @@ void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocato
 	header->allocator = allocator;
 	header->capacity = capacity;
 	header->count = 0;
-	header->debug_sentinel = RJD_ARRAY_DEBUG_SENTINEL; 
+	header->debug_sentinel = RJD_MEM_DEBUG_SENTINEL32; 
 
 	char* buf = raw + sizeof(struct rjd_array_header);
 	memset(buf, 0, sizeof_type * capacity);
@@ -827,10 +857,8 @@ void rjd_array_free_impl(const void* array)
 	}
 	rjd_array_validate(array);
 
-	struct rjd_mem_allocator* allocator = rjd_array_allocator((void*)array);
-
 	char* raw = (char*)array;
-	rjd_mem_free(raw - sizeof(struct rjd_array_header), allocator);
+	rjd_mem_free(raw - sizeof(struct rjd_array_header));
 }
 
 uint32_t* rjd_array_capacity_impl(const void* array)
@@ -1027,7 +1055,7 @@ static inline void rjd_array_validate(const void* array)
 	RJD_ASSERT(array);
 	const char* raw = array;
 	const struct rjd_array_header* header = (struct rjd_array_header*)(raw - sizeof(struct rjd_array_header));
-	RJD_ASSERTMSG(header->debug_sentinel == RJD_ARRAY_DEBUG_SENTINEL, 
+	RJD_ASSERTMSG(header->debug_sentinel == RJD_MEM_DEBUG_SENTINEL32, 
 		"Debug sentinel was either corrupted by an underrun or this is not an rjd_array.");
 	RJD_UNUSED_PARAM(header);
 }
@@ -1538,7 +1566,7 @@ static inline bool rjd_math_vec4_ge(rjd_math_vec4 a, rjd_math_vec4 b) {
 	return (_mm_movemask_ps(_mm_cmpge_ps(a.v, b.v)) & 0xF) == 0xF;
 }
 static inline float* rjd_math_vec4_write(rjd_math_vec4 v, float* out) {
-	RJD_ASSERT(RJD_ISALIGNED(out, 16));
+	RJD_ASSERT(RJD_MEM_ISALIGNED(out, 16));
 	_mm_stream_ps(out,  v.v);
 	return out + 4;
 }
@@ -1668,7 +1696,7 @@ static inline float* rjd_math_vec3_write(rjd_math_vec3 v, float* out) {
 	return out + 3;
 }
 static inline float* rjd_math_vec3_writefast(rjd_math_vec3 v, float* out) {
-	RJD_ASSERT(RJD_ISALIGNED(out, 16));
+	RJD_ASSERT(RJD_MEM_ISALIGNED(out, 16));
 	_mm_stream_ps(out, v.v);
 	return out + 3;
 }
@@ -2045,7 +2073,7 @@ static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec
 	return rjd_math_mat4_mul(trans, rjd_math_mat4_transpose(rot));
 }
 static inline float* rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out) {
-	RJD_ASSERT(RJD_ISALIGNED(out, 16));
+	RJD_ASSERT(RJD_MEM_ISALIGNED(out, 16));
 	_mm_stream_ps(out + 0,  m.m[0].v);
 	_mm_stream_ps(out + 4,  m.m[0].v);
 	_mm_stream_ps(out + 8,  m.m[0].v);
@@ -3652,7 +3680,7 @@ void rjd_strpool_free(struct rjd_strpool* pool)
 	for (uint32_t i = 0; i < rjd_array_count(refs); ++i) {
 		if (refs[i]) {
 			struct rjd_strref* ref = refs[i];
-			rjd_mem_free(ref, pool->storage.allocator); // struct and string are part of the same allocation block
+			rjd_mem_free(ref); // struct and string are part of the same allocation block
 		}
 	}
 	rjd_dict_free(&pool->storage);
@@ -3714,7 +3742,7 @@ void rjd_strref_release(struct rjd_strref* ref)
 
 	--ref->refcount;
 	if (ref->refcount <= 0) {
-		rjd_mem_free(ref, pool->storage.allocator); // struct and string are part of the same allocation block
+		rjd_mem_free(ref); // struct and string are part of the same allocation block
 		rjd_dict_erase(&pool->storage, hash);
 	}
 }

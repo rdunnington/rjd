@@ -3,13 +3,11 @@ todo:
 - rjd_array sort
 - rjd_array sorted insert
 - binary search for rjd_array
-- rjd_free shouldn't need allocator to dealloc
-- rjd_alloc_context -> rjd_mem_allocator
 - dict shortname for rjd_dict
 
 util ideas:
 rjd_path.h
-rjd_pagedarray.h
+rjd_deque.h
 rjd_ringbuffer.h
 rjd_filewatcher.h
 rjd_gfx.h (maybe better as a different lib?)
