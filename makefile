@@ -1,5 +1,5 @@
 all:
-	gcc --std=c99 -pedantic -Wall -Wextra -Wno-missing-field-initializers -g -march=native tests.c 
+	gcc --std=c11 -pedantic -Wall -Wextra -g -march=native tests.c 
 
 clean:
 	rm *.exe
