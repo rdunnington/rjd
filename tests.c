@@ -447,13 +447,45 @@ void expect_vec4(vec4 expected, vec4 actual)
 	}
 }
 
-
 void expect_vec3(vec3 expected, vec3 actual) 
 {
 	if (!vec3_eq(expected, actual)) {
 		ASSERTFAIL("Expected (%.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f)", 
 			vec3_x(expected), vec3_y(expected), vec3_z(expected), 
 			vec3_x(actual), vec3_y(actual), vec3_z(actual));
+	}
+}
+
+void expect_float2(float2 expected, float2 actual)
+{
+	if (!rjd_math_isequalf(expected.x, actual.x) ||
+		!rjd_math_isequalf(expected.y, actual.y))
+	{
+		ASSERTFAIL("Expected (%.2f, %.2f), but got: (%.2f, %.2f)", 
+			expected.x, expected.y, actual.x, actual.y);
+	}
+}
+
+void expect_float3(float3 expected, float3 actual)
+{
+	if (!rjd_math_isequalf(expected.x, actual.x) ||
+		!rjd_math_isequalf(expected.y, actual.y) ||
+		!rjd_math_isequalf(expected.z, actual.z))
+	{
+		ASSERTFAIL("Expected (%.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f)", 
+			expected.x, expected.y, expected.z, actual.x, actual.y, actual.z);
+	}
+}
+
+void expect_float4(float4 expected, float4 actual)
+{
+	if (!rjd_math_isequalf(expected.x, actual.x) ||
+		!rjd_math_isequalf(expected.y, actual.y) ||
+		!rjd_math_isequalf(expected.z, actual.z) ||
+		!rjd_math_isequalf(expected.w, actual.w))
+	{
+		ASSERTFAIL("Expected (%.2f, %.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f, %.2f)", 
+			expected.x, expected.y, expected.z, expected.w, actual.x, actual.y, actual.z, actual.w);
 	}
 }
 
@@ -504,6 +536,29 @@ void test_math(void)
 	expect_int32(1, max32(-1, 1));
 	expect_int32(2, max32(2, 1));
 	expect_int32(1100, maxu32(10, 1100));
+
+	// float <-> vec translations
+	{
+		float2 f2 = rjd_math_float2_xy(78, 99);
+		float3 f3 = rjd_math_float3_xyz(12, 32, 11);
+		float4 f4 = rjd_math_float4_xyzw(60, 56, 77, 28);
+
+		expect_vec3(rjd_math_vec3_xyz(78, 99, 4), rjd_math_float2_to_vec3(f2, 4));
+		expect_vec3(rjd_math_vec3_xyz(12, 32, 11), rjd_math_float3_to_vec3(f3));
+		expect_vec3(rjd_math_vec3_xyz(60, 56, 77), rjd_math_float4_to_vec3(f4));
+		
+		expect_vec4(rjd_math_vec4_xyzw(78, 99, 55, 44), rjd_math_float2_to_vec4(f2, 55, 44));
+		expect_vec4(rjd_math_vec4_xyzw(12, 32, 11, 55), rjd_math_float3_to_vec4(f3, 55));
+		expect_vec4(rjd_math_vec4_xyzw(60, 56, 77, 28), rjd_math_float4_to_vec4(f4));
+		
+		expect_float2(f2, rjd_math_vec3_to_float2(rjd_math_vec3_xyz(78, 99, 23)));
+		expect_float3(f3, rjd_math_vec3_to_float3(rjd_math_vec3_xyz(12, 32, 11)));
+		expect_float4(f4, rjd_math_vec3_to_float4(rjd_math_vec3_xyz(60, 56, 77), 28));
+		
+		expect_float2(f2, rjd_math_vec4_to_float2(rjd_math_vec4_xyzw(78, 99, 23, 87)));
+		expect_float3(f3, rjd_math_vec4_to_float3(rjd_math_vec4_xyzw(12, 32, 11, 87)));
+		expect_float4(f4, rjd_math_vec4_to_float4(rjd_math_vec4_xyzw(60, 56, 77, 28));
+	}
 
 	// vec4
 	expect_true(vec4_eq(vec4_zero(), vec4_zero()));

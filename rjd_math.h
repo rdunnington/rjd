@@ -63,12 +63,66 @@ RJD_MATH_CLAMP_FUNCS(RJD_MATH_DECLARE_CLAMP_FUNC)
 	xmacro(rjd_math_remapf, float)
 RJD_MATH_REMAP_FUNCS(RJD_MATH_DECLARE_REMAP_FUNC)
 
+// vector structs
 
-// vec4
+typedef union rjd_math_float2 {
+	struct {
+		float x;
+		float y;
+	};
+	float v[2];
+} rjd_math_float2;
 
-typedef struct {
+typedef union rjd_math_float3 {
+	struct {
+		float x;
+		float y;
+		float z;
+	};
+	float v[3];
+} rjd_math_float3;
+
+typedef union rjd_math_float4 {
+	struct {
+		float x;
+		float y;
+		float z;
+		float w;
+	};
+	float v[4];
+} rjd_math_float4;
+
+typedef struct rjd_math_vec3 {
+	__m128 v;
+} rjd_math_vec3;
+
+typedef struct rjd_math_vec4 {
 	__m128 v;
 } rjd_math_vec4;
+
+// float structs are mainly intended for convenience tranlations out of __m128 registers
+
+static inline rjd_math_float2 rjd_math_float2_xy(float x, float y);
+static inline rjd_math_float3 rjd_math_float3_xyz(float x, float y, float z);
+static inline rjd_math_float4 rjd_math_float4_xyzw(float x, float y, float z, float w);
+
+static inline rjd_math_vec3 rjd_math_float2_to_vec3(rjd_math_float2 f, float z);
+static inline rjd_math_vec3 rjd_math_float3_to_vec3(rjd_math_float3 f);
+static inline rjd_math_vec3 rjd_math_float4_to_vec3(rjd_math_float4 f);
+
+static inline rjd_math_vec4 rjd_math_float2_to_vec4(rjd_math_float2 f, float z, float w);
+static inline rjd_math_vec4 rjd_math_float3_to_vec4(rjd_math_float3 f, float w);
+static inline rjd_math_vec4 rjd_math_float4_to_vec4(rjd_math_float4 f);
+
+static inline rjd_math_float2 rjd_math_vec3_to_float2(rjd_math_vec3 v);
+static inline rjd_math_float3 rjd_math_vec3_to_float3(rjd_math_vec3 v);
+static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v);
+
+static inline rjd_math_float2 rjd_math_vec4_to_float2(rjd_math_vec4 v);
+static inline rjd_math_float3 rjd_math_vec4_to_float3(rjd_math_vec4 v);
+static inline rjd_math_float4 rjd_math_vec4_to_float4(rjd_math_vec4 v);
+
+// vec4
 
 #define rjd_math_vec4_shuffle(v4, x, y, z, w) ((rjd_math_vec4){_mm_shuffle_ps((v4).v, (v4).v, _MM_SHUFFLE(w, z, y, x))})
 
@@ -107,10 +161,6 @@ static inline bool			rjd_math_vec4_ge(rjd_math_vec4 a, rjd_math_vec4 b);
 static inline float*		rjd_math_vec4_write(rjd_math_vec4 v, float* out);
 
 // vec3
-
-typedef struct {
-	__m128 v;
-} rjd_math_vec3;
 
 #define rjd_math_vec3_shuffle(v3, x, y, z) ((rjd_math_vec3){_mm_shuffle_ps((v3).v, (v3).v, _MM_SHUFFLE(3, z, y, x))})
 
@@ -296,6 +346,10 @@ static inline float*		rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
 	#define vec3_ge       	rjd_math_vec3_ge
 	#define vec3_write		rjd_math_vec3_write
 	#define vec3_writefast	rjd_math_vec3_writefast
+
+	#define float2			rjd_math_float2
+	#define float3			rjd_math_float3
+	#define float4 			rjd_math_float4
 #endif
 
 // implementation
@@ -328,6 +382,88 @@ static inline int32_t rjd_math_pow32(int32_t v, uint32_t power)
 		--power;
 	}
 	return r;
+}
+
+// vec <-> float tranlations
+
+static inline rjd_math_float2 rjd_math_float2_xy(float x, float y)
+{
+	return (rjd_math_float2){{ x, y }};
+}
+static inline rjd_math_float3 rjd_math_float3_xyz(float x, float y, float z)
+{
+	return (rjd_math_float3){{ x, y, z }};
+}
+static inline rjd_math_float4 rjd_math_float4_xyzw(float x, float y, float z, float w)
+{
+	return (rjd_math_float4){{ x, y, z, w }};
+}
+
+static inline rjd_math_vec3 rjd_math_float2_to_vec3(rjd_math_float2 f, float z)
+{
+	return rjd_math_vec3_xyz(f.x, f.y, z);
+}
+static inline rjd_math_vec3 rjd_math_float3_to_vec3(rjd_math_float3 f)
+{
+	return rjd_math_vec3_xyz(f.x, f.y, f.z);
+}
+static inline rjd_math_vec3 rjd_math_float4_to_vec3(rjd_math_float4 f)
+{
+	return rjd_math_vec3_xyz(f.x, f.y, f.z);
+}
+
+static inline rjd_math_vec4 rjd_math_float2_to_vec4(rjd_math_float2 f, float z, float w)
+{
+	return rjd_math_vec4_xyzw(f.x, f.y, z, w);
+}
+static inline rjd_math_vec4 rjd_math_float3_to_vec4(rjd_math_float3 f, float w)
+{
+	return rjd_math_vec4_xyzw(f.x, f.y, f.z, w);
+}
+static inline rjd_math_vec4 rjd_math_float4_to_vec4(rjd_math_float4 f)
+{
+	return rjd_math_vec4_xyzw(f.x, f.y, f.z, f.w);
+}
+
+static inline rjd_math_float2 rjd_math_vec3_to_float2(rjd_math_vec3 v)
+{
+	rjd_math_float4 f;
+	rjd_math_vec3_writefast(v, f.v);
+	return (rjd_math_float2){ .x = f.x, .y = f.y };
+}
+static inline rjd_math_float3 rjd_math_vec3_to_float3(rjd_math_vec3 v)
+{
+	
+	rjd_math_float4 f;
+	rjd_math_vec3_writefast(v, f.v);
+	return (rjd_math_float3){ .x = f.x, .y = f.y, .z = f.z };
+}
+static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v, float w)
+{
+	
+	rjd_math_float4 f;
+	rjd_math_vec3_writefast(v, f.v);
+	f.w = w;
+	return f;
+}
+
+static inline rjd_math_float2 rjd_math_vec4_to_float2(rjd_math_vec4 v)
+{
+	rjd_math_float4 f;
+	rjd_math_vec4_write(v, f.v);
+	return (rjd_math_float2){ .x = f.x, .y = f.y };
+}
+static inline rjd_math_float3 rjd_math_vec4_to_float3(rjd_math_vec4 v)
+{
+	rjd_math_float4 f;
+	rjd_math_vec4_write(v, f.v);
+	return (rjd_math_float3){ .x = f.x, .y = f.y, .z = f.z };
+}
+static inline rjd_math_float4 rjd_math_vec4_to_float4(rjd_math_vec4 v)
+{
+	rjd_math_float4 f;
+	rjd_math_vec4_write(v, f.v);
+	return f;
 }
 
 // vec3 <-> vec4 conversion helpers
