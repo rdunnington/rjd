@@ -557,7 +557,7 @@ void test_math(void)
 		
 		expect_float2(f2, rjd_math_vec4_to_float2(rjd_math_vec4_xyzw(78, 99, 23, 87)));
 		expect_float3(f3, rjd_math_vec4_to_float3(rjd_math_vec4_xyzw(12, 32, 11, 87)));
-		expect_float4(f4, rjd_math_vec4_to_float4(rjd_math_vec4_xyzw(60, 56, 77, 28));
+		expect_float4(f4, rjd_math_vec4_to_float4(rjd_math_vec4_xyzw(60, 56, 77, 28)));
 	}
 
 	// vec4

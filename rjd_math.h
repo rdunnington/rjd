@@ -116,7 +116,7 @@ static inline rjd_math_vec4 rjd_math_float4_to_vec4(rjd_math_float4 f);
 
 static inline rjd_math_float2 rjd_math_vec3_to_float2(rjd_math_vec3 v);
 static inline rjd_math_float3 rjd_math_vec3_to_float3(rjd_math_vec3 v);
-static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v);
+static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v, float w);
 
 static inline rjd_math_float2 rjd_math_vec4_to_float2(rjd_math_vec4 v);
 static inline rjd_math_float3 rjd_math_vec4_to_float3(rjd_math_vec4 v);
