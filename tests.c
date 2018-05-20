@@ -46,8 +46,6 @@ RJD_STATIC_ASSERT(sizeof(uint32_t) == sizeof(char) * 4);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char* test = __FILE__;
-
 char logbuffer[1024 * 128];
 size_t logbuffer_pos = 0;
 void test_log_hook(const char* msg, size_t length)
@@ -69,6 +67,7 @@ void test_logging()
 	g_rjd_global_logchannel = &local;
 
 	// normal tests
+	const int line_test_begin = __LINE__;
 	LOG("test");
 	LOG("");
 	LOG("%s%d%d%s", "forma", 1, 1, "ed!");
@@ -107,17 +106,30 @@ void test_logging()
 	LOG_CHANNEL(&local2, RJD_LOG_VERBOSITY_MED, "other channel");
 	
 	// expect equals
-	const char* expected = 
-		"tests.c(72): test\n"
-		"tests.c(73): \n"
-		"tests.c(74): forma11ed!\n"
-		"tests.c(83): ok1\n"
-		"tests.c(88): ok2\n"
-		"tests.c(89): ok2\n"
-		"tests.c(93): ok3\n"
-		"tests.c(94): ok3\n"
-		"tests.c(95): ok3\n"
-		"tests.c(107): other channel\n";
+	char expected[1024];
+	snprintf(expected, sizeof(expected),
+		"tests.c(%d): test\n"
+		"tests.c(%d): \n"
+		"tests.c(%d): forma11ed!\n"
+		"tests.c(%d): ok1\n"
+		"tests.c(%d): ok2\n"
+		"tests.c(%d): ok2\n",
+		line_test_begin + 1,
+		line_test_begin + 2,
+		line_test_begin + 3,
+		line_test_begin + 12,
+		line_test_begin + 17,
+		line_test_begin + 18);
+
+	snprintf(expected + strlen(expected), sizeof(expected) - strlen(expected),
+		"tests.c(%d): ok3\n"
+		"tests.c(%d): ok3\n"
+		"tests.c(%d): ok3\n"
+		"tests.c(%d): other channel\n",
+		line_test_begin + 22,
+		line_test_begin + 23,
+		line_test_begin + 24,
+		line_test_begin + 36);
 
 	expect_str(expected, logbuffer);
 	
@@ -197,6 +209,11 @@ void test_mem()
 {
 	//macros
 	{
+		#if RJD_COMPILER_MSVC
+			#pragma warning(push)
+			#pragma warning(disable:4127) // conditional expression is constant (yes we know, that's the point of this test)
+		#endif
+
 		expect_true(MEM_ISALIGNED(0, 4));
 		expect_true(MEM_ISALIGNED(4, 4));
 		expect_true(MEM_ISALIGNED(8, 4));
@@ -223,6 +240,10 @@ void test_mem()
 		expect_int32(12, MEM_ALIGNSIZE(10, 4));
 		expect_int32(12, MEM_ALIGNSIZE(11, 4));
 		expect_int32(12, MEM_ALIGNSIZE(12, 4));
+
+		#if RJD_COMPILER_MSVC
+			#pragma warning(pop)
+		#endif
 	}
 
 	// default allocator
@@ -1156,7 +1177,7 @@ void test_strpool()
 	strpool_free(&pool);
 }
 
-int main(void) 
+int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
 {
 	test_logging();
 	test_enum();

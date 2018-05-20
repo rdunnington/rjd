@@ -267,7 +267,7 @@ static inline float rjd_ease_out_back(float t) {
 }
 
 static inline float rjd_ease_out_elas(float t) {
-	return sinf(-13.0f * RJD_MATH_PI / 2.0f * (t + 1)) * pow(2, -10 * t) + 1;
+	return sinf(-13.0f * RJD_MATH_PI / 2.0f * (t + 1)) * powf(2, -10 * t) + 1;
 }
 
 static inline float rjd_ease_out_boun(float t) {
@@ -278,7 +278,7 @@ static inline float rjd_ease_out_boun(float t) {
 	} else if (t < 9.0f/10.0f) {
 		return 4356.0f/361.0f*t*t - 35442.0f/1805.0f*t + 16061.0f/1805.0f;
 	} else {
-		return 54.0f/5.0f*t*t - 513.0f/25.0f*t + 268.0/25.0f;
+		return 54.0f/5.0f*t*t - 513.0f/25.0f*t + 268.0f/25.0f;
 	}
 }
 

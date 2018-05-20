@@ -92,3 +92,8 @@
 	#define COMPILER_CLANG_ONLY	RJD_COMPILER_CLANG_ONLY
 #endif
 
+#if RJD_COMPILER_MSVC
+	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer (this is ok in C99)
+	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (all major compilers support this)
+#endif
+

@@ -45,7 +45,7 @@ struct rjd_logchannel
 	#define RJD_ASSERTFAIL(...)
 #endif
 
-#define RJD_UNUSED_PARAM(param) ((void)param)
+#define RJD_UNUSED_PARAM(param) ((void)(param))
 
 void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* channel, enum rjd_log_verbosity verbosity, const char* format, ...);
 void rjd_log_resetglobal(void);

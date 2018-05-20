@@ -1,1 +1,1 @@
-cl tests.c /Z7 /Gv
+cl tests.c /Z7 /Gv /W4 -D_CRT_SECURE_NO_WARNINGS

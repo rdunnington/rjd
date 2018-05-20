@@ -117,6 +117,11 @@
 	#define COMPILER_CLANG_ONLY	RJD_COMPILER_CLANG_ONLY
 #endif
 
+#if RJD_COMPILER_MSVC
+	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer (this is ok in C99)
+	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (all major compilers support this)
+#endif
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // rjd_debug.h
@@ -169,7 +174,7 @@ struct rjd_logchannel
 	#define RJD_ASSERTFAIL(...)
 #endif
 
-#define RJD_UNUSED_PARAM(param) ((void)param)
+#define RJD_UNUSED_PARAM(param) ((void)(param))
 
 void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* channel, enum rjd_log_verbosity verbosity, const char* format, ...);
 void rjd_log_resetglobal(void);
@@ -1117,15 +1122,15 @@ static inline uint32_t rjd_math_next_pow2(uint32_t v);
 static inline int32_t rjd_math_pow32(int32_t v, uint32_t power);
 
 #define RJD_MATH_DECLARE_SIGN_FUNC(name, type) static inline type name(type v);
-#define RJD_MATH_DEFINE_SIGN_FUNC(name, type) static inline type name(type v) { return (v < 0) ? -1 : 1; }
+#define RJD_MATH_DEFINE_SIGN_FUNC(name, type) static inline type name(type v) { return (v < 0) ? (type)-1 : (type)1; }
 #define RJD_MATH_SIGN_FUNCS(xmacro)		\
 	xmacro(rjd_math_sign32, int32_t)	\
 	xmacro(rjd_math_sign, double)		\
 	xmacro(rjd_math_signf, float)
 RJD_MATH_SIGN_FUNCS(RJD_MATH_DECLARE_SIGN_FUNC)
 
-#define RJD_MATH_DECLARE_ISEQUAL_FUNC(name, type) static inline type name(type a, type b);
-#define RJD_MATH_DEFINE_ISEQUAL_FUNC(name, type) static inline type name(type a, type b) { return (type)fabs(a - b) < RJD_MATH_EPSILON; }
+#define RJD_MATH_DECLARE_ISEQUAL_FUNC(name, type) static inline bool name(type a, type b);
+#define RJD_MATH_DEFINE_ISEQUAL_FUNC(name, type) static inline bool name(type a, type b) { return (type)fabs(a - b) < RJD_MATH_EPSILON; }
 #define RJD_MATH_ISEQUAL_FUNCS(xmacro)	\
 	xmacro(rjd_math_isequal, double)	\
 	xmacro(rjd_math_isequalf, float)
@@ -1162,7 +1167,7 @@ RJD_MATH_CLAMP_FUNCS(RJD_MATH_DECLARE_CLAMP_FUNC)
 
 
 #define RJD_MATH_DECLARE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax);
-#define RJD_MATH_DEFINE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax) { float oldrange = oldmax - oldmin; float newrange = newmax - newmin; return ((v - oldmin) * newrange) / oldrange + newmin; }
+#define RJD_MATH_DEFINE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax) { type oldrange = oldmax - oldmin; type newrange = newmax - newmin; return ((v - oldmin) * newrange) / oldrange + newmin; }
 #define RJD_MATH_REMAP_FUNCS(xmacro)	\
 	xmacro(rjd_math_remap, double)		\
 	xmacro(rjd_math_remapf, float)
@@ -1532,21 +1537,19 @@ static inline rjd_math_vec4 rjd_math_float4_to_vec4(rjd_math_float4 f)
 
 static inline rjd_math_float2 rjd_math_vec3_to_float2(rjd_math_vec3 v)
 {
-	rjd_math_float4 f;
+	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
 	rjd_math_vec3_writefast(v, f.v);
 	return (rjd_math_float2){ .x = f.x, .y = f.y };
 }
 static inline rjd_math_float3 rjd_math_vec3_to_float3(rjd_math_vec3 v)
 {
-	
-	rjd_math_float4 f;
+	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
 	rjd_math_vec3_writefast(v, f.v);
 	return (rjd_math_float3){ .x = f.x, .y = f.y, .z = f.z };
 }
 static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v, float w)
 {
-	
-	rjd_math_float4 f;
+	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
 	rjd_math_vec3_writefast(v, f.v);
 	f.w = w;
 	return f;
@@ -1554,19 +1557,19 @@ static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v, float w)
 
 static inline rjd_math_float2 rjd_math_vec4_to_float2(rjd_math_vec4 v)
 {
-	rjd_math_float4 f;
+	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
 	rjd_math_vec4_write(v, f.v);
 	return (rjd_math_float2){ .x = f.x, .y = f.y };
 }
 static inline rjd_math_float3 rjd_math_vec4_to_float3(rjd_math_vec4 v)
 {
-	rjd_math_float4 f;
+	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
 	rjd_math_vec4_write(v, f.v);
 	return (rjd_math_float3){ .x = f.x, .y = f.y, .z = f.z };
 }
 static inline rjd_math_float4 rjd_math_vec4_to_float4(rjd_math_vec4 v)
 {
-	rjd_math_float4 f;
+	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
 	rjd_math_vec4_write(v, f.v);
 	return f;
 }
@@ -1657,7 +1660,7 @@ static inline float rjd_math_vec4_lengthsq(rjd_math_vec4 v) {
 	return rjd_math_vec4_dot(v, v);
 }
 static inline float rjd_math_vec4_length(rjd_math_vec4 v) {
-	return sqrt(rjd_math_vec4_lengthsq(v));
+	return sqrtf(rjd_math_vec4_lengthsq(v));
 }
 static inline float rjd_math_vec4_hmin(rjd_math_vec4 v) {
 	v = rjd_math_vec4_min(v, rjd_math_vec4_shuffle(v,1,1,2,3));
@@ -1794,7 +1797,7 @@ static inline float rjd_math_vec3_angle(rjd_math_vec3 a, rjd_math_vec3 b) {
 	float dot = rjd_math_vec3_dot(a, b);
 	float la = rjd_math_vec3_length(a);
 	float lb = rjd_math_vec3_length(b);
-	return acos(dot / (la * lb));
+	return acosf(dot / (la * lb));
 }
 static inline float rjd_math_vec3_lengthsq(rjd_math_vec3 v) {
 	return rjd_math_vec4_lengthsq(rjd_math_vec3to4(v));
@@ -2150,7 +2153,8 @@ static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
 	term = rjd_math_vec4_mul(term, rjd_math_vec4_shuffle(t2,2,0,1,0)); // m03m11m22 m03m12m20 m03m10m21 m02m11m20
 	inv.m[3] = rjd_math_vec4_sub(inv.m[3], term);
 
-	rjd_math_vec4 det = rjd_math_vec4_mul(rjd_math_mat4_transpose(inv).m[0], m.m[0]);
+	rjd_math_mat4 trans = rjd_math_mat4_transpose(inv);
+	rjd_math_vec4 det = rjd_math_vec4_mul(trans.m[0], m.m[0]);
 
 	det.v = _mm_hadd_ps(det.v, det.v);
 	det.v = _mm_hadd_ps(det.v, det.v);
@@ -2768,7 +2772,7 @@ static inline float rjd_ease_out_back(float t) {
 }
 
 static inline float rjd_ease_out_elas(float t) {
-	return sinf(-13.0f * RJD_MATH_PI / 2.0f * (t + 1)) * pow(2, -10 * t) + 1;
+	return sinf(-13.0f * RJD_MATH_PI / 2.0f * (t + 1)) * powf(2, -10 * t) + 1;
 }
 
 static inline float rjd_ease_out_boun(float t) {
@@ -2779,7 +2783,7 @@ static inline float rjd_ease_out_boun(float t) {
 	} else if (t < 9.0f/10.0f) {
 		return 4356.0f/361.0f*t*t - 35442.0f/1805.0f*t + 16061.0f/1805.0f;
 	} else {
-		return 54.0f/5.0f*t*t - 513.0f/25.0f*t + 268.0/25.0f;
+		return 54.0f/5.0f*t*t - 513.0f/25.0f*t + 268.0f/25.0f;
 	}
 }
 
