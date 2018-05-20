@@ -196,12 +196,12 @@ void test_hash()
 	const uint8_t* data2 = (const uint8_t*)"a longer string that has a bunch of characters in it!!$%^&*(";
 	const uint8_t* data3 = NULL;
 
-	expect_uint32(rjd_hash32_data(data1, strlen((const char*)data1)).value, rjd_hash32_data(data1, -1).value);
-	expect_uint32(rjd_hash32_data(data2, strlen((const char*)data2)).value, rjd_hash32_data(data2, -1).value);
+	expect_uint32(rjd_hash32_data(data1, (uint32_t)strlen((const char*)data1)).value, rjd_hash32_data(data1, -1).value);
+	expect_uint32(rjd_hash32_data(data2, (uint32_t)strlen((const char*)data2)).value, rjd_hash32_data(data2, -1).value);
 	expect_uint32(rjd_hash32_data(data3, 0).value, rjd_hash32_data(data3, -1).value);
 
-	expect_uint64(rjd_hash64_data(data1, strlen((const char*)data1)).value, rjd_hash64_data(data1, -1).value);
-	expect_uint64(rjd_hash64_data(data2, strlen((const char*)data2)).value, rjd_hash64_data(data2, -1).value);
+	expect_uint64(rjd_hash64_data(data1, (uint32_t)strlen((const char*)data1)).value, rjd_hash64_data(data1, -1).value);
+	expect_uint64(rjd_hash64_data(data2, (uint32_t)strlen((const char*)data2)).value, rjd_hash64_data(data2, -1).value);
 	expect_uint64(rjd_hash64_data(data3, 0).value, rjd_hash64_data(data3, -1).value);
 }
 
@@ -941,7 +941,7 @@ void test_strbuf(void)
 	rjd_strbuf_free(&builder);
 
 	// append substring
-	rjd_strbuf_appendl(&builder, "only see this, no comma", strlen("only see this"));
+	rjd_strbuf_appendl(&builder, "only see this, no comma", (uint32_t)strlen("only see this"));
 	expect_str("only see this", rjd_strbuf_str(&builder));
 }
 
@@ -1074,9 +1074,9 @@ void test_dict()
 		dict_insert_hashstr(&dict, key, data + i);
 	}
 
-	for (size_t i = 0; i < countof(data); ++i) {
+	for (int32_t i = 0; i < (int32_t)countof(data); ++i) {
 		char key[32] = {0};
-		sprintf(key, "k%zu", i);
+		sprintf(key, "k%d", i);
 		expect_true(dict_has_hashstr(&dict, key));
 		expect_int32(i, *(int32_t*)dict_get_hashstr(&dict, key));
 	}

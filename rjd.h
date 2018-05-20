@@ -2855,17 +2855,17 @@ struct rjd_mem_allocator;
 struct rjd_strbuf
 {
 	struct rjd_mem_allocator* allocator;
-	size_t length;
+	uint32_t length;
 	char* heap;
 	char stack[RJD_STRBUF_STATIC_SIZE];
 };
 
 struct rjd_strbuf rjd_strbuf_init(struct rjd_mem_allocator* allocator);
-size_t rjd_strbuf_length(const struct rjd_strbuf* buf);
+uint32_t rjd_strbuf_length(const struct rjd_strbuf* buf);
 const char* rjd_strbuf_str(const struct rjd_strbuf* buf);
 void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...);
 void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_list args);
-void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* str, size_t length);
+void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* str, uint32_t length);
 void rjd_strbuf_free(struct rjd_strbuf* buf);
 
 #define RJD_STRBUF_SCOPED(buffername, allocator, scope)				\
@@ -2927,7 +2927,7 @@ void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_lis
 
 	uint32_t capacity = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
 	uint32_t remaining = capacity - buf->length;
-	uint32_t format_length = strlen(format);
+	uint32_t format_length = (uint32_t)strlen(format);
 
 	if (remaining < format_length + 1) {
 		rjd_strbuf_grow(buf, format_length);
@@ -2945,7 +2945,7 @@ void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_lis
 	buf->length += written;
 }
 
-void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* format, size_t length)
+void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* format, uint32_t length)
 {
 	RJD_ASSERT(buf);
 	RJD_ASSERT(format + length <= format + strlen(format));
@@ -3616,11 +3616,11 @@ static void rjd_dict_grow(struct rjd_dict* dict, size_t capacity)
 	RJD_ASSERT(capacity > 0);
 	RJD_ASSERT(dict);
 
-	rjd_hash64* hashes = rjd_array_alloc(rjd_hash64, capacity, dict->allocator);
-	void** values = rjd_array_alloc(void*, capacity, dict->allocator);
+	rjd_hash64* hashes = rjd_array_alloc(rjd_hash64, (uint32_t)capacity, dict->allocator);
+	void** values = rjd_array_alloc(void*, (uint32_t)capacity, dict->allocator);
 
-	rjd_array_resize(hashes, capacity);
-	rjd_array_resize(values, capacity);
+	rjd_array_resize(hashes, (uint32_t)capacity);
+	rjd_array_resize(values, (uint32_t)capacity);
 
 	for (uint32_t i = 0; i < rjd_array_count(dict->hashes); ++i) {
 		if (rjd_hash64_valid(dict->hashes[i])) {
@@ -3900,7 +3900,7 @@ struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* format
 	struct rjd_strref* ref = NULL;
 
 	RJD_STRBUF_SCOPED(buffer, pool->storage.allocator, {
-		rjd_strbuf_appendl(&buffer, format, length);
+		rjd_strbuf_appendl(&buffer, format, (uint32_t)length);
 		ref = rjd_strpool_addimpl(pool, rjd_strbuf_str(&buffer));
 	});
 

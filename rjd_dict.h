@@ -163,11 +163,11 @@ static void rjd_dict_grow(struct rjd_dict* dict, size_t capacity)
 	RJD_ASSERT(capacity > 0);
 	RJD_ASSERT(dict);
 
-	rjd_hash64* hashes = rjd_array_alloc(rjd_hash64, capacity, dict->allocator);
-	void** values = rjd_array_alloc(void*, capacity, dict->allocator);
+	rjd_hash64* hashes = rjd_array_alloc(rjd_hash64, (uint32_t)capacity, dict->allocator);
+	void** values = rjd_array_alloc(void*, (uint32_t)capacity, dict->allocator);
 
-	rjd_array_resize(hashes, capacity);
-	rjd_array_resize(values, capacity);
+	rjd_array_resize(hashes, (uint32_t)capacity);
+	rjd_array_resize(values, (uint32_t)capacity);
 
 	for (uint32_t i = 0; i < rjd_array_count(dict->hashes); ++i) {
 		if (rjd_hash64_valid(dict->hashes[i])) {

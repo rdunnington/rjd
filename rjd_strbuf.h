@@ -13,17 +13,17 @@ struct rjd_mem_allocator;
 struct rjd_strbuf
 {
 	struct rjd_mem_allocator* allocator;
-	size_t length;
+	uint32_t length;
 	char* heap;
 	char stack[RJD_STRBUF_STATIC_SIZE];
 };
 
 struct rjd_strbuf rjd_strbuf_init(struct rjd_mem_allocator* allocator);
-size_t rjd_strbuf_length(const struct rjd_strbuf* buf);
+uint32_t rjd_strbuf_length(const struct rjd_strbuf* buf);
 const char* rjd_strbuf_str(const struct rjd_strbuf* buf);
 void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...);
 void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_list args);
-void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* str, size_t length);
+void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* str, uint32_t length);
 void rjd_strbuf_free(struct rjd_strbuf* buf);
 
 #define RJD_STRBUF_SCOPED(buffername, allocator, scope)				\
@@ -85,7 +85,7 @@ void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_lis
 
 	uint32_t capacity = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
 	uint32_t remaining = capacity - buf->length;
-	uint32_t format_length = strlen(format);
+	uint32_t format_length = (uint32_t)strlen(format);
 
 	if (remaining < format_length + 1) {
 		rjd_strbuf_grow(buf, format_length);
@@ -103,7 +103,7 @@ void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_lis
 	buf->length += written;
 }
 
-void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* format, size_t length)
+void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* format, uint32_t length)
 {
 	RJD_ASSERT(buf);
 	RJD_ASSERT(format + length <= format + strlen(format));

@@ -99,7 +99,7 @@ struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* format
 	struct rjd_strref* ref = NULL;
 
 	RJD_STRBUF_SCOPED(buffer, pool->storage.allocator, {
-		rjd_strbuf_appendl(&buffer, format, length);
+		rjd_strbuf_appendl(&buffer, format, (uint32_t)length);
 		ref = rjd_strpool_addimpl(pool, rjd_strbuf_str(&buffer));
 	});
 
