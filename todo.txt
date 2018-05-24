@@ -1,9 +1,10 @@
 todo:
-- move struct definitions into impl?
+x move struct definitions into impl?
 - rjd_array sort
 - rjd_array sorted insert
 - binary search for rjd_array
 - dict shortname for rjd_dict
+- make cmd not allocate and instead statically configurable
 
 util ideas:
 rjd_path.h

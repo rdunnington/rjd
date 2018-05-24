@@ -14,6 +14,7 @@
 
 #include "rjd_platform.h"
 #include "rjd_debug.h"
+#include "rjd_result.h"
 #include "rjd_enum.h"
 #include "rjd_hash.h"
 #include "rjd_mem.h"

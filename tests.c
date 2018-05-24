@@ -137,6 +137,15 @@ void test_logging()
 	rjd_log_resetglobal();
 }
 
+void test_result()
+{
+	struct rjd_result r1 = RJD_RESULT("not ok");
+	struct rjd_result r2 = RJD_RESULT_OK();
+
+	expect_false(rjd_result_isok(r1));
+	expect_true(rjd_result_isok(r2));
+}
+
 #define TEST_ENUM1_LIST(macro)	\
 	macro(e1_a)					\
 	macro(e1_b)					\
@@ -1180,6 +1189,7 @@ void test_strpool()
 int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
 {
 	test_logging();
+	test_result();
 	test_enum();
 	test_hash();
 	test_mem();
