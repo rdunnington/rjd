@@ -1226,6 +1226,10 @@ typedef union rjd_math_float4 {
 	float v[4];
 } rjd_math_float4;
 
+typedef struct rjd_math_float16 {
+	float v[16];
+} rjd_math_float16;
+
 typedef struct rjd_math_vec3 {
 	__m128 v;
 } rjd_math_vec3;
@@ -1233,6 +1237,11 @@ typedef struct rjd_math_vec3 {
 typedef struct rjd_math_vec4 {
 	__m128 v;
 } rjd_math_vec4;
+
+// column-major 4x4 matrix
+typedef struct {
+	rjd_math_vec4 m[4];
+} rjd_math_mat4;
 
 // float structs are mainly intended for convenience tranlations out of __m128 registers
 
@@ -1255,6 +1264,8 @@ static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v, float w);
 static inline rjd_math_float2 rjd_math_vec4_to_float2(rjd_math_vec4 v);
 static inline rjd_math_float3 rjd_math_vec4_to_float3(rjd_math_vec4 v);
 static inline rjd_math_float4 rjd_math_vec4_to_float4(rjd_math_vec4 v);
+
+static inline rjd_math_float16 rjd_math_mat4_to_float16(rjd_math_mat4 m);
 
 // vec4
 
@@ -1341,15 +1352,11 @@ static inline bool			rjd_math_vec3_ge(rjd_math_vec3 a, rjd_math_vec3 b);
 static inline float*		rjd_math_vec3_write(rjd_math_vec3 v, float* out);
 static inline float*		rjd_math_vec3_writefast(rjd_math_vec3 v, float* out); // writes 4 floats to out
 
-// column-major 4x4 matrix
-
-typedef struct {
-	rjd_math_vec4 m[4];
-} rjd_math_mat4;
+// mat4
 
 static inline rjd_math_mat4 rjd_math_mat4_identity(void);
 static inline rjd_math_mat4 rjd_math_mat4_translation(rjd_math_vec3 trans);
-//static inline rjd_math_mat4 rjd_math_mat4_rotation(rjd_math_quat rot);
+//static inline rjd_math_mat4 rjd_math_mat4_rotation(rjd_math_quat rot); // TODO quaternions
 static inline rjd_math_mat4 rjd_math_mat4_angleaxis(float angle, rjd_math_vec3 axis);
 static inline rjd_math_mat4 rjd_math_mat4_rotationx(float angle);
 static inline rjd_math_mat4 rjd_math_mat4_rotationy(float angle);
@@ -1595,6 +1602,13 @@ static inline rjd_math_float4 rjd_math_vec4_to_float4(rjd_math_vec4 v)
 {
 	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
 	rjd_math_vec4_write(v, f.v);
+	return f;
+}
+
+static inline rjd_math_float16 rjd_math_mat4_to_float16(rjd_math_mat4 m)
+{
+	RJD_FORCE_ALIGN(rjd_math_float16, 16) f;
+	rjd_math_mat4_write_colmajor(m, f.v);
 	return f;
 }
 
