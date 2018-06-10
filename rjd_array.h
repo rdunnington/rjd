@@ -4,16 +4,16 @@
 
 struct rjd_mem_allocator;
 
-#if RJD_COMPILER_MSVC
-	#define rjd_countof(buf) _countof(buf)
-#elif RJD_COMPILER_CLANG || RJD_COMPILER_GCC
+#if RJD_COMPILER_CLANG || RJD_COMPILER_GCC
 	#define RJD_SAME_TYPE(a, b) (__builtin_types_compatible_p(__typeof__(a), __typeof__(b)))
 	#define RJD_STATIC_ZERO(a) (sizeof(int[(a)?1:-1]) * 0)
 	#define RJD_MUST_BE_ARRAY(a) (RJD_STATIC_ZERO(!RJD_SAME_TYPE((a), &(*a))))
 
 	#define rjd_countof(buf) (sizeof(buf) / sizeof(*(buf)) + RJD_MUST_BE_ARRAY(buf))
+#elif RJD_COMPILER_MSVC
+	#define rjd_countof(buf) (_countof(buf))
 #else
-	#define rjd_countof(buf) ( (sizeof(buf) / sizeof(*(buf))) / ((size_t)(!sizeof(buf) % sizeof(0[buf]))) )
+	#define rjd_countof(buf) (sizeof(buf) / sizeof(buf[0]))
 #endif
 
 #define rjd_array_alloc(type, capacity, alloc_context)	((type*)(rjd_array_alloc_impl((capacity), (alloc_context), sizeof(type))))
