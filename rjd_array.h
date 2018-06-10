@@ -10,8 +10,6 @@ struct rjd_mem_allocator;
 	#define RJD_MUST_BE_ARRAY(a) (RJD_STATIC_ZERO(!RJD_SAME_TYPE((a), &(*a))))
 
 	#define rjd_countof(buf) (sizeof(buf) / sizeof(*(buf)) + RJD_MUST_BE_ARRAY(buf))
-#elif RJD_COMPILER_MSVC
-	#define rjd_countof(buf) (_countof(buf))
 #else
 	#define rjd_countof(buf) (sizeof(buf) / sizeof(buf[0]))
 #endif
