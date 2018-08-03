@@ -114,7 +114,7 @@ void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* 
 	if (channel->hook) {
 		channel->hook(formatted, size);
 	} else {
-		//OutputDebugString(formatted);
+		RJD_COMPILER_MSVC_ONLY(OutputDebugString(formatted));
 		fwrite(formatted, 1, size, stdout);
 		fflush(stdout);
 	}

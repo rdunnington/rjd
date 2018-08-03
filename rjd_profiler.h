@@ -46,11 +46,6 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 	return rjd_timer_global() - timer->timestamp;
 }
 #ifdef RJD_PLATFORM_WINDOWS
-	#define WIN32_LEAN_AND_MEAN
-	#define WIN32_EXTRA_LEANA
-	#define NOMINMAX
-	#include <windows.h>
-
 	static double RJD_QPC_FREQUENCY = 0;
 	
 	double rjd_timer_global(void)

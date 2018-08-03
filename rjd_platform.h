@@ -97,3 +97,12 @@
 	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (all major compilers support this)
 #endif
 
+#if RJD_PLATFORM_WINDOWS && RJD_IMPL 
+	#define WIN32_LEAN_AND_MEAN
+	#define WIN32_EXTRA_LEANA
+	#define NOMINMAX
+	#include <windows.h>
+	#undef near
+	#undef far
+#endif
+
