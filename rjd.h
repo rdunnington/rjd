@@ -122,6 +122,15 @@
 	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (all major compilers support this)
 #endif
 
+#if RJD_PLATFORM_WINDOWS && RJD_IMPL 
+	#define WIN32_LEAN_AND_MEAN
+	#define WIN32_EXTRA_LEANA
+	#define NOMINMAX
+	#include <windows.h>
+	#undef near
+	#undef far
+#endif
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // rjd_debug.h
@@ -243,7 +252,7 @@ void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* 
 	if (channel->hook) {
 		channel->hook(formatted, size);
 	} else {
-		//OutputDebugString(formatted);
+		RJD_COMPILER_MSVC_ONLY(OutputDebugString(formatted));
 		fwrite(formatted, 1, size, stdout);
 		fflush(stdout);
 	}
@@ -816,6 +825,7 @@ struct rjd_mem_allocator;
 #define rjd_array_count(buf) 							((buf)?(const uint32_t)(*rjd_array_count_impl(buf)):0)
 #define rjd_array_clear(buf)							(*rjd_array_count_impl(buf) = 0)
 #define rjd_array_resize(buf, size) 					(buf = rjd_array_resize_impl((buf), size, sizeof(*(buf))))
+#define rjd_array_trim(buf)								(buf = rjd_array_trim_impl((buf), sizeof(*(buf))))
 #define rjd_array_erase(buf, index) 					rjd_array_erase_impl((buf), index, sizeof(*(buf)))
 #define rjd_array_erase_unordered(buf, index) 			rjd_array_erase_unordered_impl((buf), index, sizeof(*(buf)))
 #define rjd_array_empty(buf) 							(rjd_array_count(buf) == 0)
@@ -846,6 +856,7 @@ struct rjd_mem_allocator;
 	#define array_count    			rjd_array_count
 	#define array_clear				rjd_array_clear
 	#define array_resize   			rjd_array_resize
+	#define array_trim				rjd_array_trim
 	#define array_erase    			rjd_array_erase
 	#define array_erase_unordered	rjd_array_erase_unordered
 	#define array_empty    			rjd_array_empty
@@ -873,6 +884,7 @@ void rjd_array_free_impl(const void* array);
 uint32_t* rjd_array_capacity_impl(const void* array);
 uint32_t* rjd_array_count_impl(const void* array);
 void* rjd_array_resize_impl(void* array, uint32_t newsize, size_t sizeof_type);
+void* rjd_array_trim_impl(void* array, size_t sizeof_type);
 void rjd_array_erase_impl(void* array, uint32_t index, size_t sizeof_type);
 void rjd_array_erase_unordered_impl(void* array, uint32_t index, size_t sizeof_type);
 void* rjd_array_grow_impl(void* array, size_t sizeof_type);
@@ -910,8 +922,6 @@ void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocato
 	header->debug_sentinel = RJD_MEM_DEBUG_SENTINEL32; 
 
 	char* buf = raw + sizeof(struct rjd_array_header);
-	memset(buf, 0, sizeof_type * capacity);
-
 	return buf;
 }
 
@@ -962,21 +972,41 @@ void* rjd_array_resize_impl(void* array, uint32_t newsize, size_t sizeof_type)
 
 	if (*capacity < newcapacity) {
 		struct rjd_mem_allocator* allocator = rjd_array_allocator(array);
-		void* newbuf = rjd_array_alloc_impl(newcapacity, allocator, sizeof_type);
+		char* newbuf = rjd_array_alloc_impl(newcapacity, allocator, sizeof_type);
 
 		uint32_t oldcount = *count;
-		memcpy(newbuf, array, oldcount * sizeof_type);
 		count = rjd_array_count_impl(newbuf);
-		
-		uint32_t diff = newcapacity - *capacity;
-		memset(newbuf, 0, diff * sizeof_type);
+		*count = oldcount;
+
+		memcpy(newbuf, array, (*count * sizeof_type));
 
 		rjd_array_free(array);
 		array = newbuf;
 	}
 
+	// zero new members
+	if (newsize > *count) {
+		memset((char*)array + (*count * sizeof_type), 0, (newsize - *count) * sizeof_type);
+	}
+
 	*count = newsize;
-	return (void*)array;
+	return array;
+}
+
+void* rjd_array_trim_impl(void* array, size_t sizeof_type)
+{
+	if (rjd_array_count(array) == rjd_array_capacity(array)) {
+		return array;
+	}
+
+	void* newarray = rjd_array_alloc_impl(rjd_array_count(array), rjd_array_allocator(array), sizeof_type);
+	memcpy(newarray, array, rjd_array_count(array) * sizeof_type);
+	*rjd_array_count_impl(newarray) = rjd_array_count(array);
+
+	rjd_array_free(array);
+
+	return newarray;
+
 }
 
 void rjd_array_erase_impl(void* array, uint32_t index, size_t sizeof_type)
@@ -3025,10 +3055,10 @@ static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 
 	if (!buf->heap) {
 		buf->heap = rjd_array_alloc(char, next, buf->allocator);
+		rjd_array_resize(buf->heap, next);
 
 		strcpy(buf->heap, buf->stack);
 	}
-	rjd_array_resize(buf->heap, next);
 }
 
 #endif // RJD_IMPL
@@ -3086,11 +3116,6 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 	return rjd_timer_global() - timer->timestamp;
 }
 #ifdef RJD_PLATFORM_WINDOWS
-	#define WIN32_LEAN_AND_MEAN
-	#define WIN32_EXTRA_LEANA
-	#define NOMINMAX
-	#include <windows.h>
-
 	static double RJD_QPC_FREQUENCY = 0;
 	
 	double rjd_timer_global(void)
