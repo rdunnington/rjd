@@ -324,9 +324,36 @@ void test_array()
 		array_resize(a, 16);
 		expect_uint32(16, array_count(a));
 		expect_uint32(32, array_capacity(a));
+		for (size_t i = 0; i < array_count(a); ++i) {
+			expect_int32(0, a[i].a);
+			expect_int32(0, a[i].b);
+			expect_int32(0, a[i].c);
+			expect_int32(0, a[i].d);
+		}
 
 		array_resize(a, 50);
 		expect_uint32(50, array_count(a));
+		expect_uint32(50, array_capacity(a));
+		for (size_t i = 0; i < array_count(a); ++i) {
+			expect_int32(0, a[i].a);
+			expect_int32(0, a[i].b);
+			expect_int32(0, a[i].c);
+			expect_int32(0, a[i].d);
+		}
+
+		array_resize(a, 51);
+		expect_uint32(51, array_count(a));
+		expect_uint32(51, array_capacity(a));
+		expect_int32(0, a[50].a);
+		expect_int32(0, a[50].b);
+		expect_int32(0, a[50].c);
+		expect_int32(0, a[50].d);
+
+		array_resize(a, 50);
+		expect_uint32(50, array_count(a));
+		expect_uint32(51, array_capacity(a));
+
+		array_trim(a);
 		expect_uint32(50, array_capacity(a));
 
 		for (size_t i = 0; i < array_count(a); ++i) {

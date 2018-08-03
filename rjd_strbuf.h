@@ -146,10 +146,10 @@ static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 
 	if (!buf->heap) {
 		buf->heap = rjd_array_alloc(char, next, buf->allocator);
+		rjd_array_resize(buf->heap, next);
 
 		strcpy(buf->heap, buf->stack);
 	}
-	rjd_array_resize(buf->heap, next);
 }
 
 #endif // RJD_IMPL
