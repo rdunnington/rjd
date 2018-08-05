@@ -888,10 +888,10 @@ static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) 
 	return m;
 }
 static inline rjd_math_mat4 rjd_math_mat4_mul(rjd_math_mat4 a, rjd_math_mat4 b) {
-	rjd_math_mat4 t = rjd_math_mat4_transpose(b);
+	rjd_math_mat4 t = rjd_math_mat4_transpose(a);
 	rjd_math_mat4 m;
 	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
-		m.m[i] = rjd_math_mat4_mulv4(t, a.m[i]);
+		m.m[i] = rjd_math_mat4_mulv4(t, b.m[i]);
 	}
 	return m;
 }
@@ -1079,44 +1079,8 @@ static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
 	return out;
 }
 static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m) {
-	// TODO optimize with _mm_movelh_ps / _mm_movehl_ps
-
-	// we want a transformation such that: 
-	// v0 = a b c d -> a e i m
-	// v1 = e f g h -> b f j n
-	// v2 = i j k l -> c g k o
-	// v3 = m n o p -> d h l p
-
-	rjd_math_mat4 temp;
-	temp.m[0].v = _mm_unpacklo_ps(m.m[0].v, m.m[1].v);
-	temp.m[1].v = _mm_unpackhi_ps(m.m[0].v, m.m[1].v);
-	temp.m[2].v = _mm_unpacklo_ps(m.m[2].v, m.m[3].v);
-	temp.m[3].v = _mm_unpackhi_ps(m.m[2].v, m.m[3].v);
-
-	// v0 = a e b f
-	// v1 = c g d h
-	// v2 = i m j h
-	// v3 = k o l p
-	rjd_math_mat4 t;
-	t.m[0].v = _mm_unpacklo_ps(temp.m[0].v, temp.m[2].v);
-	t.m[1].v = _mm_unpackhi_ps(temp.m[0].v, temp.m[2].v);
-	t.m[2].v = _mm_unpacklo_ps(temp.m[1].v, temp.m[3].v);
-	t.m[3].v = _mm_unpackhi_ps(temp.m[1].v, temp.m[3].v);
-
-	// v0 = a e i m
-	// v1 = b j f h
-	// v2 = c k g o
-	// v3 = d l h p
-	t.m[0] = rjd_math_vec4_shuffle(t.m[0], 0, 2, 1, 3);
-	t.m[1] = rjd_math_vec4_shuffle(t.m[1], 0, 2, 1, 3);
-	t.m[2] = rjd_math_vec4_shuffle(t.m[2], 0, 2, 1, 3);
-	t.m[3] = rjd_math_vec4_shuffle(t.m[3], 0, 2, 1, 3);
-
-	// v0 = a i e m
-	// v1 = b f j h
-	// v2 = c g k o
-	// v3 = d h l p
-	return t;
+	_MM_TRANSPOSE4_PS(m.m[0].v, m.m[1].v, m.m[2].v, m.m[3].v);
+	return m;
 }
 static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float top, float bot, float near, float far) {
 	RJD_UNUSED_PARAM(left);
@@ -1144,10 +1108,10 @@ static inline rjd_math_mat4 rjd_math_mat4_perspective(float y_fov, float aspect,
 }
 static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up) {
 	rjd_math_vec3 forward = rjd_math_vec3_normalize(rjd_math_vec3_sub(target, eye));
-	rjd_math_vec3 left = rjd_math_vec3_normalize(rjd_math_vec3_cross(up, forward));
-	up = rjd_math_vec3_normalize(rjd_math_vec3_cross(forward, left));
+	rjd_math_vec3 left = rjd_math_vec3_normalize(rjd_math_vec3_cross(forward, up));
+	up = rjd_math_vec3_normalize(rjd_math_vec3_cross(left, forward));
 
-	rjd_math_mat4 rot = rjd_math_mat4_rotationbasis(left, up, forward);
+	rjd_math_mat4 rot = rjd_math_mat4_rotationbasis(left, up, rjd_math_vec3_neg(forward));
 	rjd_math_mat4 trans = rjd_math_mat4_translation(rjd_math_vec3_neg(eye));
 	return rjd_math_mat4_mul(trans, rjd_math_mat4_transpose(rot));
 }
