@@ -50,8 +50,6 @@ char logbuffer[1024 * 128];
 size_t logbuffer_pos = 0;
 void test_log_hook(const char* msg, size_t length)
 {
-	UNUSED_PARAM(length);
-
 	strncpy(logbuffer + logbuffer_pos, msg, sizeof(logbuffer) - logbuffer_pos);
 	logbuffer_pos += length;
 }
@@ -385,6 +383,40 @@ void test_array()
 		array_clear(a);
 		expect_int32(0, array_count(a));
 		expect_int32(50, array_capacity(a));
+
+		array_free(a);
+	}
+
+	// growing from push test
+	{
+		uint32_t* a = array_alloc(uint32_t, 3, &context);
+
+		for (uint32_t i = 0; i < 15; ++i) {
+			rjd_array_push(a, i * 2);
+		}
+
+		for (uint32_t i = 0; i < array_count(a); ++i) {
+			expect_uint32(a[i], i * 2);
+		}
+
+		expect_uint32(24, rjd_array_capacity(a));
+
+		array_free(a);
+	}
+
+	{
+		uint32_t* a = array_alloc(uint32_t, 3, &context);
+		array_reserve(a, 20);
+
+		for (uint32_t i = 0; i < 15; ++i) {
+			rjd_array_push(a, i * 2);
+		}
+
+		for (uint32_t i = 0; i < array_count(a); ++i) {
+			expect_uint32(a[i], i * 2);
+		}
+
+		expect_uint32(20, rjd_array_capacity(a));
 
 		array_free(a);
 	}

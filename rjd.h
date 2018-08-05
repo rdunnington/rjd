@@ -824,13 +824,14 @@ struct rjd_mem_allocator;
 #define rjd_array_capacity(buf) 						((buf)?(const uint32_t)(*rjd_array_capacity_impl(buf)):0)
 #define rjd_array_count(buf) 							((buf)?(const uint32_t)(*rjd_array_count_impl(buf)):0)
 #define rjd_array_clear(buf)							(*rjd_array_count_impl(buf) = 0)
+#define rjd_array_reserve(buf, capacity)				(buf = rjd_array_reserve_impl((buf), capacity, sizeof(*(buf))))
 #define rjd_array_resize(buf, size) 					(buf = rjd_array_resize_impl((buf), size, sizeof(*(buf))))
 #define rjd_array_trim(buf)								(buf = rjd_array_trim_impl((buf), sizeof(*(buf))))
 #define rjd_array_erase(buf, index) 					rjd_array_erase_impl((buf), index, sizeof(*(buf)))
 #define rjd_array_erase_unordered(buf, index) 			rjd_array_erase_unordered_impl((buf), index, sizeof(*(buf)))
 #define rjd_array_empty(buf) 							(rjd_array_count(buf) == 0)
 #define rjd_array_full(buf) 							(rjd_array_count(buf) == rjd_array_capacity(buf))
-#define rjd_array_push(buf, value) 						((buf) = rjd_array_grow_impl((buf), sizeof(*buf)), (buf)[rjd_array_count(buf) - 1] = value)
+#define rjd_array_push(buf, value) 						(buf = rjd_array_push_impl((buf), sizeof(*(buf))), (buf)[rjd_array_count(buf) - 1] = value)
 #define rjd_array_pop(buf)		 						(--*rjd_array_count_impl(buf), *(buf + rjd_array_count(buf)))
 
 #define rjd_array_sum_pred(acc, element) (acc + element)
@@ -855,6 +856,7 @@ struct rjd_mem_allocator;
 	#define array_capacity 			rjd_array_capacity
 	#define array_count    			rjd_array_count
 	#define array_clear				rjd_array_clear
+	#define array_reserve			rjd_array_reserve
 	#define array_resize   			rjd_array_resize
 	#define array_trim				rjd_array_trim
 	#define array_erase    			rjd_array_erase
@@ -883,11 +885,12 @@ void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocato
 void rjd_array_free_impl(const void* array);
 uint32_t* rjd_array_capacity_impl(const void* array);
 uint32_t* rjd_array_count_impl(const void* array);
-void* rjd_array_resize_impl(void* array, uint32_t newsize, size_t sizeof_type);
+void* rjd_array_reserve_impl(void* array, uint32_t newcapacity, size_t sizeof_type);
+void* rjd_array_resize_impl(void* array, uint32_t newcount, size_t sizeof_type);
 void* rjd_array_trim_impl(void* array, size_t sizeof_type);
 void rjd_array_erase_impl(void* array, uint32_t index, size_t sizeof_type);
 void rjd_array_erase_unordered_impl(void* array, uint32_t index, size_t sizeof_type);
-void* rjd_array_grow_impl(void* array, size_t sizeof_type);
+void* rjd_array_push_impl(void* array, size_t sizeof_type);
 bool rjd_array_contains_impl(void* array, void* value, size_t sizeof_type, size_t sizeof_value);
 void rjd_array_shuffle_impl(void* array, struct rjd_rng* rng, size_t sizeof_type);
 void rjd_array_reverse_impl(void* array, size_t sizeof_type);
@@ -958,38 +961,47 @@ uint32_t* rjd_array_count_impl(const void* array)
 	return &header->count;
 }
 
-void* rjd_array_resize_impl(void* array, uint32_t newsize, size_t sizeof_type)
+void* rjd_array_reserve_impl(void* array, uint32_t newcapacity, size_t sizeof_type)
 {
 	RJD_ASSERT(array);
 	RJD_ASSERT(sizeof_type > 0);
 
 	rjd_array_validate(array);
 
-	uint32_t newcapacity = newsize > 0 ? newsize : 1;
+	uint32_t oldcapacity = rjd_array_capacity(array);
 
-	uint32_t* count = rjd_array_count_impl(array);
-	uint32_t* capacity = rjd_array_capacity_impl(array);
-
-	if (*capacity < newcapacity) {
+	if (oldcapacity < newcapacity) {
 		struct rjd_mem_allocator* allocator = rjd_array_allocator(array);
-		char* newbuf = rjd_array_alloc_impl(newcapacity, allocator, sizeof_type);
+		char* newarray = rjd_array_alloc_impl(newcapacity, allocator, sizeof_type);
 
-		uint32_t oldcount = *count;
-		count = rjd_array_count_impl(newbuf);
-		*count = oldcount;
+		uint32_t* count = rjd_array_count_impl(newarray);
+		*count = rjd_array_count(array);
 
-		memcpy(newbuf, array, (*count * sizeof_type));
+		memcpy(newarray, array, (*count * sizeof_type));
 
 		rjd_array_free(array);
-		array = newbuf;
+		return newarray;
 	}
+
+	return array;
+}
+
+void* rjd_array_resize_impl(void* array, uint32_t newcount, size_t sizeof_type)
+{
+	RJD_ASSERT(array);
+	RJD_ASSERT(sizeof_type > 0);
+
+	rjd_array_validate(array);
+
+	array = rjd_array_reserve_impl(array, newcount, sizeof_type);
+	uint32_t* count = rjd_array_count_impl(array);
 
 	// zero new members
-	if (newsize > *count) {
-		memset((char*)array + (*count * sizeof_type), 0, (newsize - *count) * sizeof_type);
+	if (newcount > *count) {
+		memset((char*)array + (*count * sizeof_type), 0, (newcount - *count) * sizeof_type);
 	}
 
-	*count = newsize;
+	*count = newcount;
 	return array;
 }
 
@@ -1048,18 +1060,22 @@ void rjd_array_erase_unordered_impl(void* array, uint32_t index, size_t sizeof_t
 	}
 }
 
-void* rjd_array_grow_impl(void* array, size_t sizeof_type) {
+void* rjd_array_push_impl(void* array, size_t sizeof_type) {
 	RJD_ASSERT(array);
 	RJD_ASSERT(sizeof_type > 0);
 
 	rjd_array_validate(array);
 
+	uint32_t count = rjd_array_count(array);
 	uint32_t capacity = rjd_array_capacity(array);
-	if (capacity == rjd_array_count(array)) {
-		array = rjd_array_resize_impl(array, capacity * 2, sizeof_type);
+	if (count == capacity) {
+		array = rjd_array_reserve_impl(array, capacity * 2, sizeof_type);
 	}
 
-	*rjd_array_count_impl(array) += 1;
+	*rjd_array_count_impl(array) = count + 1;
+
+	// skip init new element to 0 since it will be set in the push macro
+
 	return array;
 }
 
