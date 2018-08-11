@@ -27,7 +27,7 @@ struct rjd_mem_allocator;
 #define rjd_array_empty(buf) 							(rjd_array_count(buf) == 0)
 #define rjd_array_full(buf) 							(rjd_array_count(buf) == rjd_array_capacity(buf))
 #define rjd_array_push(buf, value) 						(buf = rjd_array_push_impl((buf), sizeof(*(buf))), (buf)[rjd_array_count(buf) - 1] = value)
-#define rjd_array_pop(buf)		 						(--*rjd_array_count_impl(buf), *(buf + rjd_array_count(buf)))
+#define rjd_array_pop(buf)		 						(rjd_array_pop_impl(buf), --*rjd_array_count_impl(buf), *(buf + rjd_array_count(buf)))
 
 #define rjd_array_sum_pred(acc, element) (acc + element)
 
@@ -86,6 +86,7 @@ void* rjd_array_trim_impl(void* array, size_t sizeof_type);
 void rjd_array_erase_impl(void* array, uint32_t index, size_t sizeof_type);
 void rjd_array_erase_unordered_impl(void* array, uint32_t index, size_t sizeof_type);
 void* rjd_array_push_impl(void* array, size_t sizeof_type);
+void rjd_array_pop_impl(void* array);
 bool rjd_array_contains_impl(void* array, void* value, size_t sizeof_type, size_t sizeof_value);
 void rjd_array_shuffle_impl(void* array, struct rjd_rng* rng, size_t sizeof_type);
 void rjd_array_reverse_impl(void* array, size_t sizeof_type);
@@ -272,6 +273,11 @@ void* rjd_array_push_impl(void* array, size_t sizeof_type) {
 	// skip init new element to 0 since it will be set in the push macro
 
 	return array;
+}
+
+void rjd_array_pop_impl(void* array)
+{
+	RJD_ASSERT(rjd_array_count(array) > 0);
 }
 
 bool rjd_array_contains_impl(void* array, void* value, size_t sizeof_type, size_t sizeof_value)
