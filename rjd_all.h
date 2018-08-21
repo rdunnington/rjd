@@ -30,3 +30,4 @@
 #include "rjd_fio.h"
 #include "rjd_strpool.h"
 #include "rjd_slotmap.h"
+#include "rjd_path.h"

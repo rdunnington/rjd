@@ -1250,7 +1250,7 @@ void test_slotmap(void)
 	struct rjd_mem_allocator allocator = mem_allocator_initdefault();
 
 	{
-		uint32_t* map = rjd_slotmap_alloc(struct aggregate, 8, &allocator);
+		uint32_t* map = rjd_slotmap_alloc(uint32_t, 8, &allocator);
 
 		expect_uint32(8, rjd_slotmap_count(map));
 
@@ -1274,6 +1274,19 @@ void test_slotmap(void)
 	}
 }
 
+void test_path(void)
+{
+	expect_str(NULL,   rjd_path_extension(NULL));
+	expect_str(NULL,   rjd_path_extension(""));
+	expect_str(NULL,   rjd_path_extension("no_extension"));
+	expect_str(NULL,   rjd_path_extension("not_even_this_one."));
+	expect_str(".txt", rjd_path_extension(".txt"));
+	expect_str(".txt", rjd_path_extension("some_file_name.txt"));
+	expect_str(".txt", rjd_path_extension("some/path/some_file.txt"));
+	expect_str(".txt", rjd_path_extension("some\\path\\some_file.txt"));
+	expect_str(".txt", rjd_path_extension("some\\path\\some.long.extension.txt"));
+}
+
 int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
 {
 	test_logging();
@@ -1292,6 +1305,7 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_fio();
 	test_strpool();
 	test_slotmap();
+	test_path();
 
 	return 0;
 }

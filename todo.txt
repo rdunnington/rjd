@@ -1,13 +1,12 @@
 todo:
-x move struct definitions into impl?
+- RJD_HEADER -> RJD_HEADER_H macros
 - rjd_array sort
 - rjd_array sorted insert
 - binary search for rjd_array
-- dict shortname for rjd_dict
+- remove shortnames
 - make cmd not allocate and instead statically configurable
 
 util ideas:
-rjd_path.h
 rjd_deque.h
 rjd_ringbuffer.h
 rjd_filewatcher.h

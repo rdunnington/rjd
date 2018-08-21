@@ -138,7 +138,8 @@ void rjd_strbuf_free(struct rjd_strbuf* buf)
 
 static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 {
-	RJD_ASSERT(buf && buf->allocator);
+	RJD_ASSERT(buf);
+	RJD_ASSERT(buf->allocator);
 
 	uint32_t current = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
 	uint32_t min = current + format_length + 1;
