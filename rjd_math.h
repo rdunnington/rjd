@@ -55,6 +55,16 @@ RJD_MATH_MAX_FUNCS(RJD_MATH_DECLARE_MAX_FUNC)
 	xmacro(rjd_math_clampu64, uint64_t)
 RJD_MATH_CLAMP_FUNCS(RJD_MATH_DECLARE_CLAMP_FUNC)
 
+#define RJD_MATH_DECLARE_TRUNCATE_FUNC(name, bigtype, smalltype) static inline smalltype name(bigtype v);
+#define RJD_MATH_DEFINE_TRUNCATE_FUNC(name, bigtype, smalltype) static inline smalltype name(bigtype v) { RJD_ASSERT(v <= (smalltype)-1); return (smalltype)v; }
+#define RJD_MATH_TRUNCATE_FUNCS(xmacro) 						\
+	xmacro(rjd_math_truncate_u64_to_u32, uint64_t, uint32_t)	\
+	xmacro(rjd_math_truncate_u64_to_u16, uint64_t, uint16_t)	\
+	xmacro(rjd_math_truncate_u64_to_u8,  uint64_t, uint8_t)		\
+	xmacro(rjd_math_truncate_u32_to_u16, uint32_t, uint16_t)	\
+	xmacro(rjd_math_truncate_u32_to_u8,  uint32_t, uint8_t)		\
+	xmacro(rjd_math_truncate_u16_to_u8,  uint16_t, uint8_t)
+RJD_MATH_TRUNCATE_FUNCS(RJD_MATH_DECLARE_TRUNCATE_FUNC)
 
 #define RJD_MATH_DECLARE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax);
 #define RJD_MATH_DEFINE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax) { type oldrange = oldmax - oldmin; type newrange = newmax - newmin; return ((v - oldmin) * newrange) / oldrange + newmin; }
@@ -366,6 +376,7 @@ RJD_MATH_ISEQUAL_FUNCS(RJD_MATH_DEFINE_ISEQUAL_FUNC)
 RJD_MATH_MIN_FUNCS(RJD_MATH_DEFINE_MIN_FUNC)
 RJD_MATH_MAX_FUNCS(RJD_MATH_DEFINE_MAX_FUNC)
 RJD_MATH_CLAMP_FUNCS(RJD_MATH_DEFINE_CLAMP_FUNC)
+RJD_MATH_TRUNCATE_FUNCS(RJD_MATH_DEFINE_TRUNCATE_FUNC)
 RJD_MATH_REMAP_FUNCS(RJD_MATH_DEFINE_REMAP_FUNC)
 
 static inline uint32_t rjd_math_next_pow2(uint32_t v) 
