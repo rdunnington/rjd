@@ -1249,13 +1249,6 @@ void test_slotmap(void)
 {
 	struct rjd_mem_allocator allocator = mem_allocator_initdefault();
 
-	struct aggregate
-	{
-		uint16_t a;
-		uint8_t b;
-		uint8_t c;
-	};
-
 	{
 		uint32_t* map = rjd_slotmap_alloc(struct aggregate, 8, &allocator);
 
@@ -1277,19 +1270,8 @@ void test_slotmap(void)
 			rjd_slotmap_erase(map, slots[i]);
 		}
 
-		
+		rjd_slotmap_free(map);
 	}
-
-//#define rjd_slotmap_alloc(type, count, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), size, allocator))
-//#define rjd_slotmap_insert(map, data, out_slot)		((map) = rjd_slotmap_insert_impl((map), (out_slot)), \
-//													 (map)[out_slot->index] = data)
-//#define rjd_slotmap_get(map, slot)					((map)[rjd_slotmap_get_impl((map), (slot))])
-//#define rjd_slotmap_count(map)						(rjd_slotmap_count_impl(map))
-//#define rjd_slotmap_erase(map, slot)				(rjd_slotmap_erase_impl((map), (slot)))
-//#define rjd_slotmap_free(map)						(rjd_slotmap_free_impl(map))
-
-
-
 }
 
 int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
