@@ -361,6 +361,10 @@ void test_array()
 		expect_false(array_empty(a));
 		expect_true(array_full(a));
 
+		for (size_t i = 0; i < array_count(a); ++i) {
+			expect_int32(i, rjd_array_get(a, i).a);
+		}
+
 		array_erase(a, 0);
 		expect_int32(1, a[0].a);
 		array_erase(a, 1);
