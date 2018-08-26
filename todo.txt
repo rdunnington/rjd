@@ -1,13 +1,20 @@
 todo:
 - RJD_HEADER -> RJD_HEADER_H macros
-- rjd_array sort
-- rjd_array sorted insert
-- binary search for rjd_array
-- remove shortnames
-- make cmd not allocate and instead statically configurable
+- rjd_array: sort
+- rjd_array: sorted insert
+- rjd_array: binary search for rjd_array
+- rjd.h: remove shortnames
+- rjd_cmd: no allocations and instead statically configurable
+- rjd_slotmap: slot validation - add pointer to original slotmap in debug to avoid mixing slotmaps?
+- rjd_fio: fio enums should be vanilla, not using rjd_enum for simplicity. Or just use rjd_result
+- rjd_result: static assert for compile-time string
+- rjd_mem: add reset api to scoped allocators & use virtual memory to protect against overwrites
+- rjd.h: consider splitting into rjd_core.h and doing #includes for other headers
 
 util ideas:
+rjd_stream.h - unified interface for memory/file streams
+rjd_serialize.h - serializer interface with unified read/write
+rjd_bitset.h - interface for dense bool arrays
+rjd_filewatcher.h
 rjd_deque.h
 rjd_ringbuffer.h
-rjd_filewatcher.h
-rjd_gfx.h (maybe better as a different lib?)
