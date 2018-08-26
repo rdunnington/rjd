@@ -361,8 +361,8 @@ void test_array()
 		expect_false(array_empty(a));
 		expect_true(array_full(a));
 
-		for (size_t i = 0; i < array_count(a); ++i) {
-			expect_int32(i, rjd_array_get(a, i).a);
+		for (uint32_t i = 0; i < array_count(a); ++i) {
+			expect_uint32(i, rjd_array_get(a, i).a);
 		}
 
 		array_erase(a, 0);
@@ -1270,9 +1270,23 @@ void test_slotmap(void)
 			expect_uint32(i + 1337, value);
 		}
 
+		uint32_t visited = 0;
+		for (struct rjd_slot s = rjd_slotmap_next(map, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(map, &s))
+		{
+			++visited;
+		}
+		expect_uint32(25, visited);
+
 		for (uint32_t i = 0; i < rjd_countof(slots); i += 5) {
 			rjd_slotmap_erase(map, slots[i]);
 		}
+
+		visited = 0;
+		for (struct rjd_slot s = rjd_slotmap_next(map, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(map, &s))
+		{
+			++visited;
+		}
+		expect_uint32(20, visited);
 
 		rjd_slotmap_free(map);
 	}
