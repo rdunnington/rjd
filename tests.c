@@ -221,32 +221,43 @@ void test_mem()
 			#pragma warning(disable:4127) // conditional expression is constant (yes we know, that's the point of this test)
 		#endif
 
-		expect_true(MEM_ISALIGNED(0, 4));
-		expect_true(MEM_ISALIGNED(4, 4));
-		expect_true(MEM_ISALIGNED(8, 4));
-		expect_true(MEM_ISALIGNED(8, 8));
-		expect_true(MEM_ISALIGNED(16, 8));
-		expect_true(MEM_ISALIGNED(16, 16));
-		expect_true(MEM_ISALIGNED(32, 16));
-		expect_true(MEM_ISALIGNED(32, 32));
+		expect_true(RJD_MEM_ISALIGNED(0, 4));
+		expect_true(RJD_MEM_ISALIGNED(4, 4));
+		expect_true(RJD_MEM_ISALIGNED(8, 4));
+		expect_true(RJD_MEM_ISALIGNED(8, 8));
+		expect_true(RJD_MEM_ISALIGNED(16, 8));
+		expect_true(RJD_MEM_ISALIGNED(16, 16));
+		expect_true(RJD_MEM_ISALIGNED(32, 16));
+		expect_true(RJD_MEM_ISALIGNED(32, 32));
 
-		expect_false(MEM_ISALIGNED(1, 4));
-		expect_false(MEM_ISALIGNED(2, 4));
-		expect_false(MEM_ISALIGNED(3, 4));
+		expect_false(RJD_MEM_ISALIGNED(1, 4));
+		expect_false(RJD_MEM_ISALIGNED(2, 4));
+		expect_false(RJD_MEM_ISALIGNED(3, 4));
 
-		expect_int32(0, MEM_ALIGNSIZE(0, 4));
-		expect_int32(4, MEM_ALIGNSIZE(1, 4));
-		expect_int32(4, MEM_ALIGNSIZE(2, 4));
-		expect_int32(4, MEM_ALIGNSIZE(3, 4));
-		expect_int32(4, MEM_ALIGNSIZE(4, 4));
-		expect_int32(8, MEM_ALIGNSIZE(5, 4));
-		expect_int32(8, MEM_ALIGNSIZE(6, 4));
-		expect_int32(8, MEM_ALIGNSIZE(7, 4));
-		expect_int32(8, MEM_ALIGNSIZE(8, 4));
-		expect_int32(12, MEM_ALIGNSIZE(9, 4));
-		expect_int32(12, MEM_ALIGNSIZE(10, 4));
-		expect_int32(12, MEM_ALIGNSIZE(11, 4));
-		expect_int32(12, MEM_ALIGNSIZE(12, 4));
+		expect_int32(0, RJD_MEM_ALIGN(0, 4));
+		expect_int32(4, RJD_MEM_ALIGN(1, 4));
+		expect_int32(4, RJD_MEM_ALIGN(2, 4));
+		expect_int32(4, RJD_MEM_ALIGN(3, 4));
+		expect_int32(4, RJD_MEM_ALIGN(4, 4));
+		expect_int32(8, RJD_MEM_ALIGN(5, 4));
+		expect_int32(8, RJD_MEM_ALIGN(6, 4));
+		expect_int32(8, RJD_MEM_ALIGN(7, 4));
+		expect_int32(8, RJD_MEM_ALIGN(8, 4));
+		expect_int32(12, RJD_MEM_ALIGN(9, 4));
+		expect_int32(12, RJD_MEM_ALIGN(10, 4));
+		expect_int32(12, RJD_MEM_ALIGN(11, 4));
+		expect_int32(12, RJD_MEM_ALIGN(12, 4));
+
+		expect_int32(0, RJD_MEM_ALIGN(0, 8));
+		expect_int32(8, RJD_MEM_ALIGN(2, 8));
+		expect_int32(8, RJD_MEM_ALIGN(4, 8));
+		expect_int32(8, RJD_MEM_ALIGN(6, 8));
+		expect_int32(8, RJD_MEM_ALIGN(8, 8));
+		expect_int32(16, RJD_MEM_ALIGN(10, 8));
+		expect_int32(16, RJD_MEM_ALIGN(12, 8));
+		expect_int32(16, RJD_MEM_ALIGN(14, 8));
+		expect_int32(16, RJD_MEM_ALIGN(16, 8));
+		expect_int32(24, RJD_MEM_ALIGN(18, 8));
 
 		#if RJD_COMPILER_MSVC
 			#pragma warning(pop)
@@ -255,41 +266,105 @@ void test_mem()
 
 	// default allocator
 	{
-		struct rjd_mem_allocator ctx = mem_allocator_initdefault();
-		int32_t* v = mem_alloc(int32_t, &ctx);
-		*v = 1337;
-		expect_int32(1337, *v);
+		struct rjd_mem_allocator a = rjd_mem_allocator_init_default();
+		int32_t* p0 = rjd_mem_alloc(int32_t, &a);
+		expect_true(p0 != NULL);
+		*p0 = 1337;
 
-		char* p1 = mem_alloc_array(char, 128, &ctx);
+		char* p1 = rjd_mem_alloc_array(char, 128, &a);
+		expect_true(p1 != NULL);
 		strncpy(p1, "thequickbrownfoxjumpedoverthesuperdeduperlazydog!", 128);
 		p1[127] = 0;
 
-		char* p2 = mem_alloc_array(char, 64, &ctx);
+		char* p2 = rjd_mem_alloc_array(char, 64, &a);
+		expect_true(p2 != NULL);
 		strncpy(p2, "this fox wasn't as quick as the last one", 64);
 		p2[63] = 0;
 
-		mem_free(v);
-		mem_free(p1);
-		mem_free(p2);
+		char* p3 = rjd_mem_alloc_aligned(char, &a, 64);
+		expect_true(p3 != NULL);
+		expect_uint64(RJD_MEM_ALIGN((uint64_t)p3, 64), (uint64_t)p3);
+
+		struct aligned_struct {
+			double a;
+			double b;
+			double c;
+			double e;
+		};
+		char* p4 = rjd_mem_alloc_array_aligned(char, 8, &a, 32);
+		expect_true(p4 != NULL);
+		expect_uint64(RJD_MEM_ALIGN((uint64_t)p4, 32), (uint64_t)p4);
+
+		expect_false(rjd_mem_allocator_reset(&a));
+
+		rjd_mem_free(p0);
+		rjd_mem_free(p1);
+		rjd_mem_free(p2);
+		rjd_mem_free(p3);
+		rjd_mem_free(p4);
 	}
 
+	// linear allocator
+	{
+		char stackmem[1024];
+		struct rjd_mem_allocator a = rjd_mem_allocator_init_linear(stackmem, sizeof(stackmem));
+
+		expect_true(rjd_mem_allocator_type(&a) != NULL);
+
+		expect_true(rjd_mem_alloc_array(char, 256, &a) != NULL);
+		expect_true(rjd_mem_alloc_array(char, 256, &a) != NULL);
+		expect_true(rjd_mem_alloc_array(char, 256, &a) != NULL);
+
+		expect_true(a.stats.total_size <= sizeof(stackmem));
+		{
+			const uint32_t total = a.stats.total_size;
+			expect_uint32(a.stats.current.used, 256 * 3);
+			expect_uint32(a.stats.current.peak, a.stats.current.used);
+			expect_uint32(a.stats.current.unused, total - (256 * 3));
+			expect_uint32(a.stats.current.allocs, 3);
+			expect_uint32(a.stats.current.frees, 0);
+
+			expect_uint32(a.stats.lifetime.peak, 256 * 3);
+			expect_uint32(a.stats.lifetime.allocs, 3);
+			expect_uint32(a.stats.lifetime.frees, 0);
+			expect_uint32(a.stats.lifetime.resets, 0);
+		}
+
+		expect_true(rjd_mem_allocator_reset(&a));
+
+		expect_true(rjd_mem_alloc_array(char, 512, &a) != NULL);
+		{
+			const uint32_t total = a.stats.total_size;
+			expect_uint32(a.stats.current.used, 512);
+			expect_uint32(a.stats.current.peak, a.stats.current.used);
+			expect_uint32(a.stats.current.unused, total - (256 * 3));
+			expect_uint32(a.stats.current.allocs, 3);
+			expect_uint32(a.stats.current.frees, 0);
+
+			expect_uint32(a.stats.lifetime.peak, 256 * 3);
+			expect_uint32(a.stats.lifetime.allocs, 4);
+			expect_uint32(a.stats.lifetime.frees, 0);
+			expect_uint32(a.stats.lifetime.resets, 1);
+		}
+
+		expect_true(rjd_mem_allocator_reset(&a));
+		expect_uint32(a.stats.lifetime.resets, 2);
+	}
+
+	// mem_swap
 	{
 		char test1[] = { 'm','y','t','e','s','t','\0' };
 		char test2[] = { 'o','h','n','o','e','s','\0' };
-		mem_swap(test1, test2, sizeof(test1));
+		RJD_STATIC_ASSERT(sizeof(test1) == sizeof(test2));
+		rjd_mem_swap(test1, test2, sizeof(test1));
 		expect_str("ohnoes", test1);
 		expect_str("mytest", test2);
-	}
-
-	// TODO linear allocator
-	{
-		//char stackmem[1024 * 1024];
 	}
 }
 
 void test_array()
 {
-	struct rjd_mem_allocator context = mem_allocator_initdefault();
+	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
 
 	// countof
 	{
@@ -979,7 +1054,7 @@ void test_easing()
 
 void test_strbuf(void)
 {	
-	struct rjd_mem_allocator context = mem_allocator_initdefault();
+	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
 
 	struct rjd_strbuf builder = rjd_strbuf_init(&context);
 
@@ -1030,7 +1105,7 @@ void test_profiler(void)
 
 void test_cmd()
 {
-	struct rjd_mem_allocator context = mem_allocator_initdefault();
+	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
 	
 	const char* argv0[] = { "test.exe", NULL };
 	struct rjd_cmd cmd = cmd_init(countof(argv0), argv0, &context);
@@ -1110,7 +1185,7 @@ void test_rng()
 
 void test_dict()
 {
-	struct rjd_mem_allocator context = mem_allocator_initdefault();
+	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
 	
 	struct rjd_dict dict = dict_init(&context, 0);
 	expect_str(NULL, (char*)dict_get_hashstr(&dict, "key"));
@@ -1165,7 +1240,7 @@ void expect_fio(enum fio_err expected, enum fio_err actual)
 
 void test_fio()
 {
-	struct rjd_mem_allocator context = mem_allocator_initdefault();
+	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
 
 	const char expected_contents[] = "this is a test file that has a utf-8 character!";
 
@@ -1206,7 +1281,7 @@ void test_fio()
 
 void test_strpool()
 {
-	struct rjd_mem_allocator allocator = mem_allocator_initdefault();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 
 	const char* test1 = "test1";
 	const char* test2 = "a really really super long string that has an end lalalalalalalala";
@@ -1251,7 +1326,7 @@ void test_strpool()
 
 void test_slotmap(void)
 {
-	struct rjd_mem_allocator allocator = mem_allocator_initdefault();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 
 	{
 		uint32_t* map = rjd_slotmap_alloc(uint32_t, 8, &allocator);
