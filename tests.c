@@ -26,17 +26,29 @@ void expect_float(double expected, double actual)
 	}
 }
 
-#define DEFINE_EXPECT_INTTYPE(type, format_specifier)															\
-	void expect_##type(type##_t expected, type##_t actual) {													\
-		if (expected != actual) {																				\
-			ASSERTFAIL("Expected: " format_specifier ", but got: " format_specifier "\n", expected, actual);	\
-		}																										\
+void expect_int32(int32_t expected, int32_t actual) {
+	if (expected != actual) {
+		ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
 	}
+}
 
-DEFINE_EXPECT_INTTYPE(int32,  "%d")
-DEFINE_EXPECT_INTTYPE(int64,  "%lld")
-DEFINE_EXPECT_INTTYPE(uint32, "%u")
-DEFINE_EXPECT_INTTYPE(uint64, "%llu")
+void expect_int64(int64_t expected, int64_t actual) {
+	if (expected != actual) {
+		ASSERTFAIL("Expected: %lld, but got: %lld\n", expected, actual);
+	}
+}
+
+void expect_uint32(uint32_t expected, uint32_t actual) {
+	if (expected != actual) {
+		ASSERTFAIL("Expected: %u, but got: %u\n", expected, actual);
+	}
+}
+
+void expect_uint64(uint64_t expected, uint64_t actual) {
+	if (expected != actual) {
+		ASSERTFAIL("Expected: %llu, but got: %llu\n", expected, actual);
+	}
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -298,13 +310,13 @@ void test_mem()
 		expect_true(p4 != NULL);
 		expect_uint64(RJD_MEM_ALIGN((uint64_t)p4, 32), (uint64_t)p4);
 
-		expect_false(rjd_mem_allocator_reset(&a));
-
 		rjd_mem_free(p0);
 		rjd_mem_free(p1);
 		rjd_mem_free(p2);
 		rjd_mem_free(p3);
 		rjd_mem_free(p4);
+
+		expect_false(rjd_mem_allocator_reset(&a));
 	}
 
 	// linear allocator
@@ -321,30 +333,31 @@ void test_mem()
 		expect_true(a.stats.total_size <= sizeof(stackmem));
 		{
 			const uint32_t total = a.stats.total_size;
-			expect_uint32(a.stats.current.used, 256 * 3);
+			expect_uint32(a.stats.current.used - a.stats.current.overhead, 256 * 3);
 			expect_uint32(a.stats.current.peak, a.stats.current.used);
-			expect_uint32(a.stats.current.unused, total - (256 * 3));
+			expect_uint32(a.stats.current.unused, total - ((256 * 3) + a.stats.current.overhead));
 			expect_uint32(a.stats.current.allocs, 3);
 			expect_uint32(a.stats.current.frees, 0);
 
-			expect_uint32(a.stats.lifetime.peak, 256 * 3);
+			expect_uint32(a.stats.lifetime.peak, a.stats.current.peak);
 			expect_uint32(a.stats.lifetime.allocs, 3);
 			expect_uint32(a.stats.lifetime.frees, 0);
 			expect_uint32(a.stats.lifetime.resets, 0);
 		}
 
+        const uint32_t old_peak = a.stats.lifetime.peak;
 		expect_true(rjd_mem_allocator_reset(&a));
 
 		expect_true(rjd_mem_alloc_array(char, 512, &a) != NULL);
 		{
 			const uint32_t total = a.stats.total_size;
-			expect_uint32(a.stats.current.used, 512);
+			expect_uint32(a.stats.current.used - a.stats.current.overhead, 512);
 			expect_uint32(a.stats.current.peak, a.stats.current.used);
-			expect_uint32(a.stats.current.unused, total - (256 * 3));
-			expect_uint32(a.stats.current.allocs, 3);
+			expect_uint32(a.stats.current.unused, total - (512 + a.stats.current.overhead));
+			expect_uint32(a.stats.current.allocs, 1);
 			expect_uint32(a.stats.current.frees, 0);
 
-			expect_uint32(a.stats.lifetime.peak, 256 * 3);
+			expect_uint32(a.stats.lifetime.peak, old_peak);
 			expect_uint32(a.stats.lifetime.allocs, 4);
 			expect_uint32(a.stats.lifetime.frees, 0);
 			expect_uint32(a.stats.lifetime.resets, 1);
