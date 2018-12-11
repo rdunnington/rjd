@@ -59,11 +59,11 @@ enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_al
 
 	rewind(file);
 
-	*buffer = rjd_array_alloc(char, length, context);
+	*buffer = rjd_array_alloc(char, (uint32_t)length, context);
 	if (!*buffer) {
 		return RJD_FIO_ERR_NOMEM;
 	}
-	rjd_array_resize(*buffer, length);
+	rjd_array_resize(*buffer, (uint32_t)length);
 
 	size_t read_length = fread(*buffer, 1, length, file);
 	fclose(file);

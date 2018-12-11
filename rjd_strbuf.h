@@ -22,7 +22,7 @@ struct rjd_strbuf rjd_strbuf_init(struct rjd_mem_allocator* allocator);
 uint32_t rjd_strbuf_length(const struct rjd_strbuf* buf);
 const char* rjd_strbuf_str(const struct rjd_strbuf* buf);
 void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...);
-void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_list args);
+void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, va_list args);
 void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* str, uint32_t length);
 void rjd_strbuf_free(struct rjd_strbuf* buf);
 
@@ -75,7 +75,7 @@ void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...)
 	va_end(args);
 }
 
-void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_list args)
+void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, va_list args)
 {
 	RJD_ASSERT(buf);
 

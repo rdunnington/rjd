@@ -45,7 +45,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 {
 	return rjd_timer_global() - timer->timestamp;
 }
-#ifdef RJD_PLATFORM_WINDOWS
+#if RJD_PLATFORM_WINDOWS
 	static double RJD_QPC_FREQUENCY = 0;
 	
 	double rjd_timer_global(void)
@@ -67,7 +67,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 
 		return (time.QuadPart * 1000LL) / RJD_QPC_FREQUENCY;
 	}
-#endif //_WIN32
+#endif //RJD_PLATFORM_WINDOWS
 
 #if RJD_PLATFORM_OSX
 	#include <mach/mach.h>

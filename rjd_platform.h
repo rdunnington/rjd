@@ -5,8 +5,10 @@
 // Platforms
 #if _WIN32 || __CYGWIN__
 	#define RJD_PLATFORM_WINDOWS 1
+	#define RJD_PLATFORM_OSX 0
 #elif __APPLE__ && __MACH__
 	#define RJD_PLATFORM_OSX 1
+	#define RJD_PLATFORM_WINDOWS 0
 #else
 	#error Unknown platform.
 #endif
@@ -50,7 +52,13 @@
 		#error Unknown architecture
 	#endif
 #elif RJD_COMPILER_CLANG
-	#error TODO: Implement for clang
+    #if defined(__x86_64) || defined(__x86_64__)
+        #define RJD_ARCH_64 1
+    #elif defined(i386) || defined(__i386) || defined(__i386__)
+        #define RJD_ARCH_32 1
+    #else
+        #error Unknown architecture
+    #endif
 #else
 	#error Unhandled compiler
 #endif
@@ -95,11 +103,13 @@
 #if RJD_COMPILER_MSVC
 	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer (this is ok in C99)
 	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (all major compilers support this)
+#elif RJD_COMPILER_CLANG
+	#pragma clang diagnostic ignored "-Wmissing-braces" // clang is paranoid about zero-init for nested structs
 #endif
 
 #if RJD_PLATFORM_WINDOWS && RJD_IMPL 
 	#define WIN32_LEAN_AND_MEAN
-	#define WIN32_EXTRA_LEANA
+	#define WIN32_EXTRA_LEAN
 	#define NOMINMAX
 	#include <windows.h>
 	#undef near

@@ -6,3 +6,7 @@ a.out
 *.pdb
 *.stackdump
 .vs
+tags
+.DS_Store
+*.out*
+rjd.xcodeproj/

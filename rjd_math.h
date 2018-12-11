@@ -892,7 +892,7 @@ static inline rjd_math_mat4 rjd_math_mat4_scaling_nonuniform(rjd_math_vec3 scale
 	return m;
 }
 static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) {
-	rjd_math_mat4 m;
+    rjd_math_mat4 m = {0};
 	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
 		m.m[i] = rjd_math_vec4_add(a.m[i], b.m[i]);
 	}
@@ -900,7 +900,7 @@ static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) 
 }
 static inline rjd_math_mat4 rjd_math_mat4_mul(rjd_math_mat4 a, rjd_math_mat4 b) {
 	rjd_math_mat4 t = rjd_math_mat4_transpose(a);
-	rjd_math_mat4 m;
+    rjd_math_mat4 m = {0};
 	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
 		m.m[i] = rjd_math_mat4_mulv4(t, b.m[i]);
 	}
@@ -1079,7 +1079,7 @@ static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
 
 	rjd_math_vec4 det_reciprocal = {_mm_rcp_ps(det.v)};
 
-	rjd_math_mat4 out;
+    rjd_math_mat4 out = {0};
 	for (size_t i = 0; i < rjd_countof(out.m); ++i) {
 		out.m[i] = rjd_math_vec4_mul(det_reciprocal, inv.m[i]);
 	}

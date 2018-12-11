@@ -22,7 +22,7 @@ struct rjd_mem_allocator_stats
 };
 
 // TODO realloc
-typedef const char* (*rjd_mem_allocator_type_func)();
+typedef const char* (*rjd_mem_allocator_type_func)(void);
 typedef void* (*rjd_mem_allocator_alloc_func)(size_t size, void* optional_heap);
 typedef void (*rjd_mem_allocator_free_func)(void* memory);
 typedef void (*rjd_mem_allocator_reset_func)(void* optional_heap);
@@ -193,11 +193,12 @@ struct rjd_mem_allocator_stats rjd_mem_allocator_getstats(const struct rjd_mem_a
 void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint32_t alignment)
 {
 	RJD_ASSERT(allocator);
+    RJD_ASSERT(size >= 0)
 	//RJD_ASSERTMSG(alignment <= 16, "TODO implment extra support for large alignments");
 
 	const uint32_t header_size = sizeof(struct rjd_mem_allocation_header);
 	const uint32_t alignment_padding = header_size < alignment ? alignment - header_size : 0;
-	const uint32_t total_size = size + header_size + alignment_padding;
+	const uint32_t total_size = (uint32_t)size + header_size + alignment_padding;
 
 	char* raw = allocator->alloc_func(total_size, allocator->optional_heap);
 	if (raw == NULL) {

@@ -103,31 +103,34 @@ void test_logging()
 
 	LOG_CHANNEL(&local2, RJD_LOG_VERBOSITY_MED, "other channel");
 	
+	// on windows this is the filename, but on osx this is the fully-qualified path
+	const char* filename = __FILE__;
+
 	// expect equals
 	char expected[1024];
 	snprintf(expected, sizeof(expected),
-		"tests.c(%d): test\n"
-		"tests.c(%d): \n"
-		"tests.c(%d): forma11ed!\n"
-		"tests.c(%d): ok1\n"
-		"tests.c(%d): ok2\n"
-		"tests.c(%d): ok2\n",
-		line_test_begin + 1,
-		line_test_begin + 2,
-		line_test_begin + 3,
-		line_test_begin + 12,
-		line_test_begin + 17,
-		line_test_begin + 18);
+		"%s(%d): test\n"
+		"%s(%d): \n"
+		"%s(%d): forma11ed!\n"
+		"%s(%d): ok1\n"
+		"%s(%d): ok2\n"
+		"%s(%d): ok2\n",
+		filename, line_test_begin + 1,
+		filename, line_test_begin + 2,
+		filename, line_test_begin + 3,
+		filename, line_test_begin + 12,
+		filename, line_test_begin + 17,
+		filename, line_test_begin + 18);
 
 	snprintf(expected + strlen(expected), sizeof(expected) - strlen(expected),
-		"tests.c(%d): ok3\n"
-		"tests.c(%d): ok3\n"
-		"tests.c(%d): ok3\n"
-		"tests.c(%d): other channel\n",
-		line_test_begin + 22,
-		line_test_begin + 23,
-		line_test_begin + 24,
-		line_test_begin + 36);
+		"%s(%d): ok3\n"
+		"%s(%d): ok3\n"
+		"%s(%d): ok3\n"
+		"%s(%d): other channel\n",
+		filename, line_test_begin + 22,
+		filename, line_test_begin + 23,
+		filename, line_test_begin + 24,
+		filename, line_test_begin + 36);
 
 	expect_str(expected, logbuffer);
 	
