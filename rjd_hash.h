@@ -16,13 +16,6 @@ rjd_hash64 rjd_hash64_data(const uint8_t* key, int length);
 bool rjd_hash32_valid(rjd_hash32 hash);
 bool rjd_hash64_valid(rjd_hash64 hash);
 
-#if RJD_ENABLE_SHORTNAMES
-	#define hash32		rjd_hash32
-	#define hash64		rjd_hash64
-	#define hash32_data	rjd_hash32_data
-	#define hash64_data	rjd_hash64_data
-#endif
-
 #if RJD_IMPL
 
 // Code derived from:

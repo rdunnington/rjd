@@ -81,25 +81,6 @@
 	#define RJD_COMPILER_CLANG_ONLY(code)
 #endif
 
-#if RJD_ENABLE_SHORTNAMES
-	#define FORCE_INLINE RJD_FORCE_INLINE
-	#define FORCE_ALIGN RJD_FORCE_ALIGN
-
-	#define PLATFORM_WINDOWS	RJD_PLATFORM_WINDOWS
-	#define PLATFORM_OSX		RJD_PLATFORM_OSX
-
-	#define ARCH_64				RJD_ARCH_64
-	#define ARCH_32				RJD_ARCH_32
-
-	#define COMPILER_MSVC		RJD_COMPILER_MSVC
-	#define COMPILER_GCC        RJD_COMPILER_GCC
-	#define COMPILER_CLANG      RJD_COMPILER_CLANG
-
-	#define COMPILER_MSVC_ONLY	RJD_COMPILER_MSVC_ONLY
-	#define COMPILER_GCC_ONLY	RJD_COMPILER_GCC_ONLY
-	#define COMPILER_CLANG_ONLY	RJD_COMPILER_CLANG_ONLY
-#endif
-
 #if RJD_COMPILER_MSVC
 	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer (this is ok in C99)
 	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (all major compilers support this)

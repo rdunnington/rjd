@@ -50,19 +50,6 @@ struct rjd_logchannel
 void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* channel, enum rjd_log_verbosity verbosity, const char* format, ...);
 void rjd_log_resetglobal(void);
 
-#if RJD_ENABLE_SHORTNAMES
-	#define STATIC_ASSERT RJD_STATIC_ASSERT
-	#define ASSERT RJD_ASSERT
-	#define ASSERTMSG RJD_ASSERTMSG
-	#define ASSERTFAIL RJD_ASSERTFAIL
-
-	#define LOG_CHANNEL RJD_LOG_CHANNEL
-	#define LOG RJD_LOG
-	#define log_resetglobal rjd_log_resetglobal
-
-	#define UNUSED_PARAM RJD_UNUSED_PARAM
-#endif
-
 extern const struct rjd_logchannel* g_rjd_global_logchannel;
 
 #if RJD_IMPL

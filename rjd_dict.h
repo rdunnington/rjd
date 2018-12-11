@@ -24,19 +24,6 @@ static inline void* rjd_dict_erase_hashstr(struct rjd_dict* dict, const char* ke
 static inline void* rjd_dict_get_hashstr(const struct rjd_dict* dict, const char* key);
 static inline bool rjd_dict_has_hashstr(const struct rjd_dict* dict, const char* key);
 
-#if RJD_ENABLE_SHORTNAMES
-	#define dict_init	rjd_dict_init
-	#define dict_insert	rjd_dict_insert
-	#define dict_erase	rjd_dict_erase
-	#define dict_get	rjd_dict_get
-	#define dict_free	rjd_dict_free
-
-	#define	dict_insert_hashstr	rjd_dict_insert_hashstr
-	#define dict_erase_hashstr	rjd_dict_erase_hashstr
-	#define dict_get_hashstr	rjd_dict_get_hashstr
-	#define dict_has_hashstr	rjd_dict_has_hashstr
-#endif
-
 static inline void rjd_dict_insert_hashstr(struct rjd_dict* dict, const char* key, void* item)
 {
 	rjd_dict_insert(dict, rjd_hash64_data((uint8_t*)key, -1), item);

@@ -62,61 +62,6 @@ static inline float rjd_ease_inout_back(float t);
 static inline float rjd_ease_inout_elas(float t);
 static inline float rjd_ease_inout_boun(float t);
 
-#ifdef RJD_ENABLE_SHORTNAMES
-	#define ease            rjd_ease
-	#define ease_func		rjd_ease_func
-	#define ease_between	rjd_ease_between
-	#define ease_line       rjd_ease_line
-	#define ease_in_sine    rjd_ease_in_sine
-	#define ease_in_quad    rjd_ease_in_quad
-	#define ease_in_cube    rjd_ease_in_cube
-	#define ease_in_quar    rjd_ease_in_quar
-	#define ease_in_quin    rjd_ease_in_quin
-	#define ease_in_expo    rjd_ease_in_expo
-	#define ease_in_circ    rjd_ease_in_circ
-	#define ease_in_back    rjd_ease_in_back
-	#define ease_in_elas    rjd_ease_in_elas
-	#define ease_in_boun    rjd_ease_in_boun
-	#define ease_out_sine   rjd_ease_out_sine
-	#define ease_out_quad   rjd_ease_out_quad
-	#define ease_out_cube   rjd_ease_out_cube
-	#define ease_out_quar   rjd_ease_out_quar
-	#define ease_out_quin   rjd_ease_out_quin
-	#define ease_out_expo   rjd_ease_out_expo
-	#define ease_out_circ   rjd_ease_out_circ
-	#define ease_out_back   rjd_ease_out_back
-	#define ease_out_elas   rjd_ease_out_elas
-	#define ease_out_boun   rjd_ease_out_boun
-	#define ease_inout_sine rjd_ease_inout_sine
-	#define ease_inout_quad rjd_ease_inout_quad
-	#define ease_inout_cube rjd_ease_inout_cube
-	#define ease_inout_quar rjd_ease_inout_quar
-	#define ease_inout_quin rjd_ease_inout_quin
-	#define ease_inout_expo rjd_ease_inout_expo
-	#define ease_inout_circ rjd_ease_inout_circ
-	#define ease_inout_back rjd_ease_inout_back
-	#define ease_inout_elas rjd_ease_inout_elas
-	#define ease_inout_boun rjd_ease_inout_boun
-
-	#define EASE_TYPE_LINE RJD_EASE_TYPE_LINE
-	#define EASE_TYPE_SINE RJD_EASE_TYPE_SINE
-	#define EASE_TYPE_CUBE RJD_EASE_TYPE_CUBE
-	#define EASE_TYPE_QUAD RJD_EASE_TYPE_QUAD
-	#define EASE_TYPE_QUAR RJD_EASE_TYPE_QUAR
-	#define EASE_TYPE_QUIN RJD_EASE_TYPE_QUIN
-	#define EASE_TYPE_EXPO RJD_EASE_TYPE_EXPO
-	#define EASE_TYPE_CIRC RJD_EASE_TYPE_CIRC
-	#define EASE_TYPE_BACK RJD_EASE_TYPE_BACK
-	#define EASE_TYPE_ELAS RJD_EASE_TYPE_ELAS
-	#define EASE_TYPE_BOUN RJD_EASE_TYPE_BOUN
-	#define EASE_TYPE_MAX  RJD_EASE_TYPE_MAX
-
-	#define EASE_DIR_INOUT RJD_EASE_DIR_INOUT
-	#define EASE_DIR_IN    RJD_EASE_DIR_IN
-	#define EASE_DIR_OUT   RJD_EASE_DIR_OUT
-	#define EASE_DIR_MAX   RJD_EASE_DIR_MAX
-#endif
-
 // impl
 
 static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir dir)

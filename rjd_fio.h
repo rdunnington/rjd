@@ -19,22 +19,6 @@ enum rjd_fio_err rjd_fio_write(const char* path, const char* data, size_t length
 enum rjd_fio_err rjd_fio_size(const char* path, size_t* out_size);
 enum rjd_fio_err rjd_fio_delete(const char* path);
 
-#if RJD_ENABLE_SHORTNAMES
-	#define fio_err					rjd_fio_err
-	#define fio_writemode			rjd_fio_writemode
-
-	#define fio_read				rjd_fio_read
-	#define	fio_write				rjd_fio_write
-	#define fio_size				rjd_fio_size
-	#define fio_delete				rjd_fio_delete
-
-	#define FIO_ERR_OK				RJD_FIO_ERR_OK
-	#define FIO_ERR_IO				RJD_FIO_ERR_IO
-	#define FIO_ERR_NOMEM			RJD_FIO_ERR_NOMEM
-	#define FIO_WRITEMODE_REPLACE	RJD_FIO_WRITEMODE_REPLACE
-	#define FIO_WRITEMODE_APPEND	RJD_FIO_WRITEMODE_APPEND
-#endif
-
 #if RJD_IMPL
 
 RJD_ENUM_DEFINE(rjd_fio_err, RJD_FIO_ERR_ENUM);

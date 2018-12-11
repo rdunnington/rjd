@@ -37,22 +37,6 @@ double rjd_cmd_float(const struct rjd_cmd* cmd, const char* shortname, double _d
 bool rjd_cmd_bool(const struct rjd_cmd* cmd, const char* shortname);
 const char* rjd_cmd_str(const struct rjd_cmd* cmd, const char* shortname);
 
-#if RJD_ENABLE_SHORTNAMES
-	#define cmd_init	rjd_cmd_init
-	#define cmd_free	rjd_cmd_free
-	#define cmd_add_opt	rjd_cmd_add_opt
-	#define cmd_add_req	rjd_cmd_add_req
-	#define cmd_ok		rjd_cmd_ok
-	#define cmd_usage	rjd_cmd_usage
-	#define cmd_help	rjd_cmd_help
-
-	#define cmd_int		rjd_cmd_int
-	#define cmd_uint	rjd_cmd_uint
-	#define cmd_float	rjd_cmd_float
-	#define cmd_bool	rjd_cmd_bool
-	#define cmd_str		rjd_cmd_str
-#endif
-
 #if RJD_IMPL
 
 struct rjd_cmd rjd_cmd_init(int argc, const char** argv, struct rjd_mem_allocator* allocator)

@@ -45,35 +45,6 @@ bool rjd_geo_ray_sphere(rjd_geo_ray r, rjd_geo_sphere s, float* t_out);
 bool rjd_geo_ray_box(rjd_geo_ray r, rjd_geo_box b, float* t_out);
 bool rjd_geo_ray_boxfast(rjd_math_vec3 ray_pos, rjd_math_vec3 ray_inv_dir, rjd_geo_box b, float* t_out);
 
-#if RJD_ENABLE_SHORTNAMES
-	#define rect	rjd_geo_rect
-	#define circle	rjd_geo_circle
-	#define box		rjd_geo_box
-	#define sphere	rjd_geo_sphere
-	#define ray		rjd_geo_ray
-
-	#define rect_minmax        	rjd_geo_rect_minmax
-	#define circle_xyr         	rjd_geo_circle_xyr
-	#define box_minmax         	rjd_geo_box_minmax
-	#define sphere_xyzr        	rjd_geo_sphere_xyzr
-	#define ray_pd             	rjd_geo_ray_pd
-	
-	#define point_rect         	rjd_geo_point_rect
-	#define point_box          	rjd_geo_point_box
-	#define point_circle       	rjd_geo_point_circle
-	#define point_sphere       	rjd_geo_point_sphere
-	#define circle_circle      	rjd_geo_circle_circle
-	#define circle_rect        	rjd_geo_circle_rect
-	#define rect_rect          	rjd_geo_rect_rect
-	#define sphere_sphere      	rjd_geo_sphere_sphere
-	#define sphere_box         	rjd_geo_sphere_box
-	#define box_box            	rjd_geo_box_box
-	#define ray_point          	rjd_geo_ray_point
-	#define ray_sphere         	rjd_geo_ray_sphere
-	#define ray_box            	rjd_geo_ray_box
-	#define ray_boxfast			rjd_geo_ray_boxfast
-#endif
-
 #if RJD_IMPL
 
 rjd_geo_rect rjd_geo_rect_minmax(float minx, float miny, float maxx, float maxy) {

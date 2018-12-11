@@ -13,13 +13,6 @@ uint64_t rjd_rng_next(struct rjd_rng* rng);
 double rjd_rng_float(struct rjd_rng* rng);
 int32_t rjd_rng_range32(struct rjd_rng* rng, int32_t min_inclusive, int32_t max_exclusive);
 
-#if RJD_ENABLE_SHORTNAMES
-	#define rng_init	rjd_rng_init
-	#define rng_next	rjd_rng_next
-	#define rng_float	rjd_rng_float
-	#define rng_range32 rjd_rng_range32
-#endif
-
 #if RJD_IMPL
 
 struct rjd_rng rjd_rng_init(uint64_t seed)

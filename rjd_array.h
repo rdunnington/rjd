@@ -44,37 +44,6 @@ struct rjd_mem_allocator;
 #define rjd_array_sample(buf, rng)		((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
 #define rjd_array_shuffle(buf, rng)		rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
 
-#if RJD_ENABLE_SHORTNAMES
-	#define countof					rjd_countof
-
-	#define array_alloc    			rjd_array_alloc
-	#define array_free    			rjd_array_free
-	#define array_capacity 			rjd_array_capacity
-	#define array_count    			rjd_array_count
-	#define array_clear				rjd_array_clear
-	#define array_reserve			rjd_array_reserve
-	#define array_resize   			rjd_array_resize
-	#define array_trim				rjd_array_trim
-	#define array_erase    			rjd_array_erase
-	#define array_erase_unordered	rjd_array_erase_unordered
-	#define array_empty    			rjd_array_empty
-	#define array_full     			rjd_array_full
-	#define array_push     			rjd_array_push
-	#define array_pop      			rjd_array_pop
-
-	#define array_first				rjd_array_first
-	#define array_last				rjd_array_last
-	#define array_contains			rjd_array_contains
-	#define array_filter			rjd_array_filter
-	#define array_map				rjd_array_map
-	#define	array_reduce			rjd_array_reduce
-	#define array_sum				rjd_array_sum
-	#define array_reverse			rjd_array_reverse
-
-	#define array_sample			rjd_array_sample
-	#define array_shuffle			rjd_array_shuffle
-#endif
-
 struct rjd_rng;
 
 void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocator, size_t sizeof_type);

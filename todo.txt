@@ -7,7 +7,6 @@ todo:
 * rjd_array: sort
 * rjd_array: sorted insert
 * rjd_array: binary search for rjd_array
-* rjd.h: remove shortnames
 * rjd_cmd: no allocations and instead statically configurable
 * rjd_slotmap: slot validation - add pointer to original slotmap in debug to avoid mixing slotmaps?
 * rjd_fio: fio enums should be vanilla, not using rjd_enum for simplicity. Or just use rjd_result

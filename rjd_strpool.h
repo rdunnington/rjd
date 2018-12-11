@@ -17,19 +17,6 @@ struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* str, s
 void rjd_strref_release(struct rjd_strref* ref);
 const char* rjd_strref_str(const struct rjd_strref* ref);
 
-#if RJD_ENABLE_SHORTNAMES
-	#define strpool			rjd_strpool
-	#define strref			rjd_strref
-
-	#define strpool_init	rjd_strpool_init
-	#define strpool_free	rjd_strpool_free
-	#define strpool_add		rjd_strpool_add
-	#define strpool_addv	rjd_strpool_addv
-	#define strpool_addl	rjd_strpool_addl
-	#define strref_release	rjd_strref_release
-	#define	strref_str		rjd_strref_str
-#endif
-
 #if RJD_IMPL
 
 struct rjd_strref

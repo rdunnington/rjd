@@ -18,15 +18,6 @@ double rjd_timer_global(void);
 		RJD_LOG("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&_timer##name));	\
 	}
 
-#if RJD_ENABLE_SHORTNAMES
-	#define timer_init		rjd_timer_init
-	#define timer_reset		rjd_timer_reset
-	#define timer_elapsed	rjd_timer_elapsed
-	#define timer_global	rjd_timer_global
-
-	#define PROFILE_SCOPE	RJD_PROFILE_SCOPE
-#endif
-
 #if RJD_IMPL
 
 struct rjd_timer rjd_timer_init(void)
