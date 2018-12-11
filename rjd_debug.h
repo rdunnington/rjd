@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_DEBUG 1
+#define RJD_DEBUG_H 1
 
 enum rjd_log_verbosity
 {
@@ -65,7 +65,7 @@ void rjd_log_resetglobal(void);
 
 extern const struct rjd_logchannel* g_rjd_global_logchannel;
 
-#ifdef RJD_IMPL
+#if RJD_IMPL
 
 const struct rjd_logchannel rjd_global_logchannel = {
 	.verbosity = RJD_LOG_VERBOSITY_MED,

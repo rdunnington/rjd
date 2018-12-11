@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_PROFILER 1
+#define RJD_PROFILER_H 1
 
 struct rjd_timer
 {

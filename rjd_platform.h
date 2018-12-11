@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_PLATFORM 1
+#define RJD_PLATFORM_H 1
 
 // Platforms
 #if _WIN32 || __CYGWIN__

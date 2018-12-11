@@ -1,5 +1,7 @@
 #pragma once
 
+#define RJD_GEO_H 1
+
 typedef struct {
 	rjd_math_vec4 minmax; // xy is the min, zw is the max
 } rjd_geo_rect;

@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_ARRAY 1
+#define RJD_ARRAY_H 1
 
 struct rjd_mem_allocator;
 

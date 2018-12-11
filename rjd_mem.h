@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_MEM 1
+#define RJD_MEM_H 1
 
 struct rjd_mem_allocator_stats
 {
@@ -62,7 +62,7 @@ void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint3
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef RJD_IMPL
+#if RJD_IMPL
 
 struct rjd_mem_heap_linear
 {

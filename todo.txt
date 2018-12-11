@@ -4,7 +4,6 @@ bugs:
 * rjd_strref: add length
 
 todo:
-* RJD_HEADER -> RJD_HEADER_H macros
 * rjd_array: sort
 * rjd_array: sorted insert
 * rjd_array: binary search for rjd_array

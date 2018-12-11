@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_FILEIO 1
+#define RJD_FILEIO_H 1
 
 #define RJD_FIO_ERR_ENUM(macro) \
 	macro(RJD_FIO_ERR_OK)		\

@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_EASING
+#define RJD_EASING_H 1
 
 enum rjd_ease_type
 {

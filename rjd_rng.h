@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_RNG 1
+#define RJD_RNG_H 1
 
 struct rjd_rng
 {

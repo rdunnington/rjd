@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_STRBUF 1
+#define RJD_STRBUF_H 1
 
 #ifndef RJD_STRBUF_STATIC_SIZE
 	#define RJD_STRBUF_STATIC_SIZE 512

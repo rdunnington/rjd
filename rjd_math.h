@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_MATH 1
+#define RJD_MATH_H 1
 
 #define RJD_MATH_PI (3.141592653589793238462643f)
 #define RJD_MATH_EPSILON (0.000001)

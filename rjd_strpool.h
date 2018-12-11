@@ -1,5 +1,7 @@
 #pragma once
 
+#define RJD_STRPOOL_H 1
+
 struct rjd_strpool
 {
 	struct rjd_dict storage;

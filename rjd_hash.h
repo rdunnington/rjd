@@ -1,6 +1,6 @@
 #pragma once
 
-#define RJD_HASH
+#define RJD_HASH_H 1
 
 typedef struct {
 	uint32_t value;
