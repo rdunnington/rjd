@@ -25,13 +25,15 @@
 
 #pragma once
 
-#define RJD_PLATFORM 1
+#define RJD_PLATFORM_H 1
 
 // Platforms
 #if _WIN32 || __CYGWIN__
 	#define RJD_PLATFORM_WINDOWS 1
+	#define RJD_PLATFORM_OSX 0
 #elif __APPLE__ && __MACH__
 	#define RJD_PLATFORM_OSX 1
+	#define RJD_PLATFORM_WINDOWS 0
 #else
 	#error Unknown platform.
 #endif
@@ -75,7 +77,13 @@
 		#error Unknown architecture
 	#endif
 #elif RJD_COMPILER_CLANG
-	#error TODO: Implement for clang
+    #if defined(__x86_64) || defined(__x86_64__)
+        #define RJD_ARCH_64 1
+    #elif defined(i386) || defined(__i386) || defined(__i386__)
+        #define RJD_ARCH_32 1
+    #else
+        #error Unknown architecture
+    #endif
 #else
 	#error Unhandled compiler
 #endif
@@ -98,33 +106,16 @@
 	#define RJD_COMPILER_CLANG_ONLY(code)
 #endif
 
-#if RJD_ENABLE_SHORTNAMES
-	#define FORCE_INLINE RJD_FORCE_INLINE
-	#define FORCE_ALIGN RJD_FORCE_ALIGN
-
-	#define PLATFORM_WINDOWS	RJD_PLATFORM_WINDOWS
-	#define PLATFORM_OSX		RJD_PLATFORM_OSX
-
-	#define ARCH_64				RJD_ARCH_64
-	#define ARCH_32				RJD_ARCH_32
-
-	#define COMPILER_MSVC		RJD_COMPILER_MSVC
-	#define COMPILER_GCC        RJD_COMPILER_GCC
-	#define COMPILER_CLANG      RJD_COMPILER_CLANG
-
-	#define COMPILER_MSVC_ONLY	RJD_COMPILER_MSVC_ONLY
-	#define COMPILER_GCC_ONLY	RJD_COMPILER_GCC_ONLY
-	#define COMPILER_CLANG_ONLY	RJD_COMPILER_CLANG_ONLY
-#endif
-
 #if RJD_COMPILER_MSVC
 	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer (this is ok in C99)
 	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (all major compilers support this)
+#elif RJD_COMPILER_CLANG
+	#pragma clang diagnostic ignored "-Wmissing-braces" // clang is paranoid about zero-init for nested structs
 #endif
 
 #if RJD_PLATFORM_WINDOWS && RJD_IMPL 
 	#define WIN32_LEAN_AND_MEAN
-	#define WIN32_EXTRA_LEANA
+	#define WIN32_EXTRA_LEAN
 	#define NOMINMAX
 	#include <windows.h>
 	#undef near
@@ -138,7 +129,7 @@
 
 #pragma once
 
-#define RJD_DEBUG 1
+#define RJD_DEBUG_H 1
 
 enum rjd_log_verbosity
 {
@@ -188,22 +179,9 @@ struct rjd_logchannel
 void rjd_log_impl(const char* file, unsigned line, const struct rjd_logchannel* channel, enum rjd_log_verbosity verbosity, const char* format, ...);
 void rjd_log_resetglobal(void);
 
-#if RJD_ENABLE_SHORTNAMES
-	#define STATIC_ASSERT RJD_STATIC_ASSERT
-	#define ASSERT RJD_ASSERT
-	#define ASSERTMSG RJD_ASSERTMSG
-	#define ASSERTFAIL RJD_ASSERTFAIL
-
-	#define LOG_CHANNEL RJD_LOG_CHANNEL
-	#define LOG RJD_LOG
-	#define log_resetglobal rjd_log_resetglobal
-
-	#define UNUSED_PARAM RJD_UNUSED_PARAM
-#endif
-
 extern const struct rjd_logchannel* g_rjd_global_logchannel;
 
-#ifdef RJD_IMPL
+#if RJD_IMPL
 
 const struct rjd_logchannel rjd_global_logchannel = {
 	.verbosity = RJD_LOG_VERBOSITY_MED,
@@ -298,7 +276,7 @@ static inline bool rjd_result_isok(struct rjd_result result) {
 
 #pragma once
 
-#define RJD_ENUM 1
+#define RJD_ENUM_H 1
 
 // TODO support RJD_ENABLE_ENUM_TYPEDEF
 
@@ -411,14 +389,6 @@ static inline bool rjd_result_isok(struct rjd_result result) {
 		macrolist(RJD_ENUM_IMPL_WITH_STRING_ITEM)									\
 	}
 
-#ifdef RJD_ENABLE_SHORTNAMES
-	#define	ENUM_DECLARE	RJD_ENUM_DECLARE 
-	#define ENUM_DEFINE		RJD_ENUM_DEFINE
-
-	#define	ENUM_DECLARE_WITH_STRINGS	RJD_ENUM_DECLARE_WITH_STRINGS
-	#define ENUM_DEFINE_WITH_STRINGS	RJD_ENUM_DEFINE_WITH_STRINGS
-#endif
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // rjd_hash.h
@@ -426,7 +396,7 @@ static inline bool rjd_result_isok(struct rjd_result result) {
 
 #pragma once
 
-#define RJD_HASH
+#define RJD_HASH_H 1
 
 typedef struct {
 	uint32_t value;
@@ -441,13 +411,6 @@ rjd_hash32 rjd_hash32_data(const uint8_t* key, int length);
 rjd_hash64 rjd_hash64_data(const uint8_t* key, int length);
 bool rjd_hash32_valid(rjd_hash32 hash);
 bool rjd_hash64_valid(rjd_hash64 hash);
-
-#if RJD_ENABLE_SHORTNAMES
-	#define hash32		rjd_hash32
-	#define hash64		rjd_hash64
-	#define hash32_data	rjd_hash32_data
-	#define hash64_data	rjd_hash64_data
-#endif
 
 #if RJD_IMPL
 
@@ -533,126 +496,236 @@ bool rjd_hash64_valid(rjd_hash64 hash)
 
 #pragma once
 
-#define RJD_MEM 1
+#define RJD_MEM_H 1
+
+struct rjd_mem_allocator_stats
+{
+	uint32_t total_size;
+	struct {
+		uint32_t used;
+		uint32_t overhead;
+		uint32_t peak;
+		uint32_t unused;
+		uint32_t allocs;
+		uint32_t frees;
+	} current;
+	struct {
+		uint32_t peak;
+		uint32_t allocs;
+		uint32_t frees;
+		uint32_t resets;
+	} lifetime;
+};
 
 // TODO realloc
-typedef void* (*rjd_mem_allocfunc)(size_t size);
-typedef void* (*rjd_mem_allocfunc_scoped)(size_t size, void* allocator);
-
-typedef void (*rjd_mem_freefunc)(void* memory);
-typedef void (*rjd_mem_freefunc_scoped)(void* memory, void* heap);
+typedef const char* (*rjd_mem_allocator_type_func)(void);
+typedef void* (*rjd_mem_allocator_alloc_func)(size_t size, void* optional_heap);
+typedef void (*rjd_mem_allocator_free_func)(void* memory);
+typedef void (*rjd_mem_allocator_reset_func)(void* optional_heap);
 
 struct rjd_mem_allocator
 {
-	rjd_mem_allocfunc alloc_global;
-	rjd_mem_freefunc free_global;
-	
-	rjd_mem_allocfunc_scoped alloc_scoped;
-	rjd_mem_freefunc_scoped free_scoped;
-	void* scope;
+	rjd_mem_allocator_type_func type_func; // must return a static string
+	rjd_mem_allocator_alloc_func alloc_func;
+	rjd_mem_allocator_free_func free_func;
+	rjd_mem_allocator_reset_func reset_func; // optional
+	void* optional_heap;
+
+	struct rjd_mem_allocator_stats stats;
 
 	uint32_t debug_sentinel;
 };
 
-struct rjd_mem_allocator rjd_mem_allocator_initdefault(void);
-struct rjd_mem_allocator rjd_mem_allocator_initglobal(rjd_mem_allocfunc a, rjd_mem_freefunc f);
-struct rjd_mem_allocator rjd_mem_allocator_initscoped(rjd_mem_allocfunc_scoped a, rjd_mem_freefunc_scoped f, void* allocator);
-struct rjd_mem_allocator rjd_mem_allocator_initlinear(void* mem, size_t heapsize);
-void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator);
+struct rjd_mem_allocator rjd_mem_allocator_init_default(void);
+struct rjd_mem_allocator rjd_mem_allocator_init_linear(void* memblock, size_t size);
+
+const char* rjd_mem_allocator_type(struct rjd_mem_allocator* allocator);
+bool rjd_mem_allocator_reset(struct rjd_mem_allocator* allocator);
+struct rjd_mem_allocator_stats rjd_mem_allocator_getstats(const struct rjd_mem_allocator* allocator);
+
 void rjd_mem_free(const void* mem);
 void rjd_mem_swap(void* restrict mem1, void* restrict mem2, size_t size);
 
-#define rjd_mem_alloc(type, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type), allocator))
-#define rjd_mem_alloc_array(type, count, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator))
+#define rjd_mem_alloc(type, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type), (allocator), 8))
+#define rjd_mem_alloc_aligned(type, allocator, alignment) ((type*)rjd_mem_alloc_impl(sizeof(type), allocator, alignment))
+#define rjd_mem_alloc_array(type, count, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, 8))
+#define rjd_mem_alloc_array_aligned(type, count, allocator, alignment) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, alignment))
 
 #define RJD_MEM_ISALIGNED(p, align) (((uintptr_t)(p) & ((align)-1)) == 0)
-#define RJD_MEM_ALIGNSIZE(size, align) ((size) + (RJD_MEM_ISALIGNED(size, align) ? 0 : ((align) - ((size) & ((align)-1)))))
+#define RJD_MEM_ALIGN(size, align) ((size) + (RJD_MEM_ISALIGNED(size, align) ? 0 : ((align) - ((size) & ((align)-1)))))
 
-#if RJD_ENABLE_SHORTNAMES
-	#define mem_allocator_initdefault   	rjd_mem_allocator_initdefault
-	#define mem_allocator_initglobal    	rjd_mem_allocator_initglobal
-	#define mem_allocator_initscoped    	rjd_mem_allocator_initscoped
-	#define mem_allocator_initlinear		rjd_mem_allocator_initlinear
-	#define mem_alloc						rjd_mem_alloc
-	#define mem_alloc_array					rjd_mem_alloc_array
-	#define mem_free						rjd_mem_free
-	#define mem_swap						rjd_mem_swap
+void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint32_t alignment);
 
-	#define MEM_ISALIGNED 					RJD_MEM_ISALIGNED
-	#define MEM_ALIGNSIZE					RJD_MEM_ALIGNSIZE
-#endif
+////////////////////////////////////////////////////////////////////////////////
 
-#ifdef RJD_IMPL
+#if RJD_IMPL
 
 struct rjd_mem_heap_linear
 {
 	void* base;
 	void* next;
 	size_t size;
+	uint32_t debug_sentinel;
 };
 
-static struct rjd_mem_heap_linear rjd_mem_linear_init(void* mem, size_t size);
-static void* rjd_mem_linear_alloc(size_t size, void* heap);
-static void rjd_mem_free_scoped_noop(void* mem, void* heap);
-
-#if RJD_COMPILER_MSVC
-	static void* rjd_mem_alloc_global_wrapper(size_t size);
-	static void rjd_mem_free_global_wrapper(void* mem);
-#endif
-
-#define RJD_MEM_DEBUG_SENTINEL32 (0xA7A7A7A7u)
-#define RJD_MEM_DEBUG_SENTINEL64 (0xA7A7A7A7A7A7A7A7ull)
-
-struct rjd_mem_allocator rjd_mem_allocator_initglobal(rjd_mem_allocfunc a, rjd_mem_freefunc f)
+struct rjd_mem_allocation_header
 {
-	struct rjd_mem_allocator allocator = { a, f, NULL, NULL, NULL, RJD_MEM_DEBUG_SENTINEL32 };
+	struct rjd_mem_allocator* allocator;
+	uint8_t offset_to_block_begin_from_user;
+	uint32_t total_blocksize;
+	uint32_t debug_sentinel;
+};
+
+static const char* rjd_mem_allocator_global_type(void);
+static void* rjd_mem_allocator_global_alloc(size_t size, void* heap);
+static void rjd_mem_allocator_global_free(void* mem);
+
+static const char* rjd_mem_allocator_linear_type(void);
+static void* rjd_mem_allocator_linear_alloc(size_t size, void* heap);
+static void rjd_mem_allocator_linear_reset(void* heap);
+
+const uint32_t RJD_MEM_DEBUG_DEFAULT_SENTINEL32 = 0xA7A7A7A7u;
+const uint32_t RJD_MEM_DEBUG_LINEAR_SENTINEL32 = 0xA8A8A8A8u;
+const uint32_t RJD_MEM_STATS_UNKNOWN_UPPERBOUND = UINT32_MAX;
+
+struct rjd_mem_allocator rjd_mem_allocator_init_default()
+{
+	struct rjd_mem_allocator allocator = {
+		.type_func = rjd_mem_allocator_global_type,
+		.alloc_func = NULL,
+		.free_func = NULL,
+		.reset_func = NULL,
+		.optional_heap = NULL,
+		.stats = {
+			.total_size = RJD_MEM_STATS_UNKNOWN_UPPERBOUND,
+			.current = {
+				.unused = RJD_MEM_STATS_UNKNOWN_UPPERBOUND,
+			},
+		},
+		.debug_sentinel = RJD_MEM_DEBUG_DEFAULT_SENTINEL32,
+	};
+
+	// MSVC has a slightly different signature for malloc/free so to avoid platform-specific
+	// code, we just wrap them for all platforms here
+	allocator.alloc_func = rjd_mem_allocator_global_alloc;
+	allocator.free_func = rjd_mem_allocator_global_free;
+
 	return allocator;
 }
 
-struct rjd_mem_allocator rjd_mem_allocator_initscoped(rjd_mem_allocfunc_scoped a, rjd_mem_freefunc_scoped f, void* heap)
+struct rjd_mem_allocator rjd_mem_allocator_init_linear(void* memblock, size_t size)
 {
-	struct rjd_mem_allocator allocator = { NULL, NULL, a, f, heap, RJD_MEM_DEBUG_SENTINEL32 };
+	RJD_ASSERT(memblock);
+
+	struct rjd_mem_heap_linear* heap = (struct rjd_mem_heap_linear*)RJD_MEM_ALIGN((uintptr_t)memblock, 64);
+	uint32_t usable_size = 0;
+	{
+		char* usable_memory_start = (char*)RJD_MEM_ALIGN((uintptr_t)heap + sizeof(struct rjd_mem_heap_linear), 64);
+		char* usable_memory_end = (char*)memblock + size;
+		RJD_ASSERTMSG(usable_memory_start < usable_memory_end, 
+			"Given size was not large enough to make a heap. You need at least 128 bytes...");
+
+		usable_size = (uint32_t)(usable_memory_end - usable_memory_start);
+
+		struct rjd_mem_heap_linear copy = { 
+			.base = usable_memory_start, 
+			.next = usable_memory_start, 
+			.size = usable_size, 
+			.debug_sentinel = RJD_MEM_DEBUG_LINEAR_SENTINEL32 
+		};
+		*heap = copy;
+	}
+
+	struct rjd_mem_allocator allocator = {
+		.type_func = rjd_mem_allocator_linear_type,
+		.alloc_func = rjd_mem_allocator_linear_alloc,
+		.free_func = NULL,
+		.reset_func = rjd_mem_allocator_linear_reset,
+		.optional_heap = heap,
+		.stats = {
+			.total_size = usable_size,
+			.current = {
+				.unused = usable_size,
+			},
+		},
+		.debug_sentinel = RJD_MEM_DEBUG_LINEAR_SENTINEL32,
+	};
+
 	return allocator;
 }
 
-struct rjd_mem_allocator rjd_mem_allocator_initdefault()
+const char* rjd_mem_allocator_type(struct rjd_mem_allocator* allocator)
 {
-	#if RJD_COMPILER_MSVC
-		return rjd_mem_allocator_initglobal(rjd_mem_alloc_global_wrapper, rjd_mem_free_global_wrapper);
-	#else
-		return rjd_mem_allocator_initglobal(malloc, free);
-	#endif
+	RJD_ASSERT(allocator);
+	return allocator->type_func();
 }
 
-struct rjd_mem_allocator rjd_mem_allocator_initlinear(void* mem, size_t heapsize)
+bool rjd_mem_allocator_reset(struct rjd_mem_allocator* allocator)
 {
-	char* bytes = (char*)mem;
-	const size_t structsize = sizeof(struct rjd_mem_heap_linear);
-	struct rjd_mem_heap_linear* heap = (struct rjd_mem_heap_linear*)bytes + heapsize - structsize;
-	*heap = rjd_mem_linear_init(mem, heapsize - structsize);
+	RJD_ASSERT(allocator);
 
-	return rjd_mem_allocator_initscoped(rjd_mem_linear_alloc, rjd_mem_free_scoped_noop, heap);
+	allocator->stats.current.used = 0;
+	allocator->stats.current.overhead = 0;
+	allocator->stats.current.peak = 0;
+	allocator->stats.current.unused = allocator->stats.total_size;
+	allocator->stats.current.allocs = 0;
+	allocator->stats.current.frees = 0;
+	++allocator->stats.lifetime.resets;
+
+	if (allocator->reset_func) {
+		allocator->reset_func(allocator->optional_heap);
+
+		return true;
+	}
+	return false;
 }
 
-void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator)
+struct rjd_mem_allocator_stats rjd_mem_allocator_getstats(const struct rjd_mem_allocator* allocator)
 {
-	const size_t aligned_size = RJD_MEM_ALIGNSIZE(sizeof(struct rjd_mem_allocator), 16);
-	if (size == 0) {
-		size = 4;
+	RJD_ASSERT(allocator);
+	return allocator->stats;
+}
+
+void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint32_t alignment)
+{
+	RJD_ASSERT(allocator);
+    RJD_ASSERT(size >= 0)
+	RJD_ASSERT(alignment >= 8);
+
+	const uint32_t header_size = sizeof(struct rjd_mem_allocation_header);
+    const uint32_t alignment_padding = alignment * 2;
+	const uint32_t total_size = (uint32_t)size + header_size + alignment_padding;
+    
+   	char* raw = allocator->alloc_func(total_size, allocator->optional_heap);
+	if (raw == NULL) {
+		return raw;
 	}
 
-	void* mem = NULL;
-	if (allocator->alloc_global) {
-		mem = allocator->alloc_global(size + aligned_size);
-	} else {
-		mem = allocator->alloc_scoped(size + aligned_size, allocator->scope);
+	uintptr_t aligned_user = RJD_MEM_ALIGN((uintptr_t)raw + alignment + header_size, alignment);
+
+	struct rjd_mem_allocation_header* header = (void*)(aligned_user - header_size);
+	header->allocator = allocator;
+	header->total_blocksize = (uint32_t)total_size;
+	header->offset_to_block_begin_from_user = aligned_user - (uintptr_t)raw;
+	header->debug_sentinel = allocator->debug_sentinel;
+
+	{
+		uint32_t* current_used = &allocator->stats.current.used;
+		uint32_t* current_peak = &allocator->stats.current.peak;
+		uint32_t* lifetime_peak = &allocator->stats.lifetime.peak;
+		*current_used += total_size;
+		allocator->stats.current.overhead += total_size - size;
+		*current_peak = (*current_peak < *current_used) ? *current_used : *current_peak;
+		*lifetime_peak = (*lifetime_peak < *current_used) ? *current_used : *lifetime_peak;
+		if (allocator->stats.current.unused != RJD_MEM_STATS_UNKNOWN_UPPERBOUND) {
+			RJD_ASSERT(allocator->stats.current.unused >= total_size);
+			allocator->stats.current.unused -= total_size;
+		}
+		++allocator->stats.current.allocs;
+		++allocator->stats.lifetime.allocs;
 	}
 
-	struct rjd_mem_allocator** ptr = mem;
-	*ptr = allocator;
-
-	char* raw = mem;
-	return (void*)(raw + aligned_size);
+	return (void*)aligned_user;
 }
 
 void rjd_mem_free(const void* mem)
@@ -661,46 +734,71 @@ void rjd_mem_free(const void* mem)
 		return;
 	}
 
-	const size_t aligned_size = RJD_MEM_ALIGNSIZE(sizeof(struct rjd_mem_allocator), 16);
-
 	char* raw = (void*)mem;
-	char* begin = raw - aligned_size;
-	struct rjd_mem_allocator** ptr = (struct rjd_mem_allocator**)begin;
-	struct rjd_mem_allocator* allocator = *ptr;
-	RJD_ASSERTMSG(allocator->debug_sentinel == RJD_MEM_DEBUG_SENTINEL32, "This memory was not allocated with rjd_mem_alloc.");
+	struct rjd_mem_allocation_header* header = (void*)(raw - sizeof(struct rjd_mem_allocation_header));
+	struct rjd_mem_allocator* allocator = header->allocator;
 
-	if (allocator->free_global) {
-		allocator->free_global(begin);
-	} else {
-		allocator->free_scoped(begin, allocator->scope);
+	RJD_ASSERTMSG(header->debug_sentinel == allocator->debug_sentinel, "This memory was not allocated with rjd_mem_alloc.");
+
+	if (allocator->free_func) {
+		RJD_ASSERT(allocator->stats.current.used >= header->total_blocksize);
+		allocator->stats.current.used -= header->total_blocksize;
+		if (allocator->stats.current.unused != RJD_MEM_STATS_UNKNOWN_UPPERBOUND) {
+			allocator->stats.current.unused += header->total_blocksize;
+		}
+		++allocator->stats.current.frees;
+		++allocator->stats.lifetime.frees;
+        
+        char* begin = raw - header->offset_to_block_begin_from_user;
+        allocator->free_func(begin);
 	}
 }
 
 void rjd_mem_swap(void* restrict mem1, void* restrict mem2, size_t size)
 {
 	uint8_t tmp[1024];
-	RJD_ASSERTMSG(size < sizeof(tmp), "Increase size of static tmp buffer to at least %z", size);
+	RJD_ASSERTMSG(size < (uint32_t)sizeof(tmp), "Increase size of static buffer to at least %u", size);
 
 	memcpy(tmp, mem1, size);
 	memcpy(mem1, mem2, size);
 	memcpy(mem2, tmp, size);
 }
 
-static struct rjd_mem_heap_linear rjd_mem_linear_init(void* mem, size_t size)
+////////////////////////////////////////////////////////////////////////////////
+// local helper definitions
+
+const char* rjd_mem_allocator_global_type(void)
 {
-	struct rjd_mem_heap_linear heap = { mem, mem, size };
-	return heap;
+	return "rjd_global";
 }
 
-static void* rjd_mem_linear_alloc(size_t size, void* userheap)
+void* rjd_mem_allocator_global_alloc(size_t size, void* unused_heap)
 {
+	RJD_UNUSED_PARAM(unused_heap);
+
+	return malloc(size);
+}
+
+void rjd_mem_allocator_global_free(void* mem)
+{
+	free(mem);
+}
+
+const char* rjd_mem_allocator_linear_type(void)
+{
+	return "rjd_linear";
+}
+
+void* rjd_mem_allocator_linear_alloc(size_t size, void* optional_heap)
+{
+	struct rjd_mem_heap_linear* heap = (struct rjd_mem_heap_linear*)optional_heap;
+	RJD_ASSERT(heap->debug_sentinel == RJD_MEM_DEBUG_LINEAR_SENTINEL32);
+
 	size_t align_diff = size % 8;
 	if (align_diff != 0) {
 		size += align_diff;
 	}
 
-	struct rjd_mem_heap_linear* heap = (struct rjd_mem_heap_linear*)userheap;
-	
 	if ((char*)heap->next + size <= (char*)heap->base + heap->size) 
 	{
 		void* mem = (char*)heap->next;
@@ -712,23 +810,13 @@ static void* rjd_mem_linear_alloc(size_t size, void* userheap)
 	return NULL;
 }
 
-static void rjd_mem_free_scoped_noop(void* mem, void* heap)
+void rjd_mem_allocator_linear_reset(void* optional_heap)
 {
-	RJD_UNUSED_PARAM(mem);
-	RJD_UNUSED_PARAM(heap);
-}
+	struct rjd_mem_heap_linear* heap = (struct rjd_mem_heap_linear*)optional_heap;
+	RJD_ASSERT(heap->debug_sentinel == RJD_MEM_DEBUG_LINEAR_SENTINEL32);
 
-#if RJD_COMPILER_MSVC
-	static void* rjd_mem_alloc_global_wrapper(size_t size)
-	{
-		return malloc(size);
-	}
-	
-	static void rjd_mem_free_global_wrapper(void* mem)
-	{
-		free(mem);
-	}
-#endif
+	heap->next = heap->base;
+}
 
 #endif // RJD_IMPL
 
@@ -739,7 +827,7 @@ static void rjd_mem_free_scoped_noop(void* mem, void* heap)
 
 #pragma once
 
-#define RJD_RNG 1
+#define RJD_RNG_H 1
 
 struct rjd_rng
 {
@@ -751,13 +839,6 @@ struct rjd_rng rjd_rng_init(uint64_t seed);
 uint64_t rjd_rng_next(struct rjd_rng* rng);
 double rjd_rng_float(struct rjd_rng* rng);
 int32_t rjd_rng_range32(struct rjd_rng* rng, int32_t min_inclusive, int32_t max_exclusive);
-
-#if RJD_ENABLE_SHORTNAMES
-	#define rng_init	rjd_rng_init
-	#define rng_next	rjd_rng_next
-	#define rng_float	rjd_rng_float
-	#define rng_range32 rjd_rng_range32
-#endif
 
 #if RJD_IMPL
 
@@ -805,7 +886,7 @@ int32_t rjd_rng_range32(struct rjd_rng* rng, int32_t min_inclusive, int32_t max_
 
 #pragma once
 
-#define RJD_ARRAY 1
+#define RJD_ARRAY_H 1
 
 struct rjd_mem_allocator;
 
@@ -849,37 +930,6 @@ struct rjd_mem_allocator;
 #define rjd_array_sample(buf, rng)		((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
 #define rjd_array_shuffle(buf, rng)		rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
 
-#if RJD_ENABLE_SHORTNAMES
-	#define countof					rjd_countof
-
-	#define array_alloc    			rjd_array_alloc
-	#define array_free    			rjd_array_free
-	#define array_capacity 			rjd_array_capacity
-	#define array_count    			rjd_array_count
-	#define array_clear				rjd_array_clear
-	#define array_reserve			rjd_array_reserve
-	#define array_resize   			rjd_array_resize
-	#define array_trim				rjd_array_trim
-	#define array_erase    			rjd_array_erase
-	#define array_erase_unordered	rjd_array_erase_unordered
-	#define array_empty    			rjd_array_empty
-	#define array_full     			rjd_array_full
-	#define array_push     			rjd_array_push
-	#define array_pop      			rjd_array_pop
-
-	#define array_first				rjd_array_first
-	#define array_last				rjd_array_last
-	#define array_contains			rjd_array_contains
-	#define array_filter			rjd_array_filter
-	#define array_map				rjd_array_map
-	#define	array_reduce			rjd_array_reduce
-	#define array_sum				rjd_array_sum
-	#define array_reverse			rjd_array_reverse
-
-	#define array_sample			rjd_array_sample
-	#define array_shuffle			rjd_array_shuffle
-#endif
-
 struct rjd_rng;
 
 void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocator, size_t sizeof_type);
@@ -908,6 +958,8 @@ struct rjd_array_header
 	uint32_t debug_sentinel;
 };
 
+const uint32_t RJD_ARRAY_DEBUG_SENTINEL32 = 0xA7A7A7A7;
+
 static struct rjd_array_header* rjd_array_getheader(void* array);
 static struct rjd_mem_allocator* rjd_array_allocator(void* array);
 static inline void rjd_array_validate(const void* array);
@@ -925,7 +977,7 @@ void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocato
 	header->allocator = allocator;
 	header->capacity = capacity;
 	header->count = 0;
-	header->debug_sentinel = RJD_MEM_DEBUG_SENTINEL32; 
+	header->debug_sentinel = RJD_ARRAY_DEBUG_SENTINEL32; 
 
 	char* buf = raw + sizeof(struct rjd_array_header);
 	return buf;
@@ -1180,7 +1232,7 @@ static inline void rjd_array_validate(const void* array)
 	RJD_ASSERT(array);
 	const char* raw = array;
 	const struct rjd_array_header* header = (struct rjd_array_header*)(raw - sizeof(struct rjd_array_header));
-	RJD_ASSERTMSG(header->debug_sentinel == RJD_MEM_DEBUG_SENTINEL32, 
+	RJD_ASSERTMSG(header->debug_sentinel == RJD_ARRAY_DEBUG_SENTINEL32, 
 		"Debug sentinel was either corrupted by an underrun or this is not an rjd_array.");
 	RJD_UNUSED_PARAM(header);
 }
@@ -1194,7 +1246,7 @@ static inline void rjd_array_validate(const void* array)
 
 #pragma once
 
-#define RJD_MATH 1
+#define RJD_MATH_H 1
 
 #define RJD_MATH_PI (3.141592653589793238462643f)
 #define RJD_MATH_EPSILON (0.000001)
@@ -1446,122 +1498,6 @@ static inline rjd_math_mat4 rjd_math_mat4_perspective(float y_fov, float aspect,
 static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
 static inline float*		rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out);
 static inline float*		rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
-
-#ifdef RJD_ENABLE_SHORTNAMES
-	#define PI		RJD_MATH_PI
-	#define EPSILON	RJD_MATH_EPSILON
-
-	#define next_pow2	rjd_math_next_pow2
-	#define pow32		rjd_math_pow32
-	#define sign		rjd_math_sign
-	#define signf		rjd_math_signf
-	#define sign32		rjd_math_sign32
-	#define isequal		rjd_math_isequal
-	#define isequalf	rjd_math_isequalf
-	#define remap		rjd_math_remap
-	#define remapf		rjd_math_remapf
-
-	#define min32		rjd_math_min32
-	#define min64		rjd_math_min64
-	#define minu32		rjd_math_minu32
-	#define minu64		rjd_math_minu64
-	#define max32		rjd_math_max32
-	#define max64		rjd_math_max64
-	#define maxu32		rjd_math_maxu32
-	#define maxu64		rjd_math_maxu64
-
-	#define clamp		rjd_math_clamp
-	#define clampf		rjd_math_clampf
-	#define clamp32		rjd_math_clamp32
-	#define clamp64		rjd_math_clamp64
-	#define clampu32	rjd_math_clampu32
-	#define clampu64	rjd_math_clampu64
-
-	#define vec4 			rjd_math_vec4
-	#define vec4_shuffle	rjd_math_vec4_shuffle
-	#define vec4_zero     	rjd_math_vec4_zero
-	#define vec4_xyzw     	rjd_math_vec4_xyzw
-	#define vec4_splat    	rjd_math_vec4_splat
-	#define vec4_one      	rjd_math_vec4_one
-	#define vec4_setx     	rjd_math_vec4_setx
-	#define vec4_sety     	rjd_math_vec4_sety
-	#define vec4_setz     	rjd_math_vec4_setz
-	#define vec4_setw     	rjd_math_vec4_setw
-	#define vec4_x        	rjd_math_vec4_x
-	#define vec4_y        	rjd_math_vec4_y
-	#define vec4_z        	rjd_math_vec4_z
-	#define vec4_w        	rjd_math_vec4_w
-	#define vec4_sum      	rjd_math_vec4_sum
-	#define vec4_dot      	rjd_math_vec4_dot
-	#define vec4_lengthsq 	rjd_math_vec4_lengthsq
-	#define vec4_length   	rjd_math_vec4_length
-	#define vec4_i			rjd_math_vec4_i
-	#define vec4_hmin		rjd_math_vec4_hmin
-	#define vec4_hmax		rjd_math_vec4_hmax
-	#define vec4_normalize	rjd_math_vec4_normalize
-	#define vec4_scale    	rjd_math_vec4_scale
-	#define vec4_neg		rjd_math_vec4_neg
-	#define vec4_add      	rjd_math_vec4_add
-	#define vec4_sub      	rjd_math_vec4_sub
-	#define vec4_mul      	rjd_math_vec4_mul
-	#define vec4_div      	rjd_math_vec4_div
-	#define vec4_min      	rjd_math_vec4_min
-	#define vec4_max      	rjd_math_vec4_max
-	#define vec4_project  	rjd_math_vec4_project
-	#define vec4_lerp     	rjd_math_vec4_lerp
-	#define vec4_eq       	rjd_math_vec4_eq
-	#define vec4_ge			rjd_math_vec4_ge
-	#define vec4_write		rjd_math_vec4_write
-
-	#define vec3			rjd_math_vec3
-	#define vec3_shuffle  	rjd_math_vec3_shuffle
-	#define vec3_zero     	rjd_math_vec3_zero
-	#define vec3_xyz      	rjd_math_vec3_xyz
-	#define vec3_splat    	rjd_math_vec3_splat
-	#define vec3_one      	rjd_math_vec3_one
-	#define vec3_up       	rjd_math_vec3_up
-	#define vec3_down     	rjd_math_vec3_down
-	#define vec3_left     	rjd_math_vec3_left
-	#define vec3_right    	rjd_math_vec3_right
-	#define vec3_forward  	rjd_math_vec3_forward
-	#define vec3_back     	rjd_math_vec3_back
-	#define vec3_yzx      	rjd_math_vec3_yzx
-	#define vec3_zxy      	rjd_math_vec3_zxy
-	#define vec3_setx     	rjd_math_vec3_setx
-	#define vec3_sety     	rjd_math_vec3_sety
-	#define vec3_setz     	rjd_math_vec3_setz
-	#define vec3_x        	rjd_math_vec3_x
-	#define vec3_y        	rjd_math_vec3_y
-	#define vec3_z        	rjd_math_vec3_z
-	#define vec3_sum      	rjd_math_vec3_sum
-	#define vec3_dot      	rjd_math_vec3_dot
-	#define vec3_angle    	rjd_math_vec3_angle
-	#define vec3_lengthsq 	rjd_math_vec3_lengthsq
-	#define vec3_length   	rjd_math_vec3_length
-	#define vec3_hmin		rjd_math_vec3_hmin
-	#define vec3_hmax		rjd_math_vec3_hmax
-	#define vec3_normalize	rjd_math_vec3_normalize
-	#define vec3_scale    	rjd_math_vec3_scale
-	#define vec3_neg    	rjd_math_vec3_neg
-	#define vec3_add      	rjd_math_vec3_add
-	#define vec3_sub      	rjd_math_vec3_sub
-	#define vec3_mul      	rjd_math_vec3_mul
-	#define vec3_div      	rjd_math_vec3_div
-	#define vec3_cross    	rjd_math_vec3_cross
-	#define vec3_min      	rjd_math_vec3_min
-	#define vec3_max      	rjd_math_vec3_max
-	#define vec3_project  	rjd_math_vec3_project
-	#define vec3_reflect  	rjd_math_vec3_reflect
-	#define vec3_lerp     	rjd_math_vec3_lerp
-	#define vec3_eq       	rjd_math_vec3_eq
-	#define vec3_ge       	rjd_math_vec3_ge
-	#define vec3_write		rjd_math_vec3_write
-	#define vec3_writefast	rjd_math_vec3_writefast
-
-	#define float2			rjd_math_float2
-	#define float3			rjd_math_float3
-	#define float4 			rjd_math_float4
-#endif
 
 // implementation
 
@@ -2086,7 +2022,7 @@ static inline rjd_math_mat4 rjd_math_mat4_scaling_nonuniform(rjd_math_vec3 scale
 	return m;
 }
 static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) {
-	rjd_math_mat4 m;
+    rjd_math_mat4 m = {0};
 	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
 		m.m[i] = rjd_math_vec4_add(a.m[i], b.m[i]);
 	}
@@ -2094,7 +2030,7 @@ static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) 
 }
 static inline rjd_math_mat4 rjd_math_mat4_mul(rjd_math_mat4 a, rjd_math_mat4 b) {
 	rjd_math_mat4 t = rjd_math_mat4_transpose(a);
-	rjd_math_mat4 m;
+    rjd_math_mat4 m = {0};
 	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
 		m.m[i] = rjd_math_mat4_mulv4(t, b.m[i]);
 	}
@@ -2273,7 +2209,7 @@ static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
 
 	rjd_math_vec4 det_reciprocal = {_mm_rcp_ps(det.v)};
 
-	rjd_math_mat4 out;
+    rjd_math_mat4 out = {0};
 	for (size_t i = 0; i < rjd_countof(out.m); ++i) {
 		out.m[i] = rjd_math_vec4_mul(det_reciprocal, inv.m[i]);
 	}
@@ -2340,6 +2276,8 @@ static inline float* rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out) {
 
 #pragma once
 
+#define RJD_GEO_H 1
+
 typedef struct {
 	rjd_math_vec4 minmax; // xy is the min, zw is the max
 } rjd_geo_rect;
@@ -2382,35 +2320,6 @@ bool rjd_geo_ray_point(rjd_geo_ray r, rjd_math_vec3 p, float* t_out);
 bool rjd_geo_ray_sphere(rjd_geo_ray r, rjd_geo_sphere s, float* t_out);
 bool rjd_geo_ray_box(rjd_geo_ray r, rjd_geo_box b, float* t_out);
 bool rjd_geo_ray_boxfast(rjd_math_vec3 ray_pos, rjd_math_vec3 ray_inv_dir, rjd_geo_box b, float* t_out);
-
-#if RJD_ENABLE_SHORTNAMES
-	#define rect	rjd_geo_rect
-	#define circle	rjd_geo_circle
-	#define box		rjd_geo_box
-	#define sphere	rjd_geo_sphere
-	#define ray		rjd_geo_ray
-
-	#define rect_minmax        	rjd_geo_rect_minmax
-	#define circle_xyr         	rjd_geo_circle_xyr
-	#define box_minmax         	rjd_geo_box_minmax
-	#define sphere_xyzr        	rjd_geo_sphere_xyzr
-	#define ray_pd             	rjd_geo_ray_pd
-	
-	#define point_rect         	rjd_geo_point_rect
-	#define point_box          	rjd_geo_point_box
-	#define point_circle       	rjd_geo_point_circle
-	#define point_sphere       	rjd_geo_point_sphere
-	#define circle_circle      	rjd_geo_circle_circle
-	#define circle_rect        	rjd_geo_circle_rect
-	#define rect_rect          	rjd_geo_rect_rect
-	#define sphere_sphere      	rjd_geo_sphere_sphere
-	#define sphere_box         	rjd_geo_sphere_box
-	#define box_box            	rjd_geo_box_box
-	#define ray_point          	rjd_geo_ray_point
-	#define ray_sphere         	rjd_geo_ray_sphere
-	#define ray_box            	rjd_geo_ray_box
-	#define ray_boxfast			rjd_geo_ray_boxfast
-#endif
 
 #if RJD_IMPL
 
@@ -2577,7 +2486,7 @@ bool rjd_geo_ray_boxfast(rjd_math_vec3 ray_pos, rjd_math_vec3 ray_inv_dir, rjd_g
 
 #pragma once
 
-#define RJD_EASING
+#define RJD_EASING_H 1
 
 enum rjd_ease_type
 {
@@ -2638,61 +2547,6 @@ static inline float rjd_ease_inout_circ(float t);
 static inline float rjd_ease_inout_back(float t);
 static inline float rjd_ease_inout_elas(float t);
 static inline float rjd_ease_inout_boun(float t);
-
-#ifdef RJD_ENABLE_SHORTNAMES
-	#define ease            rjd_ease
-	#define ease_func		rjd_ease_func
-	#define ease_between	rjd_ease_between
-	#define ease_line       rjd_ease_line
-	#define ease_in_sine    rjd_ease_in_sine
-	#define ease_in_quad    rjd_ease_in_quad
-	#define ease_in_cube    rjd_ease_in_cube
-	#define ease_in_quar    rjd_ease_in_quar
-	#define ease_in_quin    rjd_ease_in_quin
-	#define ease_in_expo    rjd_ease_in_expo
-	#define ease_in_circ    rjd_ease_in_circ
-	#define ease_in_back    rjd_ease_in_back
-	#define ease_in_elas    rjd_ease_in_elas
-	#define ease_in_boun    rjd_ease_in_boun
-	#define ease_out_sine   rjd_ease_out_sine
-	#define ease_out_quad   rjd_ease_out_quad
-	#define ease_out_cube   rjd_ease_out_cube
-	#define ease_out_quar   rjd_ease_out_quar
-	#define ease_out_quin   rjd_ease_out_quin
-	#define ease_out_expo   rjd_ease_out_expo
-	#define ease_out_circ   rjd_ease_out_circ
-	#define ease_out_back   rjd_ease_out_back
-	#define ease_out_elas   rjd_ease_out_elas
-	#define ease_out_boun   rjd_ease_out_boun
-	#define ease_inout_sine rjd_ease_inout_sine
-	#define ease_inout_quad rjd_ease_inout_quad
-	#define ease_inout_cube rjd_ease_inout_cube
-	#define ease_inout_quar rjd_ease_inout_quar
-	#define ease_inout_quin rjd_ease_inout_quin
-	#define ease_inout_expo rjd_ease_inout_expo
-	#define ease_inout_circ rjd_ease_inout_circ
-	#define ease_inout_back rjd_ease_inout_back
-	#define ease_inout_elas rjd_ease_inout_elas
-	#define ease_inout_boun rjd_ease_inout_boun
-
-	#define EASE_TYPE_LINE RJD_EASE_TYPE_LINE
-	#define EASE_TYPE_SINE RJD_EASE_TYPE_SINE
-	#define EASE_TYPE_CUBE RJD_EASE_TYPE_CUBE
-	#define EASE_TYPE_QUAD RJD_EASE_TYPE_QUAD
-	#define EASE_TYPE_QUAR RJD_EASE_TYPE_QUAR
-	#define EASE_TYPE_QUIN RJD_EASE_TYPE_QUIN
-	#define EASE_TYPE_EXPO RJD_EASE_TYPE_EXPO
-	#define EASE_TYPE_CIRC RJD_EASE_TYPE_CIRC
-	#define EASE_TYPE_BACK RJD_EASE_TYPE_BACK
-	#define EASE_TYPE_ELAS RJD_EASE_TYPE_ELAS
-	#define EASE_TYPE_BOUN RJD_EASE_TYPE_BOUN
-	#define EASE_TYPE_MAX  RJD_EASE_TYPE_MAX
-
-	#define EASE_DIR_INOUT RJD_EASE_DIR_INOUT
-	#define EASE_DIR_IN    RJD_EASE_DIR_IN
-	#define EASE_DIR_OUT   RJD_EASE_DIR_OUT
-	#define EASE_DIR_MAX   RJD_EASE_DIR_MAX
-#endif
 
 // impl
 
@@ -2914,7 +2768,7 @@ static inline float rjd_ease_inout_boun(float t) {
 
 #pragma once
 
-#define RJD_STRBUF 1
+#define RJD_STRBUF_H 1
 
 #ifndef RJD_STRBUF_STATIC_SIZE
 	#define RJD_STRBUF_STATIC_SIZE 512
@@ -2936,7 +2790,7 @@ struct rjd_strbuf rjd_strbuf_init(struct rjd_mem_allocator* allocator);
 uint32_t rjd_strbuf_length(const struct rjd_strbuf* buf);
 const char* rjd_strbuf_str(const struct rjd_strbuf* buf);
 void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...);
-void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_list args);
+void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, va_list args);
 void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* str, uint32_t length);
 void rjd_strbuf_free(struct rjd_strbuf* buf);
 
@@ -2946,13 +2800,6 @@ void rjd_strbuf_free(struct rjd_strbuf* buf);
 		{scope}														\
 		rjd_strbuf_free(&buffername);								\
 	}
-
-#if RJD_ENABLE_SHORTNAMES
-	#define strbuf_init		rjd_strbuf_init
-	#define strbuf_str		rjd_strbuf_str
-	#define strbuf_append	rjd_strbuf_append
-	#define strbuf_free		rjd_strbuf_free
-#endif
 
 #if RJD_IMPL
 
@@ -2989,7 +2836,7 @@ void rjd_strbuf_append(struct rjd_strbuf* buf, const char* format, ...)
 	va_end(args);
 }
 
-void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, const va_list args)
+void rjd_strbuf_appendv(struct rjd_strbuf* buf, const char* format, va_list args)
 {
 	RJD_ASSERT(buf);
 
@@ -3076,7 +2923,7 @@ static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 
 #pragma once
 
-#define RJD_PROFILER 1
+#define RJD_PROFILER_H 1
 
 struct rjd_timer
 {
@@ -3093,15 +2940,6 @@ double rjd_timer_global(void);
 		{scope}																\
 		RJD_LOG("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&_timer##name));	\
 	}
-
-#if RJD_ENABLE_SHORTNAMES
-	#define timer_init		rjd_timer_init
-	#define timer_reset		rjd_timer_reset
-	#define timer_elapsed	rjd_timer_elapsed
-	#define timer_global	rjd_timer_global
-
-	#define PROFILE_SCOPE	RJD_PROFILE_SCOPE
-#endif
 
 #if RJD_IMPL
 
@@ -3121,7 +2959,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 {
 	return rjd_timer_global() - timer->timestamp;
 }
-#ifdef RJD_PLATFORM_WINDOWS
+#if RJD_PLATFORM_WINDOWS
 	static double RJD_QPC_FREQUENCY = 0;
 	
 	double rjd_timer_global(void)
@@ -3143,7 +2981,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 
 		return (time.QuadPart * 1000LL) / RJD_QPC_FREQUENCY;
 	}
-#endif //_WIN32
+#endif //RJD_PLATFORM_WINDOWS
 
 #if RJD_PLATFORM_OSX
 	#include <mach/mach.h>
@@ -3173,7 +3011,7 @@ double rjd_timer_elapsed(const struct rjd_timer* timer)
 
 #pragma once
 
-#define RJD_CMD 1
+#define RJD_CMD_H 1
 
 struct rjd_mem_allocator;
 
@@ -3209,22 +3047,6 @@ unsigned rjd_cmd_uint(const struct rjd_cmd* cmd, const char* shortname, unsigned
 double rjd_cmd_float(const struct rjd_cmd* cmd, const char* shortname, double _default);
 bool rjd_cmd_bool(const struct rjd_cmd* cmd, const char* shortname);
 const char* rjd_cmd_str(const struct rjd_cmd* cmd, const char* shortname);
-
-#if RJD_ENABLE_SHORTNAMES
-	#define cmd_init	rjd_cmd_init
-	#define cmd_free	rjd_cmd_free
-	#define cmd_add_opt	rjd_cmd_add_opt
-	#define cmd_add_req	rjd_cmd_add_req
-	#define cmd_ok		rjd_cmd_ok
-	#define cmd_usage	rjd_cmd_usage
-	#define cmd_help	rjd_cmd_help
-
-	#define cmd_int		rjd_cmd_int
-	#define cmd_uint	rjd_cmd_uint
-	#define cmd_float	rjd_cmd_float
-	#define cmd_bool	rjd_cmd_bool
-	#define cmd_str		rjd_cmd_str
-#endif
 
 #if RJD_IMPL
 
@@ -3521,7 +3343,7 @@ static const char* rjd_cmd_findreq(const struct rjd_cmd* cmd, const char* argnam
 
 #pragma once
 
-#define RJD_DICT 1
+#define RJD_DICT_H 1
 
 struct rjd_mem_allocator;
 
@@ -3544,19 +3366,6 @@ static inline void rjd_dict_insert_hashstr(struct rjd_dict* dict, const char* ke
 static inline void* rjd_dict_erase_hashstr(struct rjd_dict* dict, const char* key);
 static inline void* rjd_dict_get_hashstr(const struct rjd_dict* dict, const char* key);
 static inline bool rjd_dict_has_hashstr(const struct rjd_dict* dict, const char* key);
-
-#if RJD_ENABLE_SHORTNAMES
-	#define dict_init	rjd_dict_init
-	#define dict_insert	rjd_dict_insert
-	#define dict_erase	rjd_dict_erase
-	#define dict_get	rjd_dict_get
-	#define dict_free	rjd_dict_free
-
-	#define	dict_insert_hashstr	rjd_dict_insert_hashstr
-	#define dict_erase_hashstr	rjd_dict_erase_hashstr
-	#define dict_get_hashstr	rjd_dict_get_hashstr
-	#define dict_has_hashstr	rjd_dict_has_hashstr
-#endif
 
 static inline void rjd_dict_insert_hashstr(struct rjd_dict* dict, const char* key, void* item)
 {
@@ -3737,7 +3546,7 @@ static int32_t rjd_dict_findindex(const rjd_hash64* hashes, rjd_hash64 hash, enu
 
 #pragma once
 
-#define RJD_FILEIO 1
+#define RJD_FILEIO_H 1
 
 #define RJD_FIO_ERR_ENUM(macro) \
 	macro(RJD_FIO_ERR_OK)		\
@@ -3755,22 +3564,6 @@ enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_al
 enum rjd_fio_err rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode);
 enum rjd_fio_err rjd_fio_size(const char* path, size_t* out_size);
 enum rjd_fio_err rjd_fio_delete(const char* path);
-
-#if RJD_ENABLE_SHORTNAMES
-	#define fio_err					rjd_fio_err
-	#define fio_writemode			rjd_fio_writemode
-
-	#define fio_read				rjd_fio_read
-	#define	fio_write				rjd_fio_write
-	#define fio_size				rjd_fio_size
-	#define fio_delete				rjd_fio_delete
-
-	#define FIO_ERR_OK				RJD_FIO_ERR_OK
-	#define FIO_ERR_IO				RJD_FIO_ERR_IO
-	#define FIO_ERR_NOMEM			RJD_FIO_ERR_NOMEM
-	#define FIO_WRITEMODE_REPLACE	RJD_FIO_WRITEMODE_REPLACE
-	#define FIO_WRITEMODE_APPEND	RJD_FIO_WRITEMODE_APPEND
-#endif
 
 #if RJD_IMPL
 
@@ -3796,11 +3589,11 @@ enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_al
 
 	rewind(file);
 
-	*buffer = rjd_array_alloc(char, length, context);
+	*buffer = rjd_array_alloc(char, (uint32_t)length, context);
 	if (!*buffer) {
 		return RJD_FIO_ERR_NOMEM;
 	}
-	rjd_array_resize(*buffer, length);
+	rjd_array_resize(*buffer, (uint32_t)length);
 
 	size_t read_length = fread(*buffer, 1, length, file);
 	fclose(file);
@@ -3869,6 +3662,8 @@ enum rjd_fio_err rjd_fio_delete(const char* path)
 
 #pragma once
 
+#define RJD_STRPOOL_H 1
+
 struct rjd_strpool
 {
 	struct rjd_dict storage;
@@ -3883,27 +3678,16 @@ struct rjd_strref* rjd_strpool_addv(struct rjd_strpool* pool, const char* fmt, v
 struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* str, size_t length);
 void rjd_strref_release(struct rjd_strref* ref);
 const char* rjd_strref_str(const struct rjd_strref* ref);
-
-#if RJD_ENABLE_SHORTNAMES
-	#define strpool			rjd_strpool
-	#define strref			rjd_strref
-
-	#define strpool_init	rjd_strpool_init
-	#define strpool_free	rjd_strpool_free
-	#define strpool_add		rjd_strpool_add
-	#define strpool_addv	rjd_strpool_addv
-	#define strpool_addl	rjd_strpool_addl
-	#define strref_release	rjd_strref_release
-	#define	strref_str		rjd_strref_str
-#endif
+uint32_t rjd_strref_length(const struct rjd_strref* ref);
 
 #if RJD_IMPL
 
 struct rjd_strref
 {
 	const char* str;
-	int32_t refcount;
 	struct rjd_strpool* owner;
+	int32_t refcount;
+	uint32_t length;
 };
 
 static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const char* str);
@@ -3997,6 +3781,12 @@ const char* rjd_strref_str(const struct rjd_strref* ref)
 	return ref->str;
 }
 
+uint32_t rjd_strref_length(const struct rjd_strref* ref)
+{
+	RJD_ASSERT(ref);
+	return ref->length;
+}
+
 static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const char* str) 
 {
 	RJD_ASSERT(pool);
@@ -4012,8 +3802,9 @@ static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const ch
 		strcpy(copied_str, str);
 
 		ref->str = copied_str;
-		ref->refcount = 0;
 		ref->owner = pool;
+		ref->refcount = 0;
+		ref->length = (uint32_t)strlen(ref->str);
 
 		rjd_dict_insert(&pool->storage, hash, ref);
 	}
