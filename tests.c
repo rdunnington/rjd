@@ -1351,6 +1351,12 @@ void test_strpool()
 	expect_str(ref4->str, test4);
 	expect_str(ref5->str, test5);
 
+	expect_uint32((uint32_t)strlen(test1), rjd_strref_length(ref1));
+	expect_uint32((uint32_t)strlen(test1), rjd_strref_length(ref1));
+	expect_uint32((uint32_t)strlen(test1), rjd_strref_length(ref1));
+	expect_uint32((uint32_t)strlen(test1), rjd_strref_length(ref1));
+	expect_uint32((uint32_t)strlen(test1), rjd_strref_length(ref1));
+
 	rjd_strref_release(ref1);
 	rjd_strref_release(ref2);
 	rjd_strref_release(ref3);

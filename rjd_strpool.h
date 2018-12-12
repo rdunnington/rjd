@@ -16,14 +16,16 @@ struct rjd_strref* rjd_strpool_addv(struct rjd_strpool* pool, const char* fmt, v
 struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* str, size_t length);
 void rjd_strref_release(struct rjd_strref* ref);
 const char* rjd_strref_str(const struct rjd_strref* ref);
+uint32_t rjd_strref_length(const struct rjd_strref* ref);
 
 #if RJD_IMPL
 
 struct rjd_strref
 {
 	const char* str;
-	int32_t refcount;
 	struct rjd_strpool* owner;
+	int32_t refcount;
+	uint32_t length;
 };
 
 static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const char* str);
@@ -117,6 +119,12 @@ const char* rjd_strref_str(const struct rjd_strref* ref)
 	return ref->str;
 }
 
+uint32_t rjd_strref_length(const struct rjd_strref* ref)
+{
+	RJD_ASSERT(ref);
+	return ref->length;
+}
+
 static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const char* str) 
 {
 	RJD_ASSERT(pool);
@@ -132,8 +140,9 @@ static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const ch
 		strcpy(copied_str, str);
 
 		ref->str = copied_str;
-		ref->refcount = 0;
 		ref->owner = pool;
+		ref->refcount = 0;
+		ref->length = (uint32_t)strlen(ref->str);
 
 		rjd_dict_insert(&pool->storage, hash, ref);
 	}
