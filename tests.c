@@ -149,6 +149,11 @@ void test_logging()
 	rjd_log_resetglobal();
 }
 
+struct rjd_result check_result(bool condition) {
+	RJD_RESULT_CHECK(condition, "not ok");
+	return RJD_RESULT_OK();
+}
+
 void test_result()
 {
 	struct rjd_result r1 = RJD_RESULT("not ok");
@@ -156,6 +161,9 @@ void test_result()
 
 	expect_false(rjd_result_isok(r1));
 	expect_true(rjd_result_isok(r2));
+
+	expect_true(rjd_result_isok(check_result(true)));
+	expect_false(rjd_result_isok(check_result(false)));
 }
 
 #define TEST_ENUM1_LIST(macro)	\
