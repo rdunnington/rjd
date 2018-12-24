@@ -268,7 +268,7 @@ static inline bool rjd_result_isok(struct rjd_result result) {
 // TODO static assert that message is a compile-time string
 #define RJD_RESULT(message) rjd_result_init(message)
 #define RJD_RESULT_OK() rjd_result_init(NULL)
-
+#define RJD_RESULT_CHECK(validation_condition, message) if (!(validation_condition)) { return RJD_RESULT(message); }
 
 ////////////////////////////////////////////////////////////////////////////////
 // rjd_enum.h
