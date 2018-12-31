@@ -1396,8 +1396,10 @@ void test_slotmap(void)
 
 		expect_uint32(32, rjd_slotmap_count(map));
 
+		const uint32_t* const_map = map;
+
 		for (uint32_t i = 0; i < rjd_countof(slots); ++i) {
-			uint32_t value = rjd_slotmap_get(map, slots[i]);
+			uint32_t value = *rjd_slotmap_get(const_map, slots[i]);
 			expect_uint32(i + 1337, value);
 		}
 

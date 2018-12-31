@@ -13,7 +13,7 @@ static inline bool rjd_slot_isvalid(struct rjd_slot slot);
 #define rjd_slotmap_alloc(type, count, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), count, allocator))
 #define rjd_slotmap_insert(map, data, out_slot)		((map) = rjd_slotmap_insert_impl((map), (out_slot)), \
 													 (map)[(out_slot)->index] = data)
-#define rjd_slotmap_get(map, slot)					((map)[rjd_slotmap_get_impl((map), (slot))])
+#define rjd_slotmap_get(map, slot)					((map) + rjd_slotmap_get_impl((map), (slot)))
 #define rjd_slotmap_count(map)						(rjd_slotmap_count_impl(map))
 #define rjd_slotmap_erase(map, slot)				(rjd_slotmap_erase_impl((map), slot))
 #define rjd_slotmap_free(map)						(rjd_slotmap_free_impl(map))
