@@ -1,7 +1,5 @@
 bugs:
 * rjd_slotmap: actually take salt into account when getting data
-* rjd_array: remove default values from last/first get functions
-* rjd_strref: add length
 
 todo:
 * rjd_array: sort
@@ -9,10 +7,10 @@ todo:
 * rjd_array: binary search for rjd_array
 * rjd_cmd: no allocations and instead statically configurable
 * rjd_slotmap: slot validation - add pointer to original slotmap in debug to avoid mixing slotmaps?
-* rjd_fio: fio enums should be vanilla, not using rjd_enum for simplicity. Or just use rjd_result
+* rjd_fio: use rjd_result with constants for predefined results
 * rjd_result: static assert for compile-time string
-* rjd_mem: add reset api to scoped allocators & use virtual memory to protect against overwrites
-* rjd.h: consider splitting into rjd_core.h and doing #includes for other headers
+* rjd_mem: use virtual memory to protect against overwrites
+* rjd.h: remove and use normal heirarchical #include structure?
 
 util ideas:
 * rjd_stream.h - unified interface for memory/file streams

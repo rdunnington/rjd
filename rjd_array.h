@@ -29,20 +29,31 @@ struct rjd_mem_allocator;
 #define rjd_array_push(buf, value) 						(buf = rjd_array_push_impl((buf), sizeof(*(buf))), (buf)[rjd_array_count(buf) - 1] = value)
 #define rjd_array_pop(buf)		 						(rjd_array_pop_impl(buf), --*rjd_array_count_impl(buf), *(buf + rjd_array_count(buf)))
 #define rjd_array_get(buf, index)						(rjd_array_get_validate((buf), (index)), (buf)[(index)])
+#define rjd_array_first(buf)							(rjd_array_get_validate((buf), 0), (buf)[0])
+#define rjd_array_last(buf)								(rjd_array_get_validate((buf), 0), (buf)[rjd_array_count(buf) - 1])
 
-#define rjd_array_sum_pred(acc, element) (acc + element)
+// searching/sorting
+#define rjd_array_contains(buf, data_ptr)				rjd_array_contains_impl((buf), data_ptr, sizeof(*buf), sizeof(*data_ptr))
 
-#define rjd_array_first(buf, _default)		(((buf) && rjd_array_count(buf) > 0) ? ((buf)[0]) : (_default))
-#define rjd_array_last(buf, _default)		(((buf) && rjd_array_count(buf) > 0) ? ((buf)[rjd_array_count(buf) - 1]) : (_default))
-#define rjd_array_contains(buf, value)		rjd_array_contains_impl((buf), &(value), sizeof(*buf), sizeof(value))
-#define rjd_array_filter(buf, pred)			for(int _i = (int)rjd_array_count(buf) - 1; _i >= 0; --_i) { if (!(pred((buf)[_i]))) { rjd_array_erase((buf), _i); } }
-#define rjd_array_map(in, out, pred)		rjd_array_resize((out), rjd_array_count(in)); for (size_t _i = 0; _i < rjd_array_count(in); ++_i) { out[_i] = pred(in[_i]); }
-#define rjd_array_reduce(buf, acc, pred)	for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = pred(acc, ((buf)[_i])); }
-#define rjd_array_sum(buf, acc)				for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) { (acc) = rjd_array_sum_pred((acc), ((buf)[_i])); }
-#define rjd_array_reverse(buf)				rjd_array_reverse_impl(buf, sizeof(*buf))
+// functional-style helpers
+#define rjd_array_sum_predicate(acc, element) (acc + element)
 
-#define rjd_array_sample(buf, rng)		((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
-#define rjd_array_shuffle(buf, rng)		rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
+#define rjd_array_filter(buf, predicate, userata)		for(int _i = (int)rjd_array_count(buf) - 1; _i >= 0; --_i) { 	 \
+															if (!(predicate((buf)[_i]))) { rjd_array_erase((buf), _i); } \
+														}
+#define rjd_array_map(in, out, predicate)				rjd_array_resize((out), rjd_array_count(in)); 					\
+														for (size_t _i = 0; _i < rjd_array_count(in); ++_i) {			\
+															out[_i] = predicate(in[_i]); 								\
+														}
+#define rjd_array_reduce(buf, acc, predicate)			for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) {			\
+															(acc) = predicate(acc, ((buf)[_i]));						\
+														}
+#define rjd_array_sum(buf, acc)							for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) {			\
+															(acc) = rjd_array_sum_predicate((acc), ((buf)[_i]));		\
+														}
+#define rjd_array_reverse(buf)							rjd_array_reverse_impl(buf, sizeof(*buf))
+#define rjd_array_sample(buf, rng)						((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
+#define rjd_array_shuffle(buf, rng)						rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
 
 struct rjd_rng;
 
@@ -110,9 +121,8 @@ void rjd_array_free_impl(const void* array)
 
 uint32_t* rjd_array_capacity_impl(const void* array)
 {
-	if (!array) {
-		return 0;
-	}
+	RJD_ASSERT(array);
+
 	rjd_array_validate(array);
 
 	struct rjd_array_header* header = rjd_array_getheader((void*)array);
@@ -121,9 +131,8 @@ uint32_t* rjd_array_capacity_impl(const void* array)
 
 uint32_t* rjd_array_count_impl(const void* array)
 {
-	if (!array) {
-		return 0;
-	}
+	RJD_ASSERT(array);
+
 	rjd_array_validate(array);
 
 	struct rjd_array_header* header = rjd_array_getheader((void*)array);

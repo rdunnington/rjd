@@ -530,20 +530,13 @@ void test_array()
 			rjd_array_push(a, 0xD00D + i);
 		}
 
-		int32_t* b = rjd_array_alloc(int32_t, 16, &context);
-
-		int32_t first = rjd_array_first(b, 1337);
-		expect_int32(1337, first);
-		first = rjd_array_first(a, 0);
+		int32_t first = rjd_array_first(a);
 		expect_int32(0xD00D + 0, first);
 
-		int32_t last = rjd_array_last(b, 1337);
-		expect_int32(1337, last);
-		last = rjd_array_last(a, 0);
+		int32_t last = rjd_array_last(a);
 		expect_int32(0xD00D + 15, last);
 
 		rjd_array_free(a);
-		rjd_array_free(b);
 	}
 
 	// functional-style tests
@@ -555,13 +548,13 @@ void test_array()
 
 		// filter
 		#define testfilter(element) (element < 8)
-		rjd_array_filter(b, testfilter);
+		rjd_array_filter(b, testfilter, NULL);
 		expect_uint32(8, rjd_array_count(b));
+		#undef testfilter
 
 		// reduce / sum
-		#define testsum(acc, element) (acc + element)
 		int32_t sum1 = 0;
-		rjd_array_reduce(b, sum1, testsum);
+		rjd_array_reduce(b, sum1, rjd_array_sum_predicate);
 		expect_int32(1 + 2 + 3 + 4 + 5 + 6 + 7, sum1);
 
 		int32_t sum2 = 0;
@@ -570,11 +563,11 @@ void test_array()
 
 		// contains
 		int32_t two = 2;
-		bool has2 = rjd_array_contains(b, two);
+		bool has2 = rjd_array_contains(b, &two);
 		expect_true(has2);
 
 		int32_t ten = 10;
-		bool has10 = rjd_array_contains(b, ten);
+		bool has10 = rjd_array_contains(b, &ten);
 		expect_false(has10);
 
 		// map
