@@ -51,6 +51,20 @@ void expect_uint64(uint64_t expected, uint64_t actual) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+int32_t compare_int32_predicate(const void* a, const void* b, void* userdata) {
+	RJD_UNUSED_PARAM(userdata);
+
+	int32_t aa = *(int32_t*)a;
+	int32_t bb = *(int32_t*)b;
+
+	if (aa == bb) {
+		return 0;
+	}
+	return aa < bb;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 RJD_STATIC_ASSERT(true);
 RJD_STATIC_ASSERT(1 == 1);
 RJD_STATIC_ASSERT(sizeof(uint32_t) == sizeof(char) * 4);
@@ -387,7 +401,7 @@ void test_mem()
 
 void test_array()
 {
-	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 
 	// rjd_countof
 	{
@@ -409,7 +423,7 @@ void test_array()
 			int c;
 			int d;
 		};
-		struct test* a = rjd_array_alloc(struct test, 32, &context);
+		struct test* a = rjd_array_alloc(struct test, 32, &allocator);
 		expect_uint32(0, rjd_array_count(a));
 		expect_uint32(32, rjd_array_capacity(a));
 		expect_true(rjd_array_empty(a));
@@ -491,7 +505,7 @@ void test_array()
 
 	// growing from push test
 	{
-		uint32_t* a = rjd_array_alloc(uint32_t, 3, &context);
+		uint32_t* a = rjd_array_alloc(uint32_t, 3, &allocator);
 
 		for (uint32_t i = 0; i < 15; ++i) {
 			rjd_array_push(a, i * 2);
@@ -507,7 +521,7 @@ void test_array()
 	}
 
 	{
-		uint32_t* a = rjd_array_alloc(uint32_t, 3, &context);
+		uint32_t* a = rjd_array_alloc(uint32_t, 3, &allocator);
 		rjd_array_reserve(a, 20);
 
 		for (uint32_t i = 0; i < 15; ++i) {
@@ -525,23 +539,72 @@ void test_array()
 
 	// first/last
 	{
-		int32_t* a = rjd_array_alloc(int32_t, 16, &context);
+		int32_t* a = rjd_array_alloc(int32_t, 16, &allocator);
 		for (int32_t i = 0; i < (int32_t)rjd_array_capacity(a); ++i) {
 			rjd_array_push(a, 0xD00D + i);
 		}
 
-		int32_t first = rjd_array_first(a);
+		const int32_t first = rjd_array_first(a);
 		expect_int32(0xD00D + 0, first);
 
-		int32_t last = rjd_array_last(a);
+		const int32_t last = rjd_array_last(a);
 		expect_int32(0xD00D + 15, last);
 
 		rjd_array_free(a);
 	}
 
+	// find and sort tests
+	{
+		int32_t* shuffled = rjd_array_alloc(int32_t, 8, &allocator);
+		rjd_array_push(shuffled, 5);
+		rjd_array_push(shuffled, 0);
+		rjd_array_push(shuffled, 3);
+		rjd_array_push(shuffled, 4);
+		rjd_array_push(shuffled, 7);
+		rjd_array_push(shuffled, 6);
+		rjd_array_push(shuffled, 2);
+		rjd_array_push(shuffled, 1);
+
+		int32_t* sorted = rjd_array_alloc(int32_t, 16, &allocator);
+		for (uint32_t i = 0; i < rjd_array_count(sorted); ++i)
+		{
+			rjd_array_push(sorted, i);
+		}
+
+		// find linear
+		{
+			int32_t search = 0;
+			expect_int32(1, rjd_array_find(shuffled, &search));
+			search = 100;
+			expect_int32(RJD_ARRAY_NOT_FOUND, rjd_array_find(shuffled, &search));
+			search = 1;
+			expect_int32(7, rjd_array_find(shuffled, &search));
+		}
+
+		// find sorted
+		for (int32_t i = 0; i < (int32_t)rjd_array_count(sorted); ++i)
+		{
+			expect_int32(i, rjd_array_find_sorted(sorted, &i, compare_int32_predicate, NULL));
+		}
+
+		// contains
+		{
+			int32_t two = 2;
+			bool has2 = rjd_array_contains(shuffled, &two);
+			expect_true(has2);
+
+			int32_t twenty = 20;
+			bool has10 = rjd_array_contains(shuffled, &twenty);
+			expect_false(has10);
+		}
+
+		rjd_array_free(sorted);
+		rjd_array_free(shuffled);
+	}
+
 	// functional-style tests
 	{
-		int32_t* b = rjd_array_alloc(int32_t, 16, &context);
+		int32_t* b = rjd_array_alloc(int32_t, 16, &allocator);
 		for (int32_t i = 0; i < 16; ++i) {
 			rjd_array_push(b, i);
 		}
@@ -561,15 +624,6 @@ void test_array()
 		rjd_array_sum(b, sum2);
 		expect_int32(sum1, sum2);
 
-		// contains
-		int32_t two = 2;
-		bool has2 = rjd_array_contains(b, &two);
-		expect_true(has2);
-
-		int32_t ten = 10;
-		bool has10 = rjd_array_contains(b, &ten);
-		expect_false(has10);
-
 		// map
 		rjd_array_clear(b);
 		rjd_array_push(b, 0);
@@ -579,7 +633,7 @@ void test_array()
 		rjd_array_push(b, 4);
 
 		#define TEST_PRED(v) (v * 2)
-		int32_t* mapped = rjd_array_alloc(int32_t, 16, &context);
+		int32_t* mapped = rjd_array_alloc(int32_t, 16, &allocator);
 		rjd_array_map(b, mapped, TEST_PRED);
 		#undef TEST_PRED
 		expect_int32(0, mapped[0]);
@@ -603,7 +657,7 @@ void test_array()
 	{
 		struct rjd_rng rng = rjd_rng_init(0x1337C0DE);
 
-		int32_t* a = rjd_array_alloc(int32_t, 8, &context);
+		int32_t* a = rjd_array_alloc(int32_t, 8, &allocator);
 		for (int32_t i = 0; i < 8; ++i) {
 			rjd_array_push(a, i);
 		}
