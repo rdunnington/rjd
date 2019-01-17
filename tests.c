@@ -51,7 +51,7 @@ void expect_uint64(uint64_t expected, uint64_t actual) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int32_t compare_int32_predicate(const void* a, const void* b, void* userdata) {
+int compare_int32_predicate(void* userdata, const void* a, const void* b) {
 	RJD_UNUSED_PARAM(userdata);
 
 	int32_t aa = *(int32_t*)a;
@@ -59,8 +59,11 @@ int32_t compare_int32_predicate(const void* a, const void* b, void* userdata) {
 
 	if (aa == bb) {
 		return 0;
+	} else if (aa < bb) {
+		return -1;
+	} else {
+		return 1;
 	}
-	return aa < bb;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -596,6 +599,11 @@ void test_array()
 			int32_t twenty = 20;
 			bool has10 = rjd_array_contains(shuffled, &twenty);
 			expect_false(has10);
+		}
+        
+		rjd_array_sort(shuffled, compare_int32_predicate, NULL);
+		for (uint32_t i = 0; i < rjd_array_count(shuffled); ++i) {
+			expect_int32(i, shuffled[i]);
 		}
 
 		rjd_array_free(sorted);
