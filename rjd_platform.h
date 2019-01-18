@@ -88,6 +88,9 @@
 	#pragma clang diagnostic ignored "-Wmissing-braces" // clang is paranoid about zero-init for nested structs
 #endif
 
+#define RJD_LANG_OBJECTIVEC defined(__OBJC__)
+#define RJD_LANG_CPP defined(__cplusplus)
+
 #if RJD_PLATFORM_WINDOWS && RJD_IMPL 
 	#define WIN32_LEAN_AND_MEAN
 	#define WIN32_EXTRA_LEAN
