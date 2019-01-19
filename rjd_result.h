@@ -19,3 +19,4 @@ static inline bool rjd_result_isok(struct rjd_result result) {
 #define RJD_RESULT(message) rjd_result_init(message)
 #define RJD_RESULT_OK() rjd_result_init(NULL)
 #define RJD_RESULT_CHECK(validation_condition, message) if (!(validation_condition)) { return RJD_RESULT(message); }
+#define RJD_RESULT_PROMOTE(result) if (!rjd_result_isok(result)) { return result; }

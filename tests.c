@@ -171,6 +171,11 @@ struct rjd_result check_result(bool condition) {
 	return RJD_RESULT_OK();
 }
 
+struct rjd_result promote_result(struct rjd_result result) {
+	RJD_RESULT_PROMOTE(result);
+	return RJD_RESULT_OK();
+}
+
 void test_result()
 {
 	struct rjd_result r1 = RJD_RESULT("not ok");
@@ -181,6 +186,9 @@ void test_result()
 
 	expect_true(rjd_result_isok(check_result(true)));
 	expect_false(rjd_result_isok(check_result(false)));
+
+	expect_true(promote_result(r1).error == r1.error);
+	expect_true(rjd_result_isok(promote_result(r2)));
 }
 
 #define TEST_ENUM1_LIST(macro)	\
