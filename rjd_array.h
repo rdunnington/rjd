@@ -304,7 +304,7 @@ int32_t rjd_array_find_linear_impl(const void* array, const void* search, size_t
 	return RJD_ARRAY_NOT_FOUND;
 }
 
-const void* rjd_array_find_sorted_internal(const void* array, int32_t length, const void* search, int32_t sizeof_value, rjd_array_compare_predicate compare, void* userdata)
+static const void* rjd_array_find_sorted_internal(const void* array, int32_t length, const void* search, uint32_t sizeof_value, rjd_array_compare_predicate compare, void* userdata)
 {
 	if (length == 0) {
 		return NULL;
@@ -344,7 +344,7 @@ int32_t rjd_array_find_sorted_impl(const void* array, const void* search, size_t
 	}
 
 	uint32_t length = rjd_array_count(array);
-	const char* found = rjd_array_find_sorted_internal(array, length, search, sizeof_type, compare, userdata);
+	const char* found = rjd_array_find_sorted_internal(array, length, search, (uint32_t)sizeof_type, compare, userdata);
 	if (found == NULL) {
 		return RJD_ARRAY_NOT_FOUND;
 	}
