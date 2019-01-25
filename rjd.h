@@ -113,8 +113,17 @@
 	#pragma clang diagnostic ignored "-Wmissing-braces" // clang is paranoid about zero-init for nested structs
 #endif
 
-#define RJD_LANG_OBJECTIVEC defined(__OBJC__)
-#define RJD_LANG_CPP defined(__cplusplus)
+#if defined(__OBJC__)
+	#define RJD_LANG_OBJC 1
+#else
+	#define RJD_LANG_OBJC 0
+#endif
+
+#if defined(__cplusplus)
+	#define RJD_LANG_CPP 1
+#else
+	#define RJD_LANG_CPP 0
+#endif
 
 #if RJD_PLATFORM_WINDOWS && RJD_IMPL 
 	#define WIN32_LEAN_AND_MEAN
@@ -272,6 +281,7 @@ static inline bool rjd_result_isok(struct rjd_result result) {
 #define RJD_RESULT(message) rjd_result_init(message)
 #define RJD_RESULT_OK() rjd_result_init(NULL)
 #define RJD_RESULT_CHECK(validation_condition, message) if (!(validation_condition)) { return RJD_RESULT(message); }
+#define RJD_RESULT_PROMOTE(result) if (!rjd_result_isok(result)) { return result; }
 
 ////////////////////////////////////////////////////////////////////////////////
 // rjd_enum.h
