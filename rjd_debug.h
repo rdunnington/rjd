@@ -25,9 +25,24 @@ struct rjd_logchannel
 	#define RJD_LOG(...)
 #endif
 
+
 #define RJD_NAMEGEN2(a, b) a##b
 #define RJD_NAMEGEN(a, b) RJD_NAMEGEN2(a, b)
-#define RJD_STATIC_ASSERT(condition) typedef char RJD_NAMEGEN(rjd_staticassert_failure_, __COUNTER__)[(condition) ? 1 : -1]
+
+#if RJD_COMPILER_MSVC
+	#define RJD_STATIC_ASSERTMSG(condition, message) typedef int RJD_NAMEGEN(rjd_staticassert_fail, __COUNTER__)[(condition) ? 1 : -1]
+#else
+	#define RJD_STATIC_ASSERTMSG(condition, message) _Static_assert(condition, message)
+#endif
+#define RJD_STATIC_ASSERT(condition) RJD_STATIC_ASSERTMSG(condition, #condition)
+
+#if RJD_COMPILER_CLANG || RJD_COMPILER_GCC
+	#define RJD_SAME_TYPE_TEST(a, b) (__builtin_types_compatible_p(__typeof__(a), __typeof__(b)))
+#else
+	#define RJD_SAME_TYPE_TEST(a, b) (1)
+#endif
+#define RJD_STATIC_TEST(a) (sizeof(int[(a)?1:-1]) * 0)
+#define RJD_MUST_BE_SAME_TYPE_TEST(a,b) RJD_STATIC_TEST(RJD_SAME_TYPE_TEST(a,b))
 
 #if RJD_COMPILER_MSVC
 	#define RJD_TRAP() __debugbreak()
