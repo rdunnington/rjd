@@ -51,9 +51,8 @@ void expect_uint64(uint64_t expected, uint64_t actual) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int compare_int32_predicate(void* userdata, const void* a, const void* b) {
-	RJD_UNUSED_PARAM(userdata);
-
+static int compare_int32(const void* a, const void* b)
+{
 	int32_t aa = *(int32_t*)a;
 	int32_t bb = *(int32_t*)b;
 
@@ -64,6 +63,12 @@ int compare_int32_predicate(void* userdata, const void* a, const void* b) {
 	} else {
 		return 1;
 	}
+}
+
+static int compare_int32_c(void* context, const void* a, const void* b)
+{
+	RJD_ASSERT(context);
+	return compare_int32(a, b);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -514,6 +519,23 @@ void test_array()
 		rjd_array_free(a);
 	}
 
+	// clone
+	{
+		uint32_t* a = rjd_array_alloc(uint32_t, 128, &allocator);
+		for (uint32_t i = 0; i < 128; ++i) {
+			rjd_array_push(a, i * 2);
+		}
+
+		uint32_t* b = rjd_array_clone(a, &allocator);
+		expect_uint32(rjd_array_count(a), rjd_array_count(b));
+		for (uint32_t i = 0; i < 128; ++i) {
+			expect_uint32(a[i], b[i]);
+		}
+
+		rjd_array_free(a);
+		rjd_array_free(b);
+	}
+
 	// growing from push test
 	{
 		uint32_t* a = rjd_array_alloc(uint32_t, 3, &allocator);
@@ -531,19 +553,50 @@ void test_array()
 		rjd_array_free(a);
 	}
 
+	// reserve
 	{
 		uint32_t* a = rjd_array_alloc(uint32_t, 3, &allocator);
 		rjd_array_reserve(a, 20);
+		expect_uint32(20, rjd_array_capacity(a));
 
-		for (uint32_t i = 0; i < 15; ++i) {
+		for (uint32_t i = 0; i < 20; ++i) {
 			rjd_array_push(a, i * 2);
 		}
+		expect_uint32(20, rjd_array_capacity(a));
 
 		for (uint32_t i = 0; i < rjd_array_count(a); ++i) {
 			expect_uint32(a[i], i * 2);
 		}
 
 		expect_uint32(20, rjd_array_capacity(a));
+
+		rjd_array_free(a);
+	}
+
+	// insert
+	{
+		int32_t* a = rjd_array_alloc(int32_t, 20, &allocator);
+		for (int32_t i = 0; i < 20; ++i) {
+			rjd_array_push(a, 22);
+		}
+
+		int32_t insert_value = 77;
+		rjd_array_insert(a, &insert_value, 0);
+		rjd_array_insert(a, &insert_value, 5);
+		rjd_array_insert(a, &insert_value, 10);
+		rjd_array_insert(a, &insert_value, 15);
+		rjd_array_insert(a, &insert_value, 20);
+		expect_uint32(25, rjd_array_count(a));
+		rjd_array_insert(a, &insert_value, 25);// this is the array count + 1
+		expect_uint32(26, rjd_array_count(a));
+
+		for (uint32_t i = 0; i < rjd_array_count(a); ++i) {
+			if (i % 5 == 0) {
+				expect_int32(insert_value, a[i]);
+			} else {
+				expect_int32(22, a[i]);
+			}
+		}
 
 		rjd_array_free(a);
 	}
@@ -576,26 +629,59 @@ void test_array()
 		rjd_array_push(shuffled, 2);
 		rjd_array_push(shuffled, 1);
 
-		int32_t* sorted = rjd_array_alloc(int32_t, 16, &allocator);
+		int32_t* sorted = rjd_array_alloc(int32_t, 256, &allocator);
 		for (uint32_t i = 0; i < rjd_array_count(sorted); ++i)
 		{
 			rjd_array_push(sorted, i);
 		}
 
+		int32_t* holes = rjd_array_alloc(int32_t, 8, &allocator);
+		rjd_array_push(holes, 0);
+		rjd_array_push(holes, 3);
+		rjd_array_push(holes, 7);
+		rjd_array_push(holes, 11);
+		rjd_array_push(holes, 21);
+		rjd_array_push(holes, 37);
+		rjd_array_push(holes, 50);
+
 		// find linear
 		{
-			int32_t search = 0;
-			expect_int32(1, rjd_array_find(shuffled, &search));
-			search = 100;
-			expect_int32(RJD_ARRAY_NOT_FOUND, rjd_array_find(shuffled, &search));
-			search = 1;
-			expect_int32(7, rjd_array_find(shuffled, &search));
+			int32_t needle = 0;
+			expect_int32(1, rjd_array_find(shuffled, &needle));
+			needle = 100;
+			expect_int32(RJD_ARRAY_NOT_FOUND, rjd_array_find(shuffled, &needle));
+			needle = 1;
+			expect_int32(7, rjd_array_find(shuffled, &needle));
+		}
+
+		// lowerbound
+		{
+			int32_t needle = -1;
+			expect_int32(0, rjd_array_lowerbound(holes, &needle, compare_int32));
+			needle = 0;
+			expect_int32(0, rjd_array_lowerbound(holes, &needle, compare_int32));
+			needle = 1;
+			expect_int32(1, rjd_array_lowerbound(holes, &needle, compare_int32));
+			needle = 2;
+			expect_int32(1, rjd_array_lowerbound(holes, &needle, compare_int32));
+			needle = 3;
+			expect_int32(1, rjd_array_lowerbound(holes, &needle, compare_int32));
+			needle = 4;
+			expect_int32(2, rjd_array_lowerbound(holes, &needle, compare_int32));
+			needle = 15;
+			expect_int32(4, rjd_array_lowerbound(holes, &needle, compare_int32));
+			needle = 21;
+			expect_int32(4, rjd_array_lowerbound(holes, &needle, compare_int32));
+			needle = 50;
+			expect_int32(6, rjd_array_lowerbound(holes, &needle, compare_int32));
+			needle = 51;
+			expect_int32(7, rjd_array_lowerbound(holes, &needle, compare_int32)); // note this is after the last element
 		}
 
 		// find sorted
 		for (int32_t i = 0; i < (int32_t)rjd_array_count(sorted); ++i)
 		{
-			expect_int32(i, rjd_array_find_sorted(sorted, &i, compare_int32_predicate, NULL));
+			expect_int32(i, rjd_array_find_sorted(sorted, &i, compare_int32));
 		}
 
 		// contains
@@ -608,14 +694,55 @@ void test_array()
 			bool has10 = rjd_array_contains(shuffled, &twenty);
 			expect_false(has10);
 		}
-        
-		rjd_array_sort(shuffled, compare_int32_predicate, NULL);
+
+		// sort
+		int32_t* shuffled2 = rjd_array_clone(shuffled, &allocator);
+
+		rjd_array_sort(shuffled, compare_int32);
 		for (uint32_t i = 0; i < rjd_array_count(shuffled); ++i) {
 			expect_int32(i, shuffled[i]);
 		}
 
+		// context-versions
+		{
+			int32_t context = 0;
+			int32_t needle = -1;
+			expect_int32(0, rjd_array_lowerbound_c(holes, &needle, compare_int32_c, &context));
+			needle = 0;
+			expect_int32(0, rjd_array_lowerbound_c(holes, &needle, compare_int32_c, &context));
+			needle = 1;
+			expect_int32(1, rjd_array_lowerbound_c(holes, &needle, compare_int32_c, &context));
+			needle = 2;
+			expect_int32(1, rjd_array_lowerbound_c(holes, &needle, compare_int32_c, &context));
+			needle = 3;
+			expect_int32(1, rjd_array_lowerbound_c(holes, &needle, compare_int32_c, &context));
+			needle = 4;
+			expect_int32(2, rjd_array_lowerbound_c(holes, &needle, compare_int32_c, &context));
+			needle = 15;
+			expect_int32(4, rjd_array_lowerbound_c(holes, &needle, compare_int32_c, &context));
+			needle = 21;
+			expect_int32(4, rjd_array_lowerbound_c(holes, &needle, compare_int32_c, &context));
+			needle = 50;
+			expect_int32(6, rjd_array_lowerbound_c(holes, &needle, compare_int32_c, &context));
+			needle = 51;
+			expect_int32(7, rjd_array_lowerbound_c(holes, &needle, compare_int32_c, &context)); // note this is after the last element
+
+			// find sorted
+			for (int32_t i = 0; i < (int32_t)rjd_array_count(sorted); ++i)
+			{
+				expect_int32(i, rjd_array_find_sorted_c(sorted, &i, compare_int32_c, &context));
+			}
+
+			rjd_array_sort_c(shuffled2, compare_int32_c, &context);
+			for (uint32_t i = 0; i < rjd_array_count(shuffled2); ++i) {
+				expect_int32(i, shuffled2[i]);
+			}
+		}
+
+		rjd_array_free(holes);
 		rjd_array_free(sorted);
 		rjd_array_free(shuffled);
+		rjd_array_free(shuffled2);
 	}
 
 	// functional-style tests

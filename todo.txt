@@ -2,9 +2,6 @@ bugs:
 * rjd_slotmap: actually take salt into account when getting data
 
 todo:
-* rjd_array: sort
-* rjd_array: sorted insert
-* rjd_array: binary search for rjd_array
 * rjd_cmd: no allocations and instead statically configurable
 * rjd_slotmap: slot validation - add pointer to original slotmap in debug to avoid mixing slotmaps?
 * rjd_fio: use rjd_result with constants for predefined results
