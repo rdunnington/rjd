@@ -98,6 +98,8 @@ uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot)
 	RJD_ASSERT(slot.index < header->count);
 	uint32_t index = slot.index;
 	RJD_ASSERTMSG(!rjd_array_contains(header->freelist, &index), "This slot is unallocated.");
+    int16_t salt = header->salts[slot.index];
+	RJD_ASSERT(salt == slot.salt);
 	return slot.index;
 }
 

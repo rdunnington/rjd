@@ -1,6 +1,3 @@
-bugs:
-* rjd_slotmap: actually take salt into account when getting data
-
 todo:
 * rjd_cmd: no allocations and instead statically configurable
 * rjd_slotmap: slot validation - add pointer to original slotmap in debug to avoid mixing slotmaps?
