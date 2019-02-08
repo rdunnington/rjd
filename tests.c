@@ -1471,10 +1471,12 @@ void test_dict()
 	rjd_dict_free(&dict);
 }
 
-void expect_fio(enum rjd_fio_err expected, enum rjd_fio_err actual)
+void expect_fio_ok(bool expected_ok, struct rjd_result actual)
 {
-	if (expected != actual) {
-		RJD_ASSERTFAIL("fio: expected %d, but got %d\n", expected, actual);
+	if (expected_ok != rjd_result_isok(actual)) {
+		const char* expected_str = expected_ok ? "OK" : "not ok";
+		const char* actual_str = actual.error ? actual.error : "OK";
+		RJD_ASSERTFAIL("fio: expected %s, but got %s\n", expected_str, actual_str);
 	}
 }
 
@@ -1484,39 +1486,40 @@ void test_fio()
 
 	const char expected_contents[] = "this is a test file that has a utf-8 character!";
 
-	enum rjd_fio_err err;
-	err = rjd_fio_write("test.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_REPLACE);
-	expect_fio(RJD_FIO_ERR_OK, err);
+	struct rjd_result result;
+
+	result = rjd_fio_write("test.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_REPLACE);
+	expect_fio_ok(true, result);
 
 	char* buffer;
-	err = rjd_fio_read("does_not_exist.txt", &buffer, &context);
-	expect_fio(RJD_FIO_ERR_IO, err);
-	err = rjd_fio_read("test.txt", &buffer, &context);
-	expect_fio(RJD_FIO_ERR_OK, err);
+	result = rjd_fio_read("does_not_exist.txt", &buffer, &context);
+	expect_fio_ok(false, result);
+	result = rjd_fio_read("test.txt", &buffer, &context);
+	expect_fio_ok(true, result);
 	expect_uint32(sizeof(expected_contents), rjd_array_count(buffer));
 	expect_true(!memcmp(buffer, expected_contents, sizeof(expected_contents)));
 
-	err = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_REPLACE);
-	expect_fio(RJD_FIO_ERR_OK, err);
-	err = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_APPEND);
+	result = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_REPLACE);
+	expect_fio_ok(true, result);
+	result = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_APPEND);
 	char* buffer2;
-	err = rjd_fio_read("test2.txt", &buffer2, &context);
-	expect_fio(RJD_FIO_ERR_OK, err);
+	result = rjd_fio_read("test2.txt", &buffer2, &context);
+	expect_fio_ok(true, result);
 	expect_uint32(sizeof(expected_contents)*2, rjd_array_count(buffer2));
 
 	size_t filesize;
-	err = rjd_fio_size("does_not_exist.txt", &filesize);
-	expect_fio(RJD_FIO_ERR_IO, err);
-	err = rjd_fio_size("test.txt", &filesize);
-	expect_fio(RJD_FIO_ERR_OK, err);
+	result = rjd_fio_size("does_not_exist.txt", &filesize);
+	expect_fio_ok(false, result);
+	result = rjd_fio_size("test.txt", &filesize);
+	expect_fio_ok(true, result);
 	expect_uint32(sizeof(expected_contents), (uint32_t)filesize);
 
-	err = rjd_fio_delete("does_not_exist.txt");
-	expect_fio(RJD_FIO_ERR_IO, err);
-	err = rjd_fio_delete("test.txt");
-	expect_fio(RJD_FIO_ERR_OK, err);
-	err = rjd_fio_delete("test2.txt");
-	expect_fio(RJD_FIO_ERR_OK, err);
+	result = rjd_fio_delete("does_not_exist.txt");
+	expect_fio_ok(false, result);
+	result = rjd_fio_delete("test.txt");
+	expect_fio_ok(true, result);
+	result = rjd_fio_delete("test2.txt");
+	expect_fio_ok(true, result);
 }
 
 void test_strpool()
