@@ -11,7 +11,7 @@ struct rjd_slot
 static inline bool rjd_slot_isvalid(struct rjd_slot slot);
 
 #define rjd_slotmap_alloc(type, count, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), count, allocator))
-#define rjd_slotmap_insert(map, data, out_slot)		((map) = rjd_slotmap_insert_impl((map), (out_slot)), \
+#define rjd_slotmap_insert(map, data, out_slot)		(rjd_slotmap_insert_impl((void**)(&map), (out_slot)), \
 													 (map)[(out_slot)->index] = data)
 #define rjd_slotmap_get(map, slot)					((map) + rjd_slotmap_get_impl((map), (slot)))
 #define rjd_slotmap_count(map)						(rjd_slotmap_count_impl(map))
@@ -20,7 +20,7 @@ static inline bool rjd_slot_isvalid(struct rjd_slot slot);
 #define rjd_slotmap_next(map, slot)					(rjd_slotmap_next_impl((map), (slot))) // pass null slot for first
 
 void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator);
-void* rjd_slotmap_insert_impl(void* map, struct rjd_slot* out_slot);
+void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot);
 uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot);
 uint32_t rjd_slotmap_count_impl(const void* map);
 void rjd_slotmap_erase_impl(void* map, struct rjd_slot slot);
@@ -64,10 +64,13 @@ void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t count, struct rjd_mem_
 	return rjd_slotmap_grow(NULL, sizeof_type, count, allocator);
 }
 
-void* rjd_slotmap_insert_impl(void* map, struct rjd_slot* out_slot)
+void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot)
 {
-	RJD_ASSERT(map);
+	RJD_ASSERT(map_p);
+	RJD_ASSERT(*map_p);
 	RJD_ASSERT(out_slot);
+
+	void* map = *map_p;
 
 	struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
 
@@ -75,6 +78,7 @@ void* rjd_slotmap_insert_impl(void* map, struct rjd_slot* out_slot)
 		map = rjd_slotmap_grow(map, header->sizeof_type, header->count * 2, header->allocator);
 		header = rjd_slotmap_getheader(map);
 		RJD_ASSERT(rjd_array_count(header->freelist) > 0);
+		*map_p = map;
 	}
 
 	uint32_t index = rjd_array_pop(header->freelist);
@@ -86,8 +90,6 @@ void* rjd_slotmap_insert_impl(void* map, struct rjd_slot* out_slot)
 
 	out_slot->index = rjd_math_truncate_u32_to_u16(index);
 	out_slot->salt = *salt;
-
-	return map;
 }
 
 uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot)
@@ -179,6 +181,7 @@ void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t count, struct 
 
 	size_t total_mem_size = sizeof(struct rjd_slotmap_header) + sizeof_type * count + sizeof(uint16_t) * count;
 	char* mem = rjd_mem_alloc_array(char, total_mem_size, allocator);
+	memset(mem, 0, total_mem_size);
 
 	struct rjd_slotmap_header* header = (struct rjd_slotmap_header*)mem;
 	header->allocator = allocator;
