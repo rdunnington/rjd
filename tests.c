@@ -1,9 +1,5 @@
 #include <math.h>
-#define RJD_IMPL true
-#define RJD_ENABLE_ASSERT true
-#define RJD_ENABLE_LOGGING true
-#define RJD_STRBUF_STATIC_SIZE 32
-#include "rjd_all.h"
+#include "tests_rjd_wrapped.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // expect utils
@@ -47,6 +43,11 @@ void expect_uint64(uint64_t expected, uint64_t actual) {
 	if (expected != actual) {
 		RJD_ASSERTFAIL("Expected: %llu, but got: %llu\n", expected, actual);
 	}
+}
+
+void expect_path(const char* expected, struct rjd_path path)
+{
+	expect_str(expected, rjd_path_get(&path));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1546,11 +1547,11 @@ void test_strpool()
 	expect_true(ref4 == rjd_strpool_add(&pool, test4));
 	expect_true(ref5 == rjd_strpool_add(&pool, test5));
 
-	expect_str(ref1->str, test1);
-	expect_str(ref2->str, test2);
-	expect_str(ref3->str, test3);
-	expect_str(ref4->str, test4);
-	expect_str(ref5->str, test5);
+	expect_str(rjd_strref_str(ref1), test1);
+	expect_str(rjd_strref_str(ref2), test2);
+	expect_str(rjd_strref_str(ref3), test3);
+	expect_str(rjd_strref_str(ref4), test4);
+	expect_str(rjd_strref_str(ref5), test5);
 
 	expect_uint32((uint32_t)strlen(test1), rjd_strref_length(ref1));
 	expect_uint32((uint32_t)strlen(test1), rjd_strref_length(ref1));
@@ -1564,11 +1565,11 @@ void test_strpool()
 	rjd_strref_release(ref4);
 	rjd_strref_release(ref5);
 
-	expect_str(ref1->str, test1);
-	expect_str(ref2->str, test2);
-	expect_str(ref3->str, test3);
-	expect_str(ref4->str, test4);
-	expect_str(ref5->str, test5);
+	expect_str(rjd_strref_str(ref1), test1);
+	expect_str(rjd_strref_str(ref2), test2);
+	expect_str(rjd_strref_str(ref3), test3);
+	expect_str(rjd_strref_str(ref4), test4);
+	expect_str(rjd_strref_str(ref5), test5);
 
 	rjd_strpool_free(&pool);
 }
@@ -1620,15 +1621,64 @@ void test_slotmap(void)
 
 void test_path(void)
 {
-	expect_str(NULL,   rjd_path_extension(NULL));
-	expect_str(NULL,   rjd_path_extension(""));
-	expect_str(NULL,   rjd_path_extension("no_extension"));
-	expect_str(NULL,   rjd_path_extension("not_even_this_one."));
-	expect_str(".txt", rjd_path_extension(".txt"));
-	expect_str(".txt", rjd_path_extension("some_file_name.txt"));
-	expect_str(".txt", rjd_path_extension("some/path/some_file.txt"));
-	expect_str(".txt", rjd_path_extension("some\\path\\some_file.txt"));
-	expect_str(".txt", rjd_path_extension("some\\path\\some.long.extension.txt"));
+	// path operations
+    expect_path("", rjd_path_create());
+    expect_path("/", rjd_path_create_with("/"));
+    expect_path("/", rjd_path_create_with("///"));
+    expect_path("a", rjd_path_create_with("a"));
+    expect_path("a", rjd_path_create_with("a/"));
+    expect_path("/a", rjd_path_create_with("/a"));
+    expect_path("/a", rjd_path_create_with("///a"));
+    expect_path("/a", rjd_path_create_with("///a///"));
+    expect_path("/a/b/c", rjd_path_create_with("/a/b/c/"));
+    expect_path("/a/b/c", rjd_path_create_with("/a/b/c"));
+    expect_path("/a/b/c", rjd_path_create_with("/a//b//c"));
+    expect_path("/a/b/c", rjd_path_create_with("///a//b//c//"));
+    expect_path("/aaa/bb/c", rjd_path_create_with("///aaa//bb//c//"));
+    expect_path("/a/bb/ccc", rjd_path_create_with("///a//bb//ccc//"));
+    expect_path("/a/bbb/c", rjd_path_create_with("///a//bbb//c//"));
+    expect_path("a/bbb/c/ddddd", rjd_path_create_with("a//bbb//c//ddddd"));
+    expect_path("c:", rjd_path_create_with("c:///"));
+    expect_path("c:/abc", rjd_path_create_with("c:///abc/"));
+
+	{
+		struct rjd_path path = rjd_path_create();
+		rjd_path_append(&path, "/");
+		expect_path("/", path);
+		rjd_path_append(&path, "/");
+        expect_path("/", path);
+		rjd_path_append(&path, "///");
+		expect_path("/", path);
+		rjd_path_append(&path, "a");
+		expect_path("/a", path);
+		rjd_path_append(&path, "b");
+		expect_path("/a/b", path);
+		rjd_path_append(&path, "//c//");
+		expect_path("/a/b/c", path);
+        rjd_path_append(&path, "//d//");
+        expect_path("/a/b/c/d", path);
+		rjd_path_clear(&path);
+		expect_path("", path);
+	}
+
+	{
+		struct rjd_path path1 = rjd_path_create_with("a/b/c");
+		struct rjd_path path2 = rjd_path_create_with("d/e");
+
+		rjd_path_join(&path1, &path2);
+		expect_path("a/b/c/d/e", path1);
+	}
+
+	// extension
+	expect_str(NULL,   rjd_path_extension_str(NULL));
+	expect_str(NULL,   rjd_path_extension_str(""));
+	expect_str(NULL,   rjd_path_extension_str("no_extension"));
+	expect_str(NULL,   rjd_path_extension_str("not_even_this_one."));
+	expect_str(".txt", rjd_path_extension_str(".txt"));
+	expect_str(".txt", rjd_path_extension_str("some_file_name.txt"));
+	expect_str(".txt", rjd_path_extension_str("some/path/some_file.txt"));
+	expect_str(".txt", rjd_path_extension_str("some\\path\\some_file.txt"));
+	expect_str(".txt", rjd_path_extension_str("some\\path\\some.long.extension.txt"));
 }
 
 int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 

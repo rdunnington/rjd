@@ -4,6 +4,7 @@ todo:
 * rjd_result: static assert for compile-time string
 * rjd_mem: use virtual memory to protect against overwrites
 * rjd.h: remove and use normal heirarchical #include structure?
+* rjd_path.h: make UTF8-compatible
 
 util ideas:
 * rjd_stream.h - unified interface for memory/file streams
