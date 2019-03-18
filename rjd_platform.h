@@ -100,12 +100,14 @@
 	#define RJD_LANG_CPP 0
 #endif
 
-#if RJD_PLATFORM_WINDOWS && RJD_IMPL 
+#if RJD_IMPL 
+#if RJD_PLATFORM_WINDOWS 
 	#define WIN32_LEAN_AND_MEAN
 	#define WIN32_EXTRA_LEAN
 	#define NOMINMAX
 	#include <windows.h>
 	#undef near
 	#undef far
-#endif
+#endif // RJD_PLATFORM_WINDOWS
+#endif // RJD_IMPL
 
