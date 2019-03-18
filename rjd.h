@@ -125,14 +125,16 @@
 	#define RJD_LANG_CPP 0
 #endif
 
-#if RJD_PLATFORM_WINDOWS && RJD_IMPL 
+#if RJD_IMPL 
+#if RJD_PLATFORM_WINDOWS 
 	#define WIN32_LEAN_AND_MEAN
 	#define WIN32_EXTRA_LEAN
 	#define NOMINMAX
 	#include <windows.h>
 	#undef near
 	#undef far
-#endif
+#endif // RJD_PLATFORM_WINDOWS
+#endif // RJD_IMPL
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -166,9 +168,24 @@ struct rjd_logchannel
 	#define RJD_LOG(...)
 #endif
 
+
 #define RJD_NAMEGEN2(a, b) a##b
 #define RJD_NAMEGEN(a, b) RJD_NAMEGEN2(a, b)
-#define RJD_STATIC_ASSERT(condition) typedef char RJD_NAMEGEN(rjd_staticassert_failure_, __COUNTER__)[(condition) ? 1 : -1]
+
+#if RJD_COMPILER_MSVC
+	#define RJD_STATIC_ASSERTMSG(condition, message) typedef int RJD_NAMEGEN(rjd_staticassert_fail, __COUNTER__)[(condition) ? 1 : -1]
+#else
+	#define RJD_STATIC_ASSERTMSG(condition, message) _Static_assert(condition, message)
+#endif
+#define RJD_STATIC_ASSERT(condition) RJD_STATIC_ASSERTMSG(condition, #condition)
+
+#if RJD_COMPILER_CLANG || RJD_COMPILER_GCC
+	#define RJD_SAME_TYPE_TEST(a, b) (__builtin_types_compatible_p(__typeof__(a), __typeof__(b)))
+#else
+	#define RJD_SAME_TYPE_TEST(a, b) (1)
+#endif
+#define RJD_STATIC_TEST(a) (sizeof(int[(a)?1:-1]) * 0)
+#define RJD_MUST_BE_SAME_TYPE_TEST(a,b) RJD_STATIC_TEST(RJD_SAME_TYPE_TEST(a,b))
 
 #if RJD_COMPILER_MSVC
 	#define RJD_TRAP() __debugbreak()
@@ -901,76 +918,94 @@ int32_t rjd_rng_range32(struct rjd_rng* rng, int32_t min_inclusive, int32_t max_
 
 #define RJD_ARRAY_H 1
 
-struct rjd_mem_allocator;
+// helpers
+#define RJD_MUST_BE_ARRAY(a) (RJD_STATIC_TEST(!RJD_SAME_TYPE_TEST((a), &(*a))))
 
-#if RJD_COMPILER_CLANG || RJD_COMPILER_GCC
-	#define RJD_SAME_TYPE(a, b) (__builtin_types_compatible_p(__typeof__(a), __typeof__(b)))
-	#define RJD_STATIC_ZERO(a) (sizeof(int[(a)?1:-1]) * 0)
-	#define RJD_MUST_BE_ARRAY(a) (RJD_STATIC_ZERO(!RJD_SAME_TYPE((a), &(*a))))
+// static array count
+#define rjd_countof(buf) (sizeof(buf) / sizeof(*(buf)) + RJD_MUST_BE_ARRAY(buf))
 
-	#define rjd_countof(buf) (sizeof(buf) / sizeof(*(buf)) + RJD_MUST_BE_ARRAY(buf))
-#else
-	#define rjd_countof(buf) (sizeof(buf) / sizeof(buf[0]))
-#endif
-
-#define rjd_array_alloc(type, capacity, alloc_context)	((type*)(rjd_array_alloc_impl((capacity), (alloc_context), sizeof(type))))
-#define rjd_array_free(buf)								rjd_array_free_impl(buf)
-#define rjd_array_capacity(buf) 						((buf)?(const uint32_t)(*rjd_array_capacity_impl(buf)):0)
-#define rjd_array_count(buf) 							((buf)?(const uint32_t)(*rjd_array_count_impl(buf)):0)
-#define rjd_array_clear(buf)							(*rjd_array_count_impl(buf) = 0)
-#define rjd_array_reserve(buf, capacity)				(buf = rjd_array_reserve_impl((buf), capacity, sizeof(*(buf))))
-#define rjd_array_resize(buf, size) 					(buf = rjd_array_resize_impl((buf), size, sizeof(*(buf))))
-#define rjd_array_trim(buf)								(buf = rjd_array_trim_impl((buf), sizeof(*(buf))))
-#define rjd_array_erase(buf, index) 					rjd_array_erase_impl((buf), index, sizeof(*(buf)))
-#define rjd_array_erase_unordered(buf, index) 			rjd_array_erase_unordered_impl((buf), index, sizeof(*(buf)))
-#define rjd_array_empty(buf) 							(rjd_array_count(buf) == 0)
-#define rjd_array_full(buf) 							(rjd_array_count(buf) == rjd_array_capacity(buf))
-#define rjd_array_push(buf, value) 						(buf = rjd_array_push_impl((buf), \
-														sizeof(*(buf))), (buf)[rjd_array_count(buf) - 1] = value)
-#define rjd_array_pop(buf)		 						(rjd_array_pop_impl(buf), 		\
-														--*rjd_array_count_impl(buf), 	\
-														*(buf + rjd_array_count(buf)))
-#define rjd_array_get(buf, index)						(rjd_array_get_validate((buf), (index)), (buf)[(index)])
-#define rjd_array_first(buf)							(rjd_array_get_validate((buf), 0), (buf)[0])
-#define rjd_array_last(buf)								(rjd_array_get_validate((buf), 0), (buf)[rjd_array_count(buf) - 1])
+// dyanmic array
+#define rjd_array_alloc(type, capacity, allocator)	((type*)(rjd_array_alloc_impl((capacity), (allocator), sizeof(type))))
+#define rjd_array_clone(buf, allocator)				rjd_array_clone_impl((buf), allocator, sizeof(*(buf)))
+#define rjd_array_free(buf)							rjd_array_free_impl(buf)
+#define rjd_array_capacity(buf) 					((buf)?(const uint32_t)(*rjd_array_capacity_impl(buf)):0)
+#define rjd_array_count(buf) 						((buf)?(const uint32_t)(*rjd_array_count_impl(buf)):0)
+#define rjd_array_clear(buf)						(*rjd_array_count_impl(buf) = 0)
+#define rjd_array_reserve(buf, capacity)			(buf = rjd_array_reserve_impl((buf), capacity, sizeof(*(buf))))
+#define rjd_array_resize(buf, size) 				(buf = rjd_array_resize_impl((buf), size, sizeof(*(buf))))
+#define rjd_array_trim(buf)							(buf = rjd_array_trim_impl((buf), sizeof(*(buf))))
+#define rjd_array_erase(buf, index) 				rjd_array_erase_impl((buf), index, sizeof(*(buf)))
+#define rjd_array_erase_unordered(buf, index) 		rjd_array_erase_unordered_impl((buf), index, sizeof(*(buf)))
+#define rjd_array_empty(buf) 						(rjd_array_count(buf) == 0)
+#define rjd_array_full(buf) 						(rjd_array_count(buf) == rjd_array_capacity(buf))
+#define rjd_array_push(buf, value) 					(buf = rjd_array_push_impl((buf), \
+													sizeof(*(buf))), (buf)[rjd_array_count(buf) - 1] = value)
+#define rjd_array_pop(buf)		 					(rjd_array_pop_impl(buf), 		\
+													--*rjd_array_count_impl(buf), 	\
+													*(buf + rjd_array_count(buf)))
+#define rjd_array_insert(buf, ptr, index)			(buf = rjd_array_insert_impl((buf), (ptr), sizeof(*(buf)), index))
+#define rjd_array_get(buf, index)					(rjd_array_get_validate((buf), (index)), (buf)[(index)])
+#define rjd_array_first(buf)						(rjd_array_get_validate((buf), 0), (buf)[0])
+#define rjd_array_last(buf)							(rjd_array_get_validate((buf), 0), (buf)[rjd_array_count(buf) - 1])
 
 // searching/sorting
-
-typedef int32_t (*rjd_array_compare_predicate)(void* userdata, const void* left, const void* right);
+typedef int32_t (*rjd_array_compare_func)(const void* left, const void* right);
+typedef int32_t (*rjd_array_compare_c_func)(void* context, const void* left, const void* right);
 
 enum { RJD_ARRAY_NOT_FOUND = -1 };
 
-#define rjd_array_contains(buf, ptr)					rjd_array_contains_impl((buf), (ptr), sizeof(*(buf)), sizeof(*(ptr)))
-#define rjd_array_find(buf, ptr)						rjd_array_find_linear_impl((buf), (ptr), sizeof(*(buf)), sizeof(*(ptr)))
-#define rjd_array_find_sorted(buf, ptr, predicate, userdata)																		\
-														rjd_array_find_sorted_impl((buf), (ptr), sizeof(*(buf)), sizeof(*(ptr)),	\
-																					predicate, userdata)
-#define rjd_array_sort(buf, predicate, userdata)		rjd_array_sort_impl((buf), sizeof(*(buf)), predicate, userdata)
+#define rjd_array_find(buf, ptr)						rjd_array_find_impl((buf), (ptr), sizeof(*(buf)), RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
+#define rjd_array_contains(buf, ptr)					rjd_array_contains_impl((buf), (ptr), sizeof(*(buf)), RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
+														
+// These functions sort or deal with sorted data
+#define rjd_array_sort(buf, comparer) \
+		rjd_array_sort_impl((buf), sizeof(*(buf)), comparer)
+#define rjd_array_lowerbound(buf, ptr, comparer) \
+		rjd_array_lowerbound_impl((buf), ptr, sizeof(*(buf)), comparer, RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
+#define rjd_array_find_sorted(buf, ptr, comparer) \
+		rjd_array_find_sorted_impl((buf), (ptr), sizeof(*(buf)), comparer, RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
+#define rjd_array_contains_sorted(buf, ptr, comparer) \
+		rjd_array_contains_sorted_impl((buf), (ptr), sizeof(*(buf)), comparer, RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
+
+// These versions of the sort/find sorted functions allow you to provide a content parameter that 
+// is passed into the compare func.
+#define rjd_array_sort_c(buf, comparer, context) \
+		rjd_array_sort_c_impl((buf), sizeof(*(buf)), comparer, context)
+#define rjd_array_lowerbound_c(buf, ptr, comparer, context) \
+		rjd_array_lowerbound_c_impl((buf), (ptr), sizeof(*(buf)), comparer, context, RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
+#define rjd_array_find_sorted_c(buf, ptr, comparer, context) \
+		rjd_array_find_sorted_c_impl((buf), (ptr), sizeof(*(buf)), comparer, context, RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
+#define rjd_array_contains_sorted_c(buf, ptr, comparer, context) \
+		rjd_array_contains_sorted_c_impl((buf), (ptr), sizeof(*(buf)), comparer, context, RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
 
 // predicate helpers for the functional-style interface
-#define rjd_array_sum_predicate(acc, element) 			(acc + element)
+#define rjd_array_sum_predicate(acc, element) 		(acc + element)
 
 // functional-style helpers
-#define rjd_array_filter(buf, predicate, userata)		for(int _i = (int)rjd_array_count(buf) - 1; _i >= 0; --_i) { 	 \
+#define rjd_array_filter(buf, predicate, context)	for(int _i = (int)rjd_array_count(buf) - 1; _i >= 0; --_i) { 	 	\
 															if (!(predicate((buf)[_i]))) { rjd_array_erase((buf), _i); } \
-														}
-#define rjd_array_map(in, out, predicate)				rjd_array_resize((out), rjd_array_count(in)); 					\
-														for (size_t _i = 0; _i < rjd_array_count(in); ++_i) {			\
-															out[_i] = predicate(in[_i]); 								\
-														}
-#define rjd_array_reduce(buf, acc, predicate)			for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) {			\
-															(acc) = predicate(acc, ((buf)[_i]));						\
-														}
-#define rjd_array_sum(buf, acc)							for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) {			\
-															(acc) = rjd_array_sum_predicate((acc), ((buf)[_i]));		\
-														}
-#define rjd_array_reverse(buf)							rjd_array_reverse_impl(buf, sizeof(*buf))
-#define rjd_array_sample(buf, rng)						((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
-#define rjd_array_shuffle(buf, rng)						rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
+													}
+#define rjd_array_map(in, out, predicate)			rjd_array_resize((out), rjd_array_count(in)); 					\
+													for (size_t _i = 0; _i < rjd_array_count(in); ++_i) {			\
+														out[_i] = predicate(in[_i]); 								\
+													}
+#define rjd_array_reduce(buf, acc, predicate)		for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) {			\
+														(acc) = predicate(acc, ((buf)[_i]));						\
+													}
+#define rjd_array_sum(buf, acc)						for(size_t _i = 0; _i < rjd_array_count(buf); ++_i) {			\
+														(acc) = rjd_array_sum_predicate((acc), ((buf)[_i]));		\
+													}
+#define rjd_array_reverse(buf)						rjd_array_reverse_impl(buf, sizeof(*buf))
 
+// randomness helpers
+#define rjd_array_sample(buf, rng)					((buf)[rjd_rng_range32(rng, 0, rjd_array_count(buf))])
+#define rjd_array_shuffle(buf, rng)					rjd_array_shuffle_impl(buf, rng, sizeof(*buf))
+
+struct rjd_mem_allocator;
 struct rjd_rng;
 
 void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocator, size_t sizeof_type);
+void* rjd_array_clone_impl(const void* array, struct rjd_mem_allocator* allocator, size_t sizeof_type);
 void rjd_array_free_impl(const void* array);
 uint32_t* rjd_array_capacity_impl(const void* array);
 uint32_t* rjd_array_count_impl(const void* array);
@@ -981,11 +1016,18 @@ void rjd_array_erase_impl(void* array, uint32_t index, size_t sizeof_type);
 void rjd_array_erase_unordered_impl(void* array, uint32_t index, size_t sizeof_type);
 void* rjd_array_push_impl(void* array, size_t sizeof_type);
 void rjd_array_pop_impl(void* array);
+void* rjd_array_insert_impl(void* array, const void* insert, size_t sizeof_type, uint32_t index);
 void rjd_array_get_validate(void* array, uint32_t index);
-int32_t rjd_array_find_linear_impl(const void* array, const void* search, size_t sizeof_type, size_t sizeof_value);
-int32_t rjd_array_find_sorted_impl(const void* array, const void* search, size_t sizeof_type, size_t sizeof_value, rjd_array_compare_predicate compare, void* userdata);
-bool rjd_array_contains_impl(const void* array, const void* search, size_t sizeof_type, size_t sizeof_value);
-void rjd_array_sort_impl(void* array, size_t sizeof_type, rjd_array_compare_predicate predicate, void* userdata);
+int32_t rjd_array_find_impl(const void* array, const void* search, size_t sizeof_type, int unused);
+bool rjd_array_contains_impl(const void* array, const void* search, size_t sizeof_type, int unused);
+void rjd_array_sort_impl(void* array, size_t sizeof_type, rjd_array_compare_func comparer);
+int32_t rjd_array_lowerbound_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused);
+int32_t rjd_array_find_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused);
+bool rjd_array_contains_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused);
+void rjd_array_sort_c_impl(void* array, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context);
+int32_t rjd_array_lowerbound_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused);
+int32_t rjd_array_find_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused);
+bool rjd_array_contains_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused);
 void rjd_array_shuffle_impl(void* array, struct rjd_rng* rng, size_t sizeof_type);
 void rjd_array_reverse_impl(void* array, size_t sizeof_type);
 
@@ -1004,6 +1046,7 @@ const uint32_t RJD_ARRAY_DEBUG_SENTINEL32 = 0xA7A7A7A7;
 static struct rjd_array_header* rjd_array_getheader(void* array);
 static struct rjd_mem_allocator* rjd_array_allocator(void* array);
 static inline void rjd_array_validate(const void* array);
+static void* rjd_array_grow(void* array, size_t sizeof_type);
 
 void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocator, size_t sizeof_type)
 {
@@ -1022,6 +1065,15 @@ void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocato
 
 	char* buf = raw + sizeof(struct rjd_array_header);
 	return buf;
+}
+
+void* rjd_array_clone_impl(const void* array, struct rjd_mem_allocator* allocator, size_t sizeof_type)
+{
+	uint32_t count = rjd_array_count(array);
+	void* clone = rjd_array_alloc_impl(count, allocator, sizeof_type);
+	clone = rjd_array_resize_impl(clone, count, sizeof_type);
+	memcpy(clone, array, count * sizeof_type);
+	return clone;
 }
 
 void rjd_array_free_impl(const void* array)
@@ -1112,7 +1164,6 @@ void* rjd_array_trim_impl(void* array, size_t sizeof_type)
 	rjd_array_free(array);
 
 	return newarray;
-
 }
 
 void rjd_array_erase_impl(void* array, uint32_t index, size_t sizeof_type)
@@ -1154,19 +1205,10 @@ void rjd_array_erase_unordered_impl(void* array, uint32_t index, size_t sizeof_t
 	}
 }
 
-void* rjd_array_push_impl(void* array, size_t sizeof_type) {
-	RJD_ASSERT(array);
-	RJD_ASSERT(sizeof_type > 0);
-
-	rjd_array_validate(array);
-
-	uint32_t count = rjd_array_count(array);
-	uint32_t capacity = rjd_array_capacity(array);
-	if (count == capacity) {
-		array = rjd_array_reserve_impl(array, capacity * 2, sizeof_type);
-	}
-
-	*rjd_array_count_impl(array) = count + 1;
+void* rjd_array_push_impl(void* array, size_t sizeof_type) 
+{
+	array = rjd_array_grow(array, sizeof_type);
+	++*rjd_array_count_impl(array);
 
 	// skip init new element to 0 since it will be set in the push macro
 
@@ -1178,15 +1220,31 @@ void rjd_array_pop_impl(void* array)
 	RJD_ASSERT(rjd_array_count(array) > 0);
 }
 
+void* rjd_array_insert_impl(void* array, const void* insert, size_t sizeof_type, uint32_t index)
+{
+	array = rjd_array_grow(array, sizeof_type);
+	uint32_t* count = rjd_array_count_impl(array);
+	++*count;
+
+	RJD_ASSERT(*count > index);
+
+	void* where_to_insert = (char*)array + sizeof_type * index;
+	void* element_after_insert = (char*)where_to_insert + sizeof_type;
+	memmove(element_after_insert, where_to_insert, sizeof_type * (*count - index));
+	memcpy(where_to_insert, insert, sizeof_type);
+
+	return array;
+}
+
 void rjd_array_get_validate(void* array, uint32_t index)
 {
 	rjd_array_validate(array);
 	RJD_ASSERT(index < rjd_array_count(array));
 }
 
-int32_t rjd_array_find_linear_impl(const void* array, const void* search, size_t sizeof_type, size_t sizeof_value)
+int32_t rjd_array_find_impl(const void* array, const void* search, size_t sizeof_type, int unused)
 {
-	RJD_ASSERT(sizeof_type == sizeof_value);
+	RJD_UNUSED_PARAM(unused);
 
 	rjd_array_validate(array);
 
@@ -1203,70 +1261,142 @@ int32_t rjd_array_find_linear_impl(const void* array, const void* search, size_t
 	return RJD_ARRAY_NOT_FOUND;
 }
 
-const void* rjd_array_find_sorted_internal(const void* array, int32_t length, const void* search, int32_t sizeof_value, rjd_array_compare_predicate compare, void* userdata)
+bool rjd_array_contains_impl(const void* array, const void* search, size_t sizeof_type, int unused)
 {
-	if (length == 0) {
-		return NULL;
-	}
+	RJD_UNUSED_PARAM(unused);
 
-	int32_t midpoint;
-	int32_t next_length;
-
-	if ((length % 2) == 1) {
-		midpoint = (length / 2) + 1;
-		next_length = (length / 2);
-	} else {
-		midpoint = (length / 2);
-		next_length = (length / 2) + 1;
-	}
-
-	const void* value = (const char*)array + midpoint * sizeof_value;
-	const int32_t compared_value = compare(userdata, value, search);
-	if (compared_value < 0) {
-		return rjd_array_find_sorted_internal(array, next_length, search, sizeof_value, compare, userdata);
-	} else if (compared_value > 0) {
-		const void* next_value = (const char*)value + sizeof_value;
-		return rjd_array_find_sorted_internal(next_value, next_length, search, sizeof_value, compare, userdata);
-	}
-
-	return value;
-}
-
-int32_t rjd_array_find_sorted_impl(const void* array, const void* search, size_t sizeof_type, size_t sizeof_value, rjd_array_compare_predicate compare, void* userdata)
-{
-	RJD_ASSERT(sizeof_type == sizeof_value);
-
-	rjd_array_validate(array);
-
-	if (!array) {
-		return false;
-	}
-
-	uint32_t length = rjd_array_count(array);
-	const char* found = rjd_array_find_sorted_internal(array, length, search, sizeof_type, compare, userdata);
-	if (found == NULL) {
-		return RJD_ARRAY_NOT_FOUND;
-	}
-
-	const char* begin = array;
-	ptrdiff_t diff = (found - begin) / sizeof_type;
-	return (int32_t)diff / sizeof_type;
-}
-
-bool rjd_array_contains_impl(const void* array, const void* search, size_t sizeof_type, size_t sizeof_value)
-{
-	int32_t index = rjd_array_find_linear_impl(array, search, sizeof_type, sizeof_value);
+	const int32_t index = rjd_array_find_impl(array, search, sizeof_type, 0);
 	return index != RJD_ARRAY_NOT_FOUND;
 }
 
-void rjd_array_sort_impl(void* array, size_t sizeof_type, rjd_array_compare_predicate predicate, void* userdata)
+void rjd_array_sort_impl(void* array, size_t sizeof_type, rjd_array_compare_func comparer)
 {
+	rjd_array_validate(array);
 	size_t length = rjd_array_count(array);
+	qsort(array, length, sizeof_type, comparer);
+}
+
+int32_t rjd_array_lowerbound_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused)
+{
+	RJD_UNUSED_PARAM(unused);
+
+	rjd_array_validate(array);
+
+	uint32_t length = rjd_array_count(array);
+
+	if (length == 0) {
+		return 0;
+	}
+
+	int32_t first = 0;
+	int32_t index = 0;
+	
+	while (length > 0)
+	{
+		int32_t step = length / 2;
+		index = first + step;
+
+		const void* value = (const char*)array + index * sizeof_type;
+		const int32_t compared_value = comparer(value, needle);
+
+		if (compared_value < 0) {
+			++index;
+			first = index;
+			length -= step + 1;
+		} else if (compared_value > 0) {
+			length = step;
+		} else {
+			break;
+		}
+	}
+	return index;
+}
+
+int32_t rjd_array_find_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused)
+{
+	RJD_UNUSED_PARAM(unused);
+
+	const int32_t index = rjd_array_lowerbound_impl(array, needle, sizeof_type, comparer, 0);
+	const void* value = (const char*)array + (index * sizeof_type);
+	if (comparer(array, value) == 0) {
+		return index;
+	}
+	return RJD_ARRAY_NOT_FOUND;
+}
+
+bool rjd_array_contains_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused)
+{
+	RJD_UNUSED_PARAM(unused);
+
+	const int32_t index = rjd_array_find_sorted_impl(array, needle, sizeof_type, comparer, 0);
+	return index != RJD_ARRAY_NOT_FOUND;
+}
+
+void rjd_array_sort_c_impl(void* array, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context)
+{
+	rjd_array_validate(array);
+	const size_t length = rjd_array_count(array);
 #if RJD_COMPILER_MSVC
-	qsort_s(array, length, sizeof_type, userdata, predicate);
+	qsort_s(array, length, sizeof_type, context, comparer);
 #else
-	qsort_r(array, length, sizeof_type, userdata, predicate);
+	qsort_r(array, length, sizeof_type, context, comparer);
 #endif
+}
+
+int32_t rjd_array_lowerbound_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused)
+{
+	RJD_UNUSED_PARAM(unused);
+
+	rjd_array_validate(array);
+
+	uint32_t length = rjd_array_count(array);
+
+	if (length == 0) {
+		return 0;
+	}
+
+	int32_t first = 0;
+	int32_t index = 0;
+	
+	while (length > 0)
+	{
+		int32_t step = length / 2;
+		index = first + step;
+
+		const void* value = (const char*)array + index * sizeof_type;
+		const int32_t compared_value = comparer(context, value, needle);
+
+		if (compared_value < 0) {
+			++index;
+			first = index;
+			length -= step + 1;
+		} else if (compared_value > 0) {
+			length = step;
+		} else {
+			break;
+		}
+	}
+	return index;
+}
+
+int32_t rjd_array_find_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused)
+{
+	RJD_UNUSED_PARAM(unused);
+
+	const int32_t index = rjd_array_lowerbound_c_impl(array, needle, sizeof_type, comparer, context, 0);
+	const void* value = (const char*)array + (index * sizeof_type);
+	if (comparer(context, array, value) == 0) {
+		return index;
+	}
+	return RJD_ARRAY_NOT_FOUND;
+}
+
+bool rjd_array_contains_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused)
+{
+	RJD_UNUSED_PARAM(unused);
+
+	const int32_t index = rjd_array_find_sorted_c_impl(array, needle, sizeof_type, comparer, context, 0);
+	return index != RJD_ARRAY_NOT_FOUND;
 }
 
 void rjd_array_shuffle_impl(void* array, struct rjd_rng* rng, size_t sizeof_type)
@@ -1314,6 +1444,9 @@ void rjd_array_reverse_impl(void* array, size_t sizeof_type)
 	}
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// local helpers
+
 static struct rjd_array_header* rjd_array_getheader(void* array)
 {
 	if (!array) {
@@ -1340,6 +1473,21 @@ static inline void rjd_array_validate(const void* array)
 	RJD_ASSERTMSG(header->debug_sentinel == RJD_ARRAY_DEBUG_SENTINEL32, 
 		"Debug sentinel was either corrupted by an underrun or this is not an rjd_array.");
 	RJD_UNUSED_PARAM(header);
+}
+
+static void* rjd_array_grow(void* array, size_t sizeof_type)
+{
+	RJD_ASSERT(array);
+	RJD_ASSERT(sizeof_type > 0);
+
+	rjd_array_validate(array);
+
+	uint32_t count = rjd_array_count(array);
+	uint32_t capacity = rjd_array_capacity(array);
+	if (count == capacity) {
+		array = rjd_array_reserve_impl(array, capacity * 2, sizeof_type);
+	}
+	return array;
 }
 
 #endif //RJD_IMPL
@@ -3653,38 +3801,30 @@ static int32_t rjd_dict_findindex(const rjd_hash64* hashes, rjd_hash64 hash, enu
 
 #define RJD_FILEIO_H 1
 
-#define RJD_FIO_ERR_ENUM(macro) \
-	macro(RJD_FIO_ERR_OK)		\
-	macro(RJD_FIO_ERR_IO)		\
-	macro(RJD_FIO_ERR_NOMEM)
-RJD_ENUM_DECLARE(rjd_fio_err, RJD_FIO_ERR_ENUM);
-
-#define RJD_FIO_WRITEMODE_ENUM(macro)	\
-	macro(RJD_FIO_WRITEMODE_REPLACE)	\
-	macro(RJD_FIO_WRITEMODE_APPEND)
-RJD_ENUM_DECLARE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM);
+enum rjd_fio_writemode
+{
+	RJD_FIO_WRITEMODE_REPLACE,
+	RJD_FIO_WRITEMODE_APPEND,
+};
 
 // use rjd_array_free() to free *buffer after use
-enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* context);
-enum rjd_fio_err rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode);
-enum rjd_fio_err rjd_fio_size(const char* path, size_t* out_size);
-enum rjd_fio_err rjd_fio_delete(const char* path);
+struct rjd_result rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* allocator);
+struct rjd_result rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode);
+struct rjd_result rjd_fio_size(const char* path, size_t* out_size);
+struct rjd_result rjd_fio_delete(const char* path);
 
 #if RJD_IMPL
 
-RJD_ENUM_DEFINE(rjd_fio_err, RJD_FIO_ERR_ENUM);
-RJD_ENUM_DEFINE(rjd_fio_writemode, RJD_FIO_WRITEMODE_ENUM);
-
-enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* context)
+struct rjd_result rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* allocator)
 {
 	FILE* file = fopen(path, "rb");
 	if (!file) {
-		return RJD_FIO_ERR_IO;
+		return RJD_RESULT("Failed to open the path for reading");
 	}
 
 	if (fseek(file, 0, SEEK_END)) {
 		fclose(file);
-		return RJD_FIO_ERR_IO;
+		return RJD_RESULT("Failed to seek to the end of the file");
 	}
 
 	long int length = ftell(file);
@@ -3694,9 +3834,9 @@ enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_al
 
 	rewind(file);
 
-	*buffer = rjd_array_alloc(char, (uint32_t)length, context);
+	*buffer = rjd_array_alloc(char, (uint32_t)length, allocator);
 	if (!*buffer) {
-		return RJD_FIO_ERR_NOMEM;
+		return RJD_RESULT("Not enough memory in the allocator");
 	}
 	rjd_array_resize(*buffer, (uint32_t)length);
 
@@ -3706,56 +3846,59 @@ enum rjd_fio_err rjd_fio_read(const char* path, char** buffer, struct rjd_mem_al
 	if (read_length < (size_t)length) {
 		rjd_array_free(*buffer);
 		*buffer = NULL;
-		return RJD_FIO_ERR_IO;
+		return RJD_RESULT("Failed to read the entire file into memory");
 	}
 
-	return RJD_FIO_ERR_OK;
+	return RJD_RESULT_OK();
 }
 
-enum rjd_fio_err rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode)
+struct rjd_result rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode)
 {
 	const char* m = (mode == RJD_FIO_WRITEMODE_REPLACE) ? "wb" : "ab";
 	FILE* file = fopen(path, m);
+	if (!file) {
+		return RJD_RESULT("Failed to open a writable handle");
+	}
 
-	size_t written = fwrite(data, 1, length, file);
+	const size_t written = fwrite(data, 1, length, file);
 
 	fclose(file);
 
 	if (written == 0) {
-		return RJD_FIO_ERR_IO;
+		return RJD_RESULT("Failed to write any bytes");
 	} else if (written < length) {
-		return RJD_FIO_ERR_IO;
+		return RJD_RESULT("Failed to write the entire file");
 	} else {
-		return RJD_FIO_ERR_OK;
+		return RJD_RESULT_OK();
 	}
 }
 
-enum rjd_fio_err rjd_fio_size(const char* path, size_t* out_size)
+struct rjd_result rjd_fio_size(const char* path, size_t* out_size)
 {
 	FILE* file = fopen(path, "rb");
 	if (!file) {
-		return RJD_FIO_ERR_IO;
+		return RJD_RESULT("Failed to open the path for reading");
 	}
 
 	if (fseek(file, 0, SEEK_END)) {
 		fclose(file);
-		return RJD_FIO_ERR_IO;
+		return RJD_RESULT("Failed to seek to the end of the file");
 	}
 
 	long int length = ftell(file);
 	fclose(file);
 
 	*out_size = (size_t) length;
-	return RJD_FIO_ERR_OK;
+	return RJD_RESULT_OK();
 }
 
-enum rjd_fio_err rjd_fio_delete(const char* path)
+struct rjd_result rjd_fio_delete(const char* path)
 {
 	if (remove(path)) {
-		return RJD_FIO_ERR_IO;
+		return RJD_RESULT("Failed to delete file");
 	}
 
-	return RJD_FIO_ERR_OK;
+	return RJD_RESULT_OK();
 }
 
 #endif // RJD_IMPL
@@ -3938,7 +4081,7 @@ struct rjd_slot
 static inline bool rjd_slot_isvalid(struct rjd_slot slot);
 
 #define rjd_slotmap_alloc(type, count, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), count, allocator))
-#define rjd_slotmap_insert(map, data, out_slot)		((map) = rjd_slotmap_insert_impl((map), (out_slot)), \
+#define rjd_slotmap_insert(map, data, out_slot)		(rjd_slotmap_insert_impl((void**)(&map), (out_slot)), \
 													 (map)[(out_slot)->index] = data)
 #define rjd_slotmap_get(map, slot)					((map) + rjd_slotmap_get_impl((map), (slot)))
 #define rjd_slotmap_count(map)						(rjd_slotmap_count_impl(map))
@@ -3947,7 +4090,7 @@ static inline bool rjd_slot_isvalid(struct rjd_slot slot);
 #define rjd_slotmap_next(map, slot)					(rjd_slotmap_next_impl((map), (slot))) // pass null slot for first
 
 void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator);
-void* rjd_slotmap_insert_impl(void* map, struct rjd_slot* out_slot);
+void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot);
 uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot);
 uint32_t rjd_slotmap_count_impl(const void* map);
 void rjd_slotmap_erase_impl(void* map, struct rjd_slot slot);
@@ -3991,10 +4134,13 @@ void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t count, struct rjd_mem_
 	return rjd_slotmap_grow(NULL, sizeof_type, count, allocator);
 }
 
-void* rjd_slotmap_insert_impl(void* map, struct rjd_slot* out_slot)
+void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot)
 {
-	RJD_ASSERT(map);
+	RJD_ASSERT(map_p);
+	RJD_ASSERT(*map_p);
 	RJD_ASSERT(out_slot);
+
+	void* map = *map_p;
 
 	struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
 
@@ -4002,6 +4148,7 @@ void* rjd_slotmap_insert_impl(void* map, struct rjd_slot* out_slot)
 		map = rjd_slotmap_grow(map, header->sizeof_type, header->count * 2, header->allocator);
 		header = rjd_slotmap_getheader(map);
 		RJD_ASSERT(rjd_array_count(header->freelist) > 0);
+		*map_p = map;
 	}
 
 	uint32_t index = rjd_array_pop(header->freelist);
@@ -4013,8 +4160,6 @@ void* rjd_slotmap_insert_impl(void* map, struct rjd_slot* out_slot)
 
 	out_slot->index = rjd_math_truncate_u32_to_u16(index);
 	out_slot->salt = *salt;
-
-	return map;
 }
 
 uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot)
@@ -4025,6 +4170,8 @@ uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot)
 	RJD_ASSERT(slot.index < header->count);
 	uint32_t index = slot.index;
 	RJD_ASSERTMSG(!rjd_array_contains(header->freelist, &index), "This slot is unallocated.");
+    int16_t salt = header->salts[slot.index];
+	RJD_ASSERT(salt == slot.salt);
 	return slot.index;
 }
 
@@ -4104,6 +4251,7 @@ void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t count, struct 
 
 	size_t total_mem_size = sizeof(struct rjd_slotmap_header) + sizeof_type * count + sizeof(uint16_t) * count;
 	char* mem = rjd_mem_alloc_array(char, total_mem_size, allocator);
+	memset(mem, 0, total_mem_size);
 
 	struct rjd_slotmap_header* header = (struct rjd_slotmap_header*)mem;
 	header->allocator = allocator;
@@ -4147,52 +4295,213 @@ void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t count, struct 
 
 #define RJD_PATH_H 1
 
-//struct rjd_strbuf;
-//
-//struct rjd_path
-//{
-//	struct rjd_strbuf buf;
-//};
+#ifndef RJD_PATH_BUFFER_LENGTH
+	#define RJD_PATH_BUFFER_LENGTH 256
+#endif
 
-//struct rjd_path rjd_path_init();
-//struct rjd_path rjd_path_init_contents(const char* path);
-//void rjd_path_append(struct rjd_path* path1, const char* path2);
-//void rjd_path_join(struct rjd_path* path1, struct rjd_path path2);
-//const char* rjd_path_get(struct rjd_path* path);
-//const char* rjd_path_get_extension(struct rjd_path* path);
-const char* rjd_path_extension(const char* path);
+struct rjd_path
+{
+	uint32_t length;
+	char str[RJD_PATH_BUFFER_LENGTH];
+};
+
+struct rjd_path_enumerator_state
+{
+	char impl[16];
+};
+
+struct rjd_path rjd_path_create(void);
+struct rjd_path rjd_path_create_with(const char* path);
+void rjd_path_append(struct rjd_path* path, const char* str);
+void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2);
+const char* rjd_path_get(struct rjd_path* path);
+void rjd_path_clear(struct rjd_path* path);
+const char* rjd_path_extension(const struct rjd_path* path);
+const char* rjd_path_extension_str(const char* path);
+
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path);
+const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state);
+void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state);
 
 #if RJD_IMPL
 
-//struct rjd_path rjd_path_init()
-//{
-//}
-//
-//struct rjd_path rjd_path_init_contents(const char* initial_contents)
-//{
-//}
-//
-//void rjd_path_append(struct rjd_path* path, const char* path)
-//{
-//}
-//
-//void rjd_path_join(struct rjd_path* path1, struct rjd_path path2)
-//{
-//}
+#if RJD_PLATFORM_WINDOWS
+	#define RJD_PATH_SLASH ('/')
+#elif RJD_PLATFORM_OSX
+	#define RJD_PATH_SLASH ('/')
+#else
+	#error "Unknown platform"
+#endif
 
-const char* rjd_path_extension(const char* path)
+static uint32_t rjd_path_normalize_slashes(char* path, uint32_t length);
+
+struct rjd_path rjd_path_create()
 {
-	if (!path) {
-		return NULL;
+	struct rjd_path path = {0};
+	return path;
+}
+
+struct rjd_path rjd_path_create_with(const char* initial_contents)
+{
+	struct rjd_path path;
+	char* end = stpncpy(path.str, initial_contents, RJD_PATH_BUFFER_LENGTH - 1);
+	*end = '\0';
+	path.length = (uint32_t)(end - path.str);
+	RJD_ASSERT(path.length <= RJD_PATH_BUFFER_LENGTH);
+
+	path.length = rjd_path_normalize_slashes(path.str, path.length);
+	return path;
+}
+
+void rjd_path_append(struct rjd_path* path, const char* str)
+{
+    const char slash = RJD_PATH_SLASH;
+    
+	uint32_t start = path->length;
+	uint32_t max_length = RJD_PATH_BUFFER_LENGTH - 1;
+	if (start > 0 && start < max_length && path->str[start - 1] != slash && str[0] != slash) {
+		path->str[start] = slash;
+		++start;
 	}
+
+	char* end = stpncpy(path->str + start, str, max_length - start);
+    uint32_t length = (uint32_t)(end - path->str);
+
+	path->length = rjd_path_normalize_slashes(path->str, length);
+}
+
+void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2)
+{
+	rjd_path_append(path1, path2->str);
+}
+
+const char* rjd_path_get(struct rjd_path* path)
+{
+	return path->str;
+}
+
+const char* rjd_path_extension(const struct rjd_path* path)
+{
+	return rjd_path_extension_str(path->str);
+}
+
+const char* rjd_path_extension_str(const char* path)
+{
+    if (!path) {
+        return NULL;
+    }
 
 	const char* extension = strrchr(path, '.');
-	// If a path ends with a period, it doesn't have an extension
-	if (extension && extension[1] == '\0') {
+	if (!extension) {
 		return NULL;
 	}
+
+	// If a path ends with a period, it doesn't have an extension
+	if (extension[1] == '\0') {
+		return NULL;
+	}
+
 	return extension;
 }
 
+void rjd_path_clear(struct rjd_path* path)
+{
+	RJD_ASSERT(path);
+	path->str[0] = '\0';
+}
+
+// local helpers
+static uint32_t rjd_path_normalize_slashes(char* path, uint32_t length)
+{
+    if (length == 0) {
+        return length;
+    }
+
+    for (int32_t i = length - 1; i > 0 && path[i] == RJD_PATH_SLASH; --i) {
+		path[i] = '\0';
+        --length;
+	}
+
+	char* end = path + length;
+	for (char* start = end - 1; start > path; --start)
+	{
+		while (*start != RJD_PATH_SLASH && start > path) {
+			--start;
+		}
+
+		char* slot = start;
+        while (slot > path && *(slot - 1) == RJD_PATH_SLASH) {
+            --slot;
+        }
+
+        if (start - slot > 0) {
+            uint32_t sublength = (uint32_t)(end - start);
+			memmove(slot, start, sublength + 1);
+            
+            uint32_t trimmed_size = (uint32_t)(start - slot);
+            end -= trimmed_size;
+		}
+		start = slot;
+	}
+
+    size_t newlength = end - path;
+    RJD_ASSERT(newlength == strlen(path));
+    return (uint32_t)(end - path);
+}
+
+#if RJD_PLATFORM_WINDOWS
+#elif RJD_PLATFORM_OSX
+
+#if !RJD_LANG_OBJC
+	#error "rjd_path implementation on OSX uses Objective-C interfaces. You must #include this file in a .m file."
 #endif
+
+#import <Foundation/Foundation.h>
+
+struct rjd_path_enumerator_state_osx
+{
+	NSDirectoryEnumerator<NSString*>* enumerator;
+	NSString* next;
+};
+
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path)
+{
+	RJD_ASSERT(path);
+
+	NSFileManager* manager = [NSFileManager defaultManager];
+	NSString* startingPath = [NSString stringWithUTF8String:path];
+
+	// NSFileManager:enumeratorAtPath is threadsafe
+	NSDirectoryEnumerator<NSString*>* enumerator = [manager enumeratorAtPath:startingPath];
+	[enumerator skipDescendants];
+
+	struct rjd_path_enumerator_state state = {0};
+	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)&state;
+	state_osx->enumerator = enumerator;
+	state_osx->next = nil;
+
+	return state;
+}
+
+const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
+{
+	RJD_ASSERT(state);
+
+	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)state;
+	state_osx->next = (NSString*) [state_osx->enumerator nextObject];
+	
+	return state_osx->next.UTF8String;
+}
+
+void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
+{
+	RJD_ASSERT(state);
+
+	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)state;
+	state_osx->enumerator = nil;
+	state_osx->next = nil;
+}
+
+#endif // RJD_PLATFORM_OSX && RJD_LANG_OBJC
+#endif // RJD_IMPL
 
