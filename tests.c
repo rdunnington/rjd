@@ -50,6 +50,16 @@ void expect_path(const char* expected, struct rjd_path path)
 	expect_str(expected, rjd_path_get(&path));
 }
 
+void expect_result_ok(struct rjd_result actual)
+{
+	RJD_ASSERT(actual.error == NULL);
+}
+
+void expect_result_notok(struct rjd_result actual)
+{
+	RJD_ASSERT(actual.error != NULL);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 static int compare_int32(const void* a, const void* b)
@@ -1485,7 +1495,7 @@ void test_fio()
 {
 	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
 
-	const char expected_contents[] = "this is a test file that has a utf-8 character!";
+	const char expected_contents[] = "this is a test file that has ä utf-8 character!";
 
 	struct rjd_result result;
 
@@ -1521,6 +1531,22 @@ void test_fio()
 	expect_fio_ok(true, result);
 	result = rjd_fio_delete("test2.txt");
 	expect_fio_ok(true, result);
+
+    rjd_fio_delete("test_folder");
+	result = rjd_fio_mkdir("test_folder");
+	expect_result_ok(result);
+    expect_true(rjd_fio_exists("test_folder"));
+	result = rjd_fio_mkdir("test_folder");
+	expect_result_notok(result);
+	result = rjd_fio_mkdir("test_folder/nested/deepnest");
+	expect_result_ok(result);
+    expect_true(rjd_fio_exists("test_folder/nested"));
+    expect_true(rjd_fio_exists("test_folder/nested/deepnest"));
+    result = rjd_fio_mkdir("test_folder/nested/deepnest");
+    expect_result_notok(result);
+    result = rjd_fio_delete("test_folder");
+    expect_result_ok(result);
+    expect_false(rjd_fio_exists("test_folder"));
 }
 
 void test_strpool()
