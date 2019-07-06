@@ -39,8 +39,8 @@ RJD_MATH_MIN_FUNCS(RJD_MATH_DECLARE_MIN_FUNC)
 #define RJD_MATH_DEFINE_MAX_FUNC(name, type) static inline type name(type a, type b) { return (a < b) ? b : a; }
 #define RJD_MATH_MAX_FUNCS(xmacro)		\
 	xmacro(rjd_math_max32, int32_t)		\
-	xmacro(rjd_math_max64, uint64_t)	\
-	xmacro(rjd_math_maxu64, int64_t)	\
+	xmacro(rjd_math_max64, int64_t)		\
+	xmacro(rjd_math_maxu64, uint64_t)	\
 	xmacro(rjd_math_maxu32, uint32_t)
 RJD_MATH_MAX_FUNCS(RJD_MATH_DECLARE_MAX_FUNC)
 
