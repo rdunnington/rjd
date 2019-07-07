@@ -1755,7 +1755,7 @@ void test_stream()
     // istream file
     {
 		char file_expected[500] = {0};
-		for (int i = 0; i < sizeof(file_expected); ++i) {
+		for (size_t i = 0; i < sizeof(file_expected); ++i) {
 			int range = 'z' - 'a';
 			file_expected[i] = 'a' + (i % range);
 		}
@@ -1789,7 +1789,7 @@ void test_stream()
         RJD_ASSERT(sizeof(output) % expected_size == 0);
         
         struct rjd_ostream stream = rjd_ostream_from_memory(output, sizeof(output));
-        for (int i = 0; i < sizeof(output); i += expected_size) {
+        for (size_t i = 0; i < sizeof(output); i += expected_size) {
             struct rjd_result result = rjd_ostream_write(&stream, expected, expected_size);
             expect_result_ok(result);
             expect_int32(0, memcmp(expected, output + i, expected_size));
@@ -1804,7 +1804,7 @@ void test_stream()
     // ostream file
     {
         char file_expected[500] = {0};
-        for (int i = 0; i < sizeof(file_expected); ++i) {
+        for (size_t i = 0; i < sizeof(file_expected); ++i) {
             int range = 'z' - 'a';
             file_expected[i] = 'a' + (i % range);
         }

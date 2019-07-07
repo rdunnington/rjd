@@ -119,13 +119,15 @@ bool rjd_fio_exists(const char* path)
 #elif RJD_PLATFORM_OSX
 static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
 {
+	RJD_UNUSED_PARAM(sb);
+	RJD_UNUSED_PARAM(typeflag);
+	RJD_UNUSED_PARAM(ftwbuf);
 	return remove(path);
 }
 
 struct rjd_result rjd_fio_delete(const char* path)
 {
 	if (remove(path)) {
-
     	if (nftw(path, rjd_delete_nftw_func, 64, FTW_DEPTH | FTW_PHYS)) {
 			return RJD_RESULT("delete failed");
 		}
@@ -161,7 +163,7 @@ struct rjd_result rjd_fio_mkdir(const char* path)
         const char* subpath = NULL;
 
 		if (end) {
-            RJD_ASSERT(end - next < sizeof(stackbuffer));
+            RJD_ASSERT(end - next < (ptrdiff_t)sizeof(stackbuffer));
 			memcpy(stackbuffer, next, end - next);
 			stackbuffer[end - next] = '\0';
             subpath = stackbuffer;

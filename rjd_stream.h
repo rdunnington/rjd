@@ -296,7 +296,7 @@ static struct rjd_result rjd_istream_refill_file(struct rjd_istream* stream)
 	 // cast to non-const since we know the file buffer is ok to write to
 	void* writable_buffer = (void*)stream->start;
 	ptrdiff_t bytes_wanted = stream->end - stream->start;
-	size_t bytes_read = fread(writable_buffer, 1, bytes_wanted, file);
+	int32_t bytes_read = (int32_t)fread(writable_buffer, 1, bytes_wanted, file);
 
     RJD_ASSERT(bytes_read <= bytes_wanted);
     
