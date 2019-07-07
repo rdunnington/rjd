@@ -5,11 +5,11 @@ todo:
 * rjd_mem: use virtual memory to protect against overwrites
 * rjd.h: remove and use normal heirarchical #include structure?
 * rjd_path.h: make UTF8-compatible
+* make all strings UTF8
 
 util ideas:
-* rjd_stream.h - unified interface for memory/file streams
 * rjd_serialize.h - serializer interface with unified read/write
-* rjd_bitset.h - interface for dense bool arrays
 * rjd_filewatcher.h
+* rjd_bitset.h - interface for dense bool arrays
 * rjd_deque.h
 * rjd_ringbuffer.h

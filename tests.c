@@ -1707,6 +1707,130 @@ void test_path(void)
 	expect_str(".txt", rjd_path_extension_str("some\\path\\some.long.extension.txt"));
 }
 
+void test_stream()
+{
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+
+	// istream zeroes
+	{
+		char actual[27] = {0};
+		char expected[27] = {0};
+
+		struct rjd_istream stream = rjd_istream_from_zeroes();
+		for (int i = 0; i < 20; ++i)
+		{
+			memset(actual, 0xFF, sizeof(actual));
+			struct rjd_result result = rjd_istream_read(&stream, actual, sizeof(actual));
+			expect_result_ok(result);
+			int equal = memcmp(actual, expected, sizeof(actual));
+			expect_int32(0, equal);
+		}
+		
+		rjd_istream_close(&stream);
+	}
+
+	// istream memory
+	{
+		const char string[] = "how now brown cow. the quick\nbrown fox jumped\t\nover the lazy dog.";
+		char buffer[512];
+
+		struct rjd_istream stream = rjd_istream_from_memory(string, sizeof(string));
+		struct rjd_result result = rjd_istream_read(&stream, buffer, 15);
+		expect_result_ok(result);
+		expect_int32(0, memcmp(string, buffer, 15));
+		expect_true(0 != memcmp(string + 15, buffer + 15, sizeof(string) - 15));
+
+		result = rjd_istream_read(&stream, buffer + 15, sizeof(string) - 15);
+		expect_result_ok(result);
+		expect_int32(0, memcmp(string, buffer, sizeof(string)));
+
+		char zeroes[32] = {0};
+		result = rjd_istream_read(&stream, buffer, sizeof(zeroes));
+		expect_result_notok(result);
+		expect_int32(0, memcmp(buffer, zeroes, sizeof(zeroes)));
+
+		rjd_istream_close(&stream);
+	}
+
+    // istream file
+    {
+		char file_expected[500] = {0};
+		for (int i = 0; i < sizeof(file_expected); ++i) {
+			int range = 'z' - 'a';
+			file_expected[i] = 'a' + (i % range);
+		}
+
+		struct rjd_result result = rjd_fio_write("test.txt", file_expected, sizeof(file_expected), RJD_FIO_WRITEMODE_REPLACE);
+		expect_result_ok(result);
+
+        struct rjd_istream stream = rjd_istream_from_file("test.txt", &allocator, 32);
+		char file_contents[500] = {0};
+        result = rjd_istream_read(&stream, file_contents, sizeof(file_contents) / 2);
+        expect_result_ok(result);
+		result = rjd_istream_read(&stream, file_contents + sizeof(file_contents) / 2, sizeof(file_contents) / 2);
+        expect_result_notok(result); // end of stream message
+		expect_int32(0, memcmp(file_expected, file_contents, sizeof(file_expected)));
+        
+        char after_feof[50];
+        result = rjd_istream_read(&stream, after_feof, sizeof(after_feof));
+        expect_result_notok(result);
+        
+		rjd_istream_close(&stream);
+
+		result = rjd_fio_delete("test.txt");
+        expect_result_ok(result);
+    }
+    
+    // ostream memory
+    {
+        char output[500];
+        const char expected[] = "balahaslksfdækljáááááaklsdfklasjflksajdfnjid"; // 50 chars
+        const size_t expected_size = sizeof(expected) - 1;
+        RJD_ASSERT(sizeof(output) % expected_size == 0);
+        
+        struct rjd_ostream stream = rjd_ostream_from_memory(output, sizeof(output));
+        for (int i = 0; i < sizeof(output); i += expected_size) {
+            struct rjd_result result = rjd_ostream_write(&stream, expected, expected_size);
+            expect_result_ok(result);
+            expect_int32(0, memcmp(expected, output + i, expected_size));
+        }
+        
+        struct rjd_result result = rjd_ostream_write(&stream, expected, expected_size);
+        expect_result_notok(result);
+        
+        rjd_ostream_close(&stream);
+    }
+
+    // ostream file
+    {
+        char file_expected[500] = {0};
+        for (int i = 0; i < sizeof(file_expected); ++i) {
+            int range = 'z' - 'a';
+            file_expected[i] = 'a' + (i % range);
+        }
+        
+        const size_t chunksize = sizeof(file_expected) / 2;
+        struct rjd_ostream stream = rjd_ostream_from_file("test.txt", RJD_OSTREAM_MODE_REPLACE);
+        struct rjd_result result = rjd_ostream_write(&stream, file_expected, chunksize);
+        expect_result_ok(result);
+        rjd_ostream_close(&stream);
+        
+        stream = rjd_ostream_from_file("test.txt", RJD_OSTREAM_MODE_APPEND);
+        result = rjd_ostream_write(&stream, file_expected + chunksize, chunksize);
+        rjd_ostream_close(&stream);
+        
+        char file_actual[sizeof(file_expected)];
+        FILE* file = fopen("test.txt", "rb");
+        RJD_ASSERT(file);
+        expect_uint64(sizeof(file_actual), fread(file_actual, 1, sizeof(file_actual), file));
+        fclose(file);
+        expect_int32(0, memcmp(file_expected, file_actual, sizeof(file_actual)));
+        
+        result = rjd_fio_delete("test.txt");
+        expect_result_ok(result);
+    }
+}
+
 int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
 {
 	test_logging();
@@ -1726,6 +1850,7 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_strpool();
 	test_slotmap();
 	test_path();
+	test_stream();
 
 	return 0;
 }
