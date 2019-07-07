@@ -1,4 +1,5 @@
 #include <math.h>
+#include <limits.h>
 #include "tests_rjd_wrapped.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1831,6 +1832,87 @@ void test_stream()
     }
 }
 
+struct test
+{
+	int8_t i8;
+	int16_t i16;
+	int32_t i32;
+	int64_t i64;
+	uint8_t u8;
+	uint16_t u16;
+	uint32_t u32;
+	uint64_t u64;
+};
+
+void test_struct_readwrite(struct rjd_binrw_state* state, struct test* data)
+{
+	struct rjd_result result;
+
+	result = rjd_binrw_readwrite_int8(state, &data->i8);
+	expect_result_ok(result);
+	result = rjd_binrw_readwrite_int16(state, &data->i16);
+	expect_result_ok(result);
+	result = rjd_binrw_readwrite_int32(state, &data->i32);
+	expect_result_ok(result);
+	result = rjd_binrw_readwrite_int64(state, &data->i64);
+	expect_result_ok(result);
+	result = rjd_binrw_readwrite_uint8(state, &data->u8);
+	expect_result_ok(result);
+	result = rjd_binrw_readwrite_uint16(state, &data->u16);
+	expect_result_ok(result);
+	result = rjd_binrw_readwrite_uint32(state, &data->u32);
+	expect_result_ok(result);
+	result = rjd_binrw_readwrite_uint64(state, &data->u64);
+	expect_result_ok(result);
+}
+
+void test_binrw()
+{
+	struct test expected_min = {
+		.i8 = CHAR_MIN,
+		.i16 = SHRT_MIN,
+		.i32 = INT_MIN,
+		.i64 = LLONG_MIN,
+		.u8 = 0,
+		.u16 = 0,
+		.u32 = 0,
+		.u64 = 0,
+	};
+
+	struct test expected_max = {
+		.i8 = CHAR_MAX,
+		.i16 = SHRT_MAX,
+		.i32 = INT_MAX,
+		.i64 = LLONG_MAX,
+		.u8 = UCHAR_MAX,
+		.u16 = USHRT_MAX,
+		.u32 = UINT_MAX,
+		.u64 = ULLONG_MAX,
+	};
+
+	char buffer[512];
+	RJD_STATIC_ASSERT(sizeof(buffer) >= sizeof(struct test) * 2);
+
+	struct rjd_ostream ostream = rjd_ostream_from_memory(buffer, sizeof(buffer));
+	struct rjd_istream istream = rjd_istream_from_memory(buffer, sizeof(buffer));
+
+	struct rjd_binrw_state writer = { .ostream = &ostream };
+	struct rjd_binrw_state reader = { .istream = &istream };
+
+	// The readwrite functions use the read_x() and write_x() functions, so we'll skip testing those
+	test_struct_readwrite(&writer, &expected_min);
+	test_struct_readwrite(&writer, &expected_max);
+
+    struct test actual_min = {0};
+    struct test actual_max = {0};
+
+	test_struct_readwrite(&reader, &actual_min);
+	test_struct_readwrite(&reader, &actual_max);
+
+	expect_int32(0, memcmp(&expected_min, &actual_min, sizeof(actual_min)));
+	expect_int32(0, memcmp(&expected_max, &actual_max, sizeof(actual_max)));
+}
+
 int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
 {
 	test_logging();
@@ -1851,6 +1933,7 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_slotmap();
 	test_path();
 	test_stream();
+	test_binrw();
 
 	return 0;
 }
