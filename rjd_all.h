@@ -31,3 +31,5 @@
 #include "rjd_strpool.h"
 #include "rjd_slotmap.h"
 #include "rjd_path.h"
+#include "rjd_stream.h"
+#include "rjd_binrw.h"

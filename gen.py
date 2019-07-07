@@ -34,7 +34,9 @@ files = [
     "rjd_fio.h",
     "rjd_strpool.h",
     "rjd_slotmap.h",
-    "rjd_path.h"
+    "rjd_path.h",
+    "rjd_stream.h",
+    "rjd_binrw.h"
 ]
 
 concat = "#pragma once\n\n"

@@ -1538,8 +1538,8 @@ RJD_MATH_MIN_FUNCS(RJD_MATH_DECLARE_MIN_FUNC)
 #define RJD_MATH_DEFINE_MAX_FUNC(name, type) static inline type name(type a, type b) { return (a < b) ? b : a; }
 #define RJD_MATH_MAX_FUNCS(xmacro)		\
 	xmacro(rjd_math_max32, int32_t)		\
-	xmacro(rjd_math_max64, uint64_t)	\
-	xmacro(rjd_math_maxu64, int64_t)	\
+	xmacro(rjd_math_max64, int64_t)		\
+	xmacro(rjd_math_maxu64, uint64_t)	\
 	xmacro(rjd_math_maxu32, uint32_t)
 RJD_MATH_MAX_FUNCS(RJD_MATH_DECLARE_MAX_FUNC)
 
@@ -3812,8 +3812,15 @@ struct rjd_result rjd_fio_read(const char* path, char** buffer, struct rjd_mem_a
 struct rjd_result rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode);
 struct rjd_result rjd_fio_size(const char* path, size_t* out_size);
 struct rjd_result rjd_fio_delete(const char* path);
+struct rjd_result rjd_fio_mkdir(const char* path);
+bool rjd_fio_exists(const char* path);
 
 #if RJD_IMPL
+
+#if RJD_PLATFORM_OSX
+#include <sys/stat.h>
+#include <ftw.h>
+#endif
 
 struct rjd_result rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* allocator)
 {
@@ -3892,14 +3899,90 @@ struct rjd_result rjd_fio_size(const char* path, size_t* out_size)
 	return RJD_RESULT_OK();
 }
 
+#if RJD_PLATFORM_WINDOWS
+struct rjd_result rjd_fio_delete(const char* path)
+{
+	return RJD_RESULT("not implmented");
+}
+
+struct rjd_result rjd_fio_mkdir(const char* path)
+{
+	return RJD_RESULT("not implmented");
+}
+
+bool rjd_fio_exists(const char* path)
+{
+	return false;
+}
+
+#elif RJD_PLATFORM_OSX
+static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+{
+	RJD_UNUSED_PARAM(sb);
+	RJD_UNUSED_PARAM(typeflag);
+	RJD_UNUSED_PARAM(ftwbuf);
+	return remove(path);
+}
+
 struct rjd_result rjd_fio_delete(const char* path)
 {
 	if (remove(path)) {
-		return RJD_RESULT("Failed to delete file");
+    	if (nftw(path, rjd_delete_nftw_func, 64, FTW_DEPTH | FTW_PHYS)) {
+			return RJD_RESULT("delete failed");
+		}
 	}
 
 	return RJD_RESULT_OK();
 }
+
+bool rjd_fio_exists(const char* path)
+{
+    struct stat unused;
+    return !stat(path, &unused);
+}
+
+struct rjd_result rjd_fio_mkdir(const char* path)
+{
+    RJD_ASSERT(path);
+    RJD_ASSERT(*path);
+    
+    bool created_directory = false;
+    
+    const char* next = path;
+    const char* end = next;
+	do
+    {
+		end = strstr(end, "/");
+        // skip directory separator
+        if (end) {
+            ++end;
+        }
+        
+        char stackbuffer[256];
+        const char* subpath = NULL;
+
+		if (end) {
+            RJD_ASSERT(end - next < (ptrdiff_t)sizeof(stackbuffer));
+			memcpy(stackbuffer, next, end - next);
+			stackbuffer[end - next] = '\0';
+            subpath = stackbuffer;
+		} else {
+			subpath = next;
+		}
+
+		const mode_t mode = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
+		if (mkdir(subpath, mode) == 0) {
+            created_directory = true;
+        } else if (created_directory == true) {
+            // there was an error creating a nested folder
+            created_directory = false;
+            break;
+        }
+    } while (end != NULL);
+    
+    return created_directory ? RJD_RESULT_OK() : RJD_RESULT("error creating directory");
+}
+#endif
 
 #endif // RJD_IMPL
 
@@ -4504,4 +4587,448 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
 
 #endif // RJD_PLATFORM_OSX && RJD_LANG_OBJC
 #endif // RJD_IMPL
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_stream.h
+////////////////////////////////////////////////////////////////////////////////
+
+#define RJD_STREAM_H 1
+
+// rjd_istream API design based on Fabien Giesen's Buffer-Centric IO:
+// https://fgiesen.wordpress.com/2011/11/21/buffer-centric-io/
+
+struct rjd_istream;
+
+typedef struct rjd_result rjd_istream_refill_func(struct rjd_istream* stream);
+typedef void rjd_istream_close_func(struct rjd_istream* stream);
+
+struct rjd_istream
+{
+	const uint8_t* start;
+	const uint8_t* end;
+	const uint8_t* cursor;
+	void* userdata;
+	struct rjd_result result;
+	rjd_istream_refill_func* refill;
+	rjd_istream_close_func* close;
+};
+
+// Pass this as buffer_size in rjd_istream_from_file to read the entire file into memory
+enum
+{
+	RJD_ISTREAM_FILE_BUFFER_SIZE_ALL = 0,
+};
+
+enum rjd_ostream_type
+{
+	RJD_OSTREAM_TYPE_MEMORY,
+	RJD_OSTREAM_TYPE_FILE,
+};
+
+struct rjd_ostream_memory
+{
+	uint8_t* buffer;
+	uint32_t size;
+	uint32_t cursor;
+};
+
+struct rjd_ostream_file
+{
+	FILE* file;
+};
+
+struct rjd_ostream
+{
+	enum rjd_ostream_type type;
+	union {
+		struct rjd_ostream_memory memory;
+		struct rjd_ostream_file file;
+	} state;
+};
+
+enum rjd_ostream_mode
+{
+	RJD_OSTREAM_MODE_REPLACE,
+	RJD_OSTREAM_MODE_APPEND,
+};
+
+struct rjd_mem_allocator;
+
+struct rjd_istream rjd_istream_from_zeroes(void);
+struct rjd_istream rjd_istream_from_memory(const void* buffer, uint32_t size);
+struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_allocator* allocator, uint32_t buffer_size);
+struct rjd_result rjd_istream_read(struct rjd_istream* stream, void* buffer, uint32_t size); 
+void rjd_istream_close(struct rjd_istream* stream);
+
+struct rjd_ostream rjd_ostream_from_memory(void* buffer, uint32_t size);
+struct rjd_ostream rjd_ostream_from_file(const char* filepath, enum rjd_ostream_mode);
+struct rjd_result rjd_ostream_write(struct rjd_ostream* stream, const void* buffer, uint32_t size);
+void rjd_ostream_close(struct rjd_ostream* stream);
+
+#if RJD_IMPL
+
+static struct rjd_result rjd_istream_fail(struct rjd_istream* stream, const char* reason);
+static struct rjd_result rjd_istream_refill_zeroes(struct rjd_istream* stream);
+static struct rjd_result rjd_istream_refill_memory(struct rjd_istream* stream);
+static struct rjd_result rjd_istream_refill_file(struct rjd_istream* stream);
+static void rjd_istream_close_file(struct rjd_istream* stream);
+
+struct rjd_istream rjd_istream_from_zeroes()
+{
+	struct rjd_istream stream = 
+	{
+		.start = NULL,
+		.end = NULL,
+		.cursor = NULL,
+		.userdata = NULL,
+		.result = RJD_RESULT_OK(),
+		.refill = rjd_istream_refill_zeroes,
+		.close = NULL,
+	};
+	stream.refill(&stream);
+	return stream;
+}
+
+struct rjd_istream rjd_istream_from_memory(const void* buffer, uint32_t size)
+{
+	const uint8_t* cbuffer = buffer;
+
+	struct rjd_istream stream =
+	{
+		.start = cbuffer,
+		.end = cbuffer + size,
+		.cursor = cbuffer,
+		.userdata = NULL,
+		.result = RJD_RESULT_OK(),
+		.refill = rjd_istream_refill_memory,
+		.close = NULL,
+	};
+	return stream;
+}
+
+struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_allocator* allocator, uint32_t buffer_size)
+{
+	RJD_ASSERT(filepath);
+	RJD_ASSERT(allocator);
+
+	uint8_t* buffer = NULL;
+	struct rjd_result result = RJD_RESULT_OK();
+	FILE* file = fopen(filepath, "rb");
+
+	if (file) {
+		if (buffer_size == RJD_ISTREAM_FILE_BUFFER_SIZE_ALL) {
+			result = RJD_RESULT("Failed to get file length");
+			if (fseek(file, 0, SEEK_END) == 0) {
+				long int length = ftell(file);
+				if (length >= 0) {
+					if (fseek(file, 0, SEEK_SET) == 0) {
+						buffer_size = (uint32_t)length;
+						result = RJD_RESULT_OK();
+					}
+				}
+			}
+		}
+	} else {
+		result = RJD_RESULT("Failed to open file");
+	}
+
+	if (rjd_result_isok(result)) {
+		buffer = rjd_mem_alloc_array(uint8_t, buffer_size, allocator);
+	}
+
+	struct rjd_istream stream =
+	{
+		.start = buffer,
+		.end = buffer + buffer_size,
+		.cursor = buffer,
+		.userdata = file,
+		.refill = rjd_istream_refill_file,
+		.close = rjd_istream_close_file,
+	};
+	stream.result = stream.refill(&stream);
+	return stream;
+}
+
+struct rjd_result rjd_istream_read(struct rjd_istream* stream, void* buffer, uint32_t size)
+{
+	RJD_ASSERT(stream);
+	RJD_ASSERT(buffer);
+	RJD_ASSERT(size > 0);
+
+    uint8_t* offset_buffer = buffer;
+	uint32_t bytes_remaining = size;
+	while (bytes_remaining > 0) {
+		if (stream->cursor == stream->end) {
+			stream->result = stream->refill(stream);
+		}
+        RJD_ASSERT(stream->end >= stream->cursor)
+		ptrdiff_t buffersize = stream->end - stream->cursor;
+		uint32_t readsize = rjd_math_minu32((uint32_t)buffersize, bytes_remaining);
+
+		memcpy(offset_buffer, stream->cursor, readsize);
+        
+        offset_buffer += readsize;
+		bytes_remaining -= readsize;
+		stream->cursor += readsize;
+	}
+
+	return stream->result;
+}
+
+void rjd_istream_close(struct rjd_istream* stream)
+{
+	RJD_ASSERT(stream);
+
+	if (stream->close) {
+		stream->close(stream);
+	}
+}
+
+struct rjd_ostream rjd_ostream_from_memory(void* buffer, uint32_t size)
+{
+	struct rjd_ostream stream = 
+	{
+		.type = RJD_OSTREAM_TYPE_MEMORY,
+		.state = {
+			.memory = { buffer, size, 0 },
+		},
+	};
+	return stream;
+}
+
+struct rjd_ostream rjd_ostream_from_file(const char* filepath, enum rjd_ostream_mode mode)
+{
+	const char* writemode = NULL;
+	switch (mode)
+	{
+		case RJD_OSTREAM_MODE_REPLACE: writemode = "wb"; break;
+		case RJD_OSTREAM_MODE_APPEND:  writemode = "ab"; break;
+	}
+	RJD_ASSERT(writemode);
+	FILE* file = fopen(filepath, writemode);
+
+	struct rjd_ostream stream =
+	{
+		.type = RJD_OSTREAM_TYPE_FILE,
+		.state = {
+			.file = { file },
+		},
+	};
+	return stream;
+}
+
+struct rjd_result rjd_ostream_write(struct rjd_ostream* stream, const void* buffer, uint32_t size)
+{
+	if (stream->type == RJD_OSTREAM_TYPE_MEMORY) {
+		struct rjd_ostream_memory* state = &stream->state.memory;
+		RJD_ASSERT(state->size >= state->cursor);
+
+		const uint32_t bytes_remaining = state->size - state->cursor;
+		if (size > bytes_remaining) {
+			return RJD_RESULT("attempted to write more data than the buffer can hold");
+		}
+
+		const uint8_t* cbuffer = buffer;
+		RJD_ASSERTMSG(!(cbuffer >= state->buffer && cbuffer < state->buffer + state->size), 
+					"source and destination buffers must not overlap");
+
+		memcpy(state->buffer + state->cursor, buffer, size);
+		state->cursor += size;
+	} else if (stream->type == RJD_OSTREAM_TYPE_FILE) {
+		struct rjd_ostream_file* state = &stream->state.file;
+		if (state->file == NULL) {
+			return RJD_RESULT("failed to open file for writing");
+		}
+		
+		size_t bytes_written = fwrite(buffer, 1, size, state->file);
+		if (bytes_written != size) {
+			return RJD_RESULT("failed to write all data to file");
+		}
+	}
+
+	return RJD_RESULT_OK();
+}
+
+void rjd_ostream_close(struct rjd_ostream* stream)
+{
+	if (stream->type == RJD_OSTREAM_TYPE_MEMORY) {
+		stream->state.memory.buffer = NULL;
+	} else if (stream->type == RJD_OSTREAM_TYPE_FILE) {
+		fclose(stream->state.file.file);
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// static helpers
+
+static struct rjd_result rjd_istream_fail(struct rjd_istream* stream, const char* reason)
+{
+	stream->result = RJD_RESULT(reason);
+	stream->refill = rjd_istream_refill_zeroes;
+	return stream->refill(stream);
+}
+
+static struct rjd_result rjd_istream_refill_zeroes(struct rjd_istream* stream)
+{
+	static uint8_t zeroes[128] = {0};
+
+	stream->start = zeroes;
+	stream->end = zeroes + sizeof(zeroes);
+	stream->cursor = stream->start;
+	return stream->result;
+}
+
+static struct rjd_result rjd_istream_refill_memory(struct rjd_istream* stream)
+{
+	return rjd_istream_fail(stream, "reached end of memory buffer");
+}
+
+static struct rjd_result rjd_istream_refill_file(struct rjd_istream* stream)
+{
+	FILE* file = (FILE*)stream->userdata;
+
+	 // cast to non-const since we know the file buffer is ok to write to
+	void* writable_buffer = (void*)stream->start;
+	ptrdiff_t bytes_wanted = stream->end - stream->start;
+	int32_t bytes_read = (int32_t)fread(writable_buffer, 1, bytes_wanted, file);
+
+    RJD_ASSERT(bytes_read <= bytes_wanted);
+    
+	if (bytes_read < bytes_wanted) {
+		if (feof(file)) {
+			if (bytes_read == 0) {
+				rjd_istream_close_file(stream);
+				rjd_istream_fail(stream, "attempt to read past end of file");
+			} else {
+				stream->end = stream->start + bytes_read;
+                stream->cursor = stream->start;
+                stream->result = RJD_RESULT("end of file reached, no more data available");
+			}
+		} else {
+			rjd_istream_close_file(stream);
+			rjd_istream_fail(stream, "error reading file contents into memory");
+		}
+	} else {
+        if (feof(file)) {
+            rjd_istream_fail(stream, "end of file reached, no more data available");
+        } else {
+            stream->cursor = stream->start;
+        }
+    }
+
+	return stream->result;
+}
+
+static void rjd_istream_close_file(struct rjd_istream* stream)
+{
+	rjd_mem_free(stream->start);
+	FILE* file = (FILE*)stream->userdata;
+	if (file) {
+		fclose(file);
+	}
+
+	stream->userdata = NULL;
+	stream->refill = rjd_istream_refill_zeroes;
+	stream->close = NULL;
+
+	stream->refill(stream);
+}
+
+#endif
+
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_binrw.h
+////////////////////////////////////////////////////////////////////////////////
+
+#define RJD_BINRW_H 1
+
+struct rjd_istream;
+struct rjd_ostream;
+
+struct rjd_binrw_state
+{
+	struct rjd_istream* istream;
+	struct rjd_ostream* ostream;
+};
+
+inline struct rjd_result rjd_binrw_read_int8(struct rjd_istream* stream, int8_t* value);
+inline struct rjd_result rjd_binrw_read_int16(struct rjd_istream* stream, int16_t* value);
+inline struct rjd_result rjd_binrw_read_int32(struct rjd_istream* stream, int32_t* value);
+inline struct rjd_result rjd_binrw_read_int64(struct rjd_istream* stream, int64_t* value);
+inline struct rjd_result rjd_binrw_read_uint8(struct rjd_istream* stream, uint8_t* value);
+inline struct rjd_result rjd_binrw_read_uint16(struct rjd_istream* stream, uint16_t* value);
+inline struct rjd_result rjd_binrw_read_uint32(struct rjd_istream* stream, uint32_t* value);
+inline struct rjd_result rjd_binrw_read_uint64(struct rjd_istream* stream, uint64_t* value);
+
+inline struct rjd_result rjd_binrw_write_int8(struct rjd_ostream* stream, int8_t value);
+inline struct rjd_result rjd_binrw_write_int16(struct rjd_ostream* stream, int16_t value);
+inline struct rjd_result rjd_binrw_write_int32(struct rjd_ostream* stream, int32_t value);
+inline struct rjd_result rjd_binrw_write_int64(struct rjd_ostream* stream, int64_t value);
+inline struct rjd_result rjd_binrw_write_uint8(struct rjd_ostream* stream, uint8_t value);
+inline struct rjd_result rjd_binrw_write_uint16(struct rjd_ostream* stream, uint16_t value);
+inline struct rjd_result rjd_binrw_write_uint32(struct rjd_ostream* stream, uint32_t value);
+inline struct rjd_result rjd_binrw_write_uint64(struct rjd_ostream* stream, uint64_t value);
+
+inline struct rjd_result rjd_binrw_readwrite_int8(struct rjd_binrw_state* state, int8_t* value);
+inline struct rjd_result rjd_binrw_readwrite_int16(struct rjd_binrw_state* state, int16_t* value);
+inline struct rjd_result rjd_binrw_readwrite_int32(struct rjd_binrw_state* state, int32_t* value);
+inline struct rjd_result rjd_binrw_readwrite_int64(struct rjd_binrw_state* state, int64_t* value);
+inline struct rjd_result rjd_binrw_readwrite_uint8(struct rjd_binrw_state* state, uint8_t* value);
+inline struct rjd_result rjd_binrw_readwrite_uint16(struct rjd_binrw_state* state, uint16_t* value);
+inline struct rjd_result rjd_binrw_readwrite_uint32(struct rjd_binrw_state* state, uint32_t* value);
+inline struct rjd_result rjd_binrw_readwrite_uint64(struct rjd_binrw_state* state, uint64_t* value);
+
+////////////////////////////////////////////////////////////////////////////////
+// implementation
+
+#define RJD_BINRW_DEFINE_READ_IMPL(type, name)									\
+	inline struct rjd_result name(struct rjd_istream* stream, type* value) {	\
+		RJD_ASSERT(stream && value);											\
+		return rjd_istream_read(stream, value, sizeof(*value));					\
+	}
+
+#define RJD_BINRW_DEFINE_WRITE_IMPL(type, name)								\
+	inline struct rjd_result name(struct rjd_ostream* stream, type value) {	\
+		RJD_ASSERT(stream);													\
+		return rjd_ostream_write(stream, &value, sizeof(value));			\
+	}
+
+#define RJD_BINRW_DEFINE_READWRITE_IMPL(type, type2, name)						\
+	inline struct rjd_result name(struct rjd_binrw_state* state, type* value) {	\
+		RJD_ASSERT(state && value && (state->istream || state->ostream));		\
+		if (state->istream) {													\
+			return rjd_binrw_read_ ## type2(state->istream, value);				\
+		} else {																\
+			return rjd_binrw_write_ ## type2(state->ostream, *value);			\
+		}																		\
+	}
+
+RJD_BINRW_DEFINE_READ_IMPL(int8_t, rjd_binrw_read_int8)
+RJD_BINRW_DEFINE_READ_IMPL(int16_t, rjd_binrw_read_int16)
+RJD_BINRW_DEFINE_READ_IMPL(int32_t, rjd_binrw_read_int32)
+RJD_BINRW_DEFINE_READ_IMPL(int64_t, rjd_binrw_read_int64)
+RJD_BINRW_DEFINE_READ_IMPL(uint8_t, rjd_binrw_read_uint8)
+RJD_BINRW_DEFINE_READ_IMPL(uint16_t, rjd_binrw_read_uint16)
+RJD_BINRW_DEFINE_READ_IMPL(uint32_t, rjd_binrw_read_uint32)
+RJD_BINRW_DEFINE_READ_IMPL(uint64_t, rjd_binrw_read_uint64)
+
+RJD_BINRW_DEFINE_WRITE_IMPL(int8_t, rjd_binrw_write_int8)
+RJD_BINRW_DEFINE_WRITE_IMPL(int16_t, rjd_binrw_write_int16)
+RJD_BINRW_DEFINE_WRITE_IMPL(int32_t, rjd_binrw_write_int32)
+RJD_BINRW_DEFINE_WRITE_IMPL(int64_t, rjd_binrw_write_int64)
+RJD_BINRW_DEFINE_WRITE_IMPL(uint8_t, rjd_binrw_write_uint8)
+RJD_BINRW_DEFINE_WRITE_IMPL(uint16_t, rjd_binrw_write_uint16)
+RJD_BINRW_DEFINE_WRITE_IMPL(uint32_t, rjd_binrw_write_uint32)
+RJD_BINRW_DEFINE_WRITE_IMPL(uint64_t, rjd_binrw_write_uint64)
+
+RJD_BINRW_DEFINE_READWRITE_IMPL(int8_t, int8, rjd_binrw_readwrite_int8)
+RJD_BINRW_DEFINE_READWRITE_IMPL(int16_t, int16, rjd_binrw_readwrite_int16)
+RJD_BINRW_DEFINE_READWRITE_IMPL(int32_t, int32, rjd_binrw_readwrite_int32)
+RJD_BINRW_DEFINE_READWRITE_IMPL(int64_t, int64, rjd_binrw_readwrite_int64)
+RJD_BINRW_DEFINE_READWRITE_IMPL(uint8_t, uint8, rjd_binrw_readwrite_uint8)
+RJD_BINRW_DEFINE_READWRITE_IMPL(uint16_t, uint16, rjd_binrw_readwrite_uint16)
+RJD_BINRW_DEFINE_READWRITE_IMPL(uint32_t, uint32, rjd_binrw_readwrite_uint32)
+RJD_BINRW_DEFINE_READWRITE_IMPL(uint64_t, uint64, rjd_binrw_readwrite_uint64)
+
 
