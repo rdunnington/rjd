@@ -46,6 +46,12 @@ void expect_uint64(uint64_t expected, uint64_t actual) {
 	}
 }
 
+void expect_pointer(const void* expected, const void* actual) {
+	if (expected != actual) {
+		RJD_ASSERTFAIL("Expected: %p, but got: %p\n", expected, actual);
+	}
+}
+
 void expect_path(const char* expected, struct rjd_path path)
 {
 	expect_str(expected, rjd_path_get(&path));
@@ -1646,6 +1652,93 @@ void test_slotmap(void)
 	}
 }
 
+void test_utf8(void)
+{
+	// rjd_utf8_bom_skip
+	{
+		const char buffer_with_bom[] = { 0xEF, 0xBB, 0xBF, 0 };
+		const char buffer_no_bom[] = "hey this is a normal string";
+
+		const char* expected_with_bom = buffer_with_bom + 3;
+		const char* expected_no_bom = buffer_no_bom;
+
+		expect_pointer(expected_with_bom, rjd_utf8_bom_skip(buffer_with_bom));
+		expect_pointer(expected_no_bom, rjd_utf8_bom_skip(buffer_no_bom));
+	}
+
+	// rjd_utf8_bom_write
+	{
+		char zeroes[10] = {0};
+		char buffer_with_bom[10] = {0};
+		char buffer_no_bom[2] = {0};
+		struct rjd_result result;
+
+		result = rjd_utf8_bom_write(buffer_with_bom, sizeof(buffer_with_bom));
+		expect_result_ok(result);
+		expect_true(0 != memcmp(buffer_with_bom, zeroes, sizeof(buffer_with_bom)));
+
+		result = rjd_utf8_bom_write(buffer_no_bom, sizeof(buffer_no_bom));
+		expect_result_notok(result);
+		expect_true(0 == memcmp(buffer_no_bom, zeroes, sizeof(buffer_no_bom)));
+	}
+
+	// rjd_utf8_next
+	{
+		const char ascii[] = "12345";
+		const char utf8[] = "aæ࠳ab߉නc𐤈𐤀";
+        //const char invalid_utf8[] = { 0b11111100, 0b11111110, 0b11111001, 0 };
+        const char invalid_utf8[] = { 0xFB, 0xFE, 0xF9, 0 };
+
+		const char* p = NULL;
+
+		p = rjd_utf8_next(ascii);
+		expect_pointer(ascii + 1, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(ascii + 2, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(ascii + 3, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(ascii + 4, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(ascii + 5, p);
+
+		// mixed ascii and utf8 characters
+		p = rjd_utf8_next(utf8);
+		expect_pointer(utf8 + 1, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(utf8 + 1+2, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(utf8 + 1+2+3, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(utf8 + 1+2+3+1, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(utf8 + 1+2+3+1+1, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(utf8 + 1+2+3+1+1+2, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(utf8 + 1+2+3+1+1+2+3, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(utf8 + 1+2+3+1+1+2+3+1, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(utf8 + 1+2+3+1+1+2+3+1+4, p);
+		p = rjd_utf8_next(p);
+		expect_pointer(utf8 + 1+2+3+1+1+2+3+1+4+4, p);
+
+		// middle of utf8 character
+		p = rjd_utf8_next(utf8 + 2);
+		expect_pointer(utf8 + 1+2, p);
+		p = rjd_utf8_next(utf8 + 2+1+1);
+		expect_pointer(utf8 + 1+2+3, p);
+
+		p = rjd_utf8_next(invalid_utf8 + 0);
+		expect_pointer(NULL, p);
+        p = rjd_utf8_next(invalid_utf8 + 1);
+        expect_pointer(NULL, p);
+        p = rjd_utf8_next(invalid_utf8 + 2);
+        expect_pointer(NULL, p);
+	}
+}
+
 void test_path(void)
 {
 	// path operations
@@ -1931,6 +2024,7 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_fio();
 	test_strpool();
 	test_slotmap();
+	test_utf8();
 	test_path();
 	test_stream();
 	test_binrw();
