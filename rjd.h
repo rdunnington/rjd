@@ -4371,6 +4371,84 @@ void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t count, struct 
 
 
 ////////////////////////////////////////////////////////////////////////////////
+// rjd_utf8.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#define RJD_UTF8_H 1
+
+const char* rjd_utf8_bom_skip(const char* string); // expects a NULL-terminated string
+struct rjd_result rjd_utf8_bom_write(char* buffer, size_t size);
+const char* rjd_utf8_next(const char* string); // returns NULL if string is not UTF8-encoded
+
+#if RJD_IMPL
+
+const char* rjd_utf8_bom_skip(const char* string)
+{
+	const uint8_t* s = (const uint8_t*)string;
+	if (s != NULL &&
+		*(s + 0) == 0xEF &&
+		*(s + 1) == 0xBB &&
+		*(s + 2) == 0xBF)
+	{
+		return string + 3;
+	}
+	return string;
+}
+
+struct rjd_result rjd_utf8_bom_write(char* buffer, size_t size)
+{
+	if (size <= 3) {
+		return RJD_RESULT("Buffer must be at least 3 characters long.");
+	}
+
+	*(buffer + 0) = 0xEF;
+	*(buffer + 1) = 0xBB;
+	*(buffer + 2) = 0xBF;
+
+	return RJD_RESULT_OK();
+}
+
+const char* rjd_utf8_next(const char* string)
+{
+	if (string == NULL || *string == '\0') {
+		return string;
+	}
+
+	uint8_t byte = (uint8_t)*string;
+
+    if ((byte >> 7) == 0x00) {
+        return string + 1;
+    } else if ((byte >> 5) == 0x06) { // 0b110
+        return string + 2;
+    } else if ((byte >> 4) == 0x0E) { // 0b1110
+        return string + 3;
+    } else if ((byte >> 3) == 0x1E) { //0b11110
+        return string + 4;
+    }
+
+	// if we're in the middle of a character, skip to the end of the current character
+    bool is_mid_character = (byte >> 6) == 0x02; // 0b10
+	if (is_mid_character) {
+		while (is_mid_character) {
+			++string;
+			byte = *string;
+			if (byte == '\0') {
+				break;
+			}
+            is_mid_character = (byte >> 6) == 0x02; //0b10
+		}
+		return string;
+	}
+
+	return NULL; // invalid UTF8 string
+}
+
+#endif
+
+
+////////////////////////////////////////////////////////////////////////////////
 // rjd_path.h
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -4952,56 +5030,56 @@ struct rjd_binrw_state
 	struct rjd_ostream* ostream;
 };
 
-inline struct rjd_result rjd_binrw_read_int8(struct rjd_istream* stream, int8_t* value);
-inline struct rjd_result rjd_binrw_read_int16(struct rjd_istream* stream, int16_t* value);
-inline struct rjd_result rjd_binrw_read_int32(struct rjd_istream* stream, int32_t* value);
-inline struct rjd_result rjd_binrw_read_int64(struct rjd_istream* stream, int64_t* value);
-inline struct rjd_result rjd_binrw_read_uint8(struct rjd_istream* stream, uint8_t* value);
-inline struct rjd_result rjd_binrw_read_uint16(struct rjd_istream* stream, uint16_t* value);
-inline struct rjd_result rjd_binrw_read_uint32(struct rjd_istream* stream, uint32_t* value);
-inline struct rjd_result rjd_binrw_read_uint64(struct rjd_istream* stream, uint64_t* value);
+static inline struct rjd_result rjd_binrw_read_int8(struct rjd_istream* stream, int8_t* value);
+static inline struct rjd_result rjd_binrw_read_int16(struct rjd_istream* stream, int16_t* value);
+static inline struct rjd_result rjd_binrw_read_int32(struct rjd_istream* stream, int32_t* value);
+static inline struct rjd_result rjd_binrw_read_int64(struct rjd_istream* stream, int64_t* value);
+static inline struct rjd_result rjd_binrw_read_uint8(struct rjd_istream* stream, uint8_t* value);
+static inline struct rjd_result rjd_binrw_read_uint16(struct rjd_istream* stream, uint16_t* value);
+static inline struct rjd_result rjd_binrw_read_uint32(struct rjd_istream* stream, uint32_t* value);
+static inline struct rjd_result rjd_binrw_read_uint64(struct rjd_istream* stream, uint64_t* value);
 
-inline struct rjd_result rjd_binrw_write_int8(struct rjd_ostream* stream, int8_t value);
-inline struct rjd_result rjd_binrw_write_int16(struct rjd_ostream* stream, int16_t value);
-inline struct rjd_result rjd_binrw_write_int32(struct rjd_ostream* stream, int32_t value);
-inline struct rjd_result rjd_binrw_write_int64(struct rjd_ostream* stream, int64_t value);
-inline struct rjd_result rjd_binrw_write_uint8(struct rjd_ostream* stream, uint8_t value);
-inline struct rjd_result rjd_binrw_write_uint16(struct rjd_ostream* stream, uint16_t value);
-inline struct rjd_result rjd_binrw_write_uint32(struct rjd_ostream* stream, uint32_t value);
-inline struct rjd_result rjd_binrw_write_uint64(struct rjd_ostream* stream, uint64_t value);
+static inline struct rjd_result rjd_binrw_write_int8(struct rjd_ostream* stream, int8_t value);
+static inline struct rjd_result rjd_binrw_write_int16(struct rjd_ostream* stream, int16_t value);
+static inline struct rjd_result rjd_binrw_write_int32(struct rjd_ostream* stream, int32_t value);
+static inline struct rjd_result rjd_binrw_write_int64(struct rjd_ostream* stream, int64_t value);
+static inline struct rjd_result rjd_binrw_write_uint8(struct rjd_ostream* stream, uint8_t value);
+static inline struct rjd_result rjd_binrw_write_uint16(struct rjd_ostream* stream, uint16_t value);
+static inline struct rjd_result rjd_binrw_write_uint32(struct rjd_ostream* stream, uint32_t value);
+static inline struct rjd_result rjd_binrw_write_uint64(struct rjd_ostream* stream, uint64_t value);
 
-inline struct rjd_result rjd_binrw_readwrite_int8(struct rjd_binrw_state* state, int8_t* value);
-inline struct rjd_result rjd_binrw_readwrite_int16(struct rjd_binrw_state* state, int16_t* value);
-inline struct rjd_result rjd_binrw_readwrite_int32(struct rjd_binrw_state* state, int32_t* value);
-inline struct rjd_result rjd_binrw_readwrite_int64(struct rjd_binrw_state* state, int64_t* value);
-inline struct rjd_result rjd_binrw_readwrite_uint8(struct rjd_binrw_state* state, uint8_t* value);
-inline struct rjd_result rjd_binrw_readwrite_uint16(struct rjd_binrw_state* state, uint16_t* value);
-inline struct rjd_result rjd_binrw_readwrite_uint32(struct rjd_binrw_state* state, uint32_t* value);
-inline struct rjd_result rjd_binrw_readwrite_uint64(struct rjd_binrw_state* state, uint64_t* value);
+static inline struct rjd_result rjd_binrw_readwrite_int8(struct rjd_binrw_state* state, int8_t* value);
+static inline struct rjd_result rjd_binrw_readwrite_int16(struct rjd_binrw_state* state, int16_t* value);
+static inline struct rjd_result rjd_binrw_readwrite_int32(struct rjd_binrw_state* state, int32_t* value);
+static inline struct rjd_result rjd_binrw_readwrite_int64(struct rjd_binrw_state* state, int64_t* value);
+static inline struct rjd_result rjd_binrw_readwrite_uint8(struct rjd_binrw_state* state, uint8_t* value);
+static inline struct rjd_result rjd_binrw_readwrite_uint16(struct rjd_binrw_state* state, uint16_t* value);
+static inline struct rjd_result rjd_binrw_readwrite_uint32(struct rjd_binrw_state* state, uint32_t* value);
+static inline struct rjd_result rjd_binrw_readwrite_uint64(struct rjd_binrw_state* state, uint64_t* value);
 
 ////////////////////////////////////////////////////////////////////////////////
 // implementation
 
-#define RJD_BINRW_DEFINE_READ_IMPL(type, name)									\
-	inline struct rjd_result name(struct rjd_istream* stream, type* value) {	\
-		RJD_ASSERT(stream && value);											\
-		return rjd_istream_read(stream, value, sizeof(*value));					\
+#define RJD_BINRW_DEFINE_READ_IMPL(type, name)										\
+	static inline struct rjd_result name(struct rjd_istream* stream, type* value) {	\
+		RJD_ASSERT(stream && value);												\
+		return rjd_istream_read(stream, value, sizeof(*value));						\
 	}
 
-#define RJD_BINRW_DEFINE_WRITE_IMPL(type, name)								\
-	inline struct rjd_result name(struct rjd_ostream* stream, type value) {	\
-		RJD_ASSERT(stream);													\
-		return rjd_ostream_write(stream, &value, sizeof(value));			\
+#define RJD_BINRW_DEFINE_WRITE_IMPL(type, name)										\
+	static inline struct rjd_result name(struct rjd_ostream* stream, type value) {	\
+		RJD_ASSERT(stream);															\
+		return rjd_ostream_write(stream, &value, sizeof(value));					\
 	}
 
-#define RJD_BINRW_DEFINE_READWRITE_IMPL(type, type2, name)						\
-	inline struct rjd_result name(struct rjd_binrw_state* state, type* value) {	\
-		RJD_ASSERT(state && value && (state->istream || state->ostream));		\
-		if (state->istream) {													\
-			return rjd_binrw_read_ ## type2(state->istream, value);				\
-		} else {																\
-			return rjd_binrw_write_ ## type2(state->ostream, *value);			\
-		}																		\
+#define RJD_BINRW_DEFINE_READWRITE_IMPL(type, type2, name)								\
+	static inline struct rjd_result name(struct rjd_binrw_state* state, type* value) {	\
+		RJD_ASSERT(state && value && (state->istream || state->ostream));				\
+		if (state->istream) {															\
+			return rjd_binrw_read_ ## type2(state->istream, value);						\
+		} else {																		\
+			return rjd_binrw_write_ ## type2(state->ostream, *value);					\
+		}																				\
 	}
 
 RJD_BINRW_DEFINE_READ_IMPL(int8_t, rjd_binrw_read_int8)
