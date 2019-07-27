@@ -1648,6 +1648,11 @@ void test_slotmap(void)
 		}
 		expect_uint32(20, visited);
 
+		struct rjd_slot s = rjd_slotmap_next(map, NULL);
+		expect_true(rjd_slot_isvalid(s));
+		rjd_slot_invalidate(&s);
+		expect_false(rjd_slot_isvalid(s));
+
 		rjd_slotmap_free(map);
 	}
 }

@@ -9,6 +9,7 @@ struct rjd_slot
 };
 
 static inline bool rjd_slot_isvalid(struct rjd_slot slot);
+static inline void rjd_slot_invalidate(struct rjd_slot* slot);
 
 #define rjd_slotmap_alloc(type, count, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), count, allocator))
 #define rjd_slotmap_insert(map, data, out_slot)		(rjd_slotmap_insert_impl((void**)(&map), (out_slot)), \
@@ -30,6 +31,12 @@ struct rjd_slot rjd_slotmap_next_impl(void* map, const struct rjd_slot* slot);
 static inline bool rjd_slot_isvalid(struct rjd_slot slot)
 {
 	return slot.salt != 0;
+}
+
+static inline void rjd_slot_invalidate(struct rjd_slot* slot)
+{
+	RJD_ASSERT(slot);
+	slot->salt = 0;
 }
 
 #if RJD_IMPL
