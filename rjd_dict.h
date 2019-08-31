@@ -7,16 +7,16 @@ struct rjd_mem_allocator;
 struct rjd_dict
 {
 	uint32_t count;
-	rjd_hash64* hashes;
+	struct rjd_hash64* hashes;
 	void** values;
 	struct rjd_mem_allocator* allocator;
 };
 
 struct rjd_dict rjd_dict_init(struct rjd_mem_allocator* allocator, size_t initial_capacity);
-void rjd_dict_insert(struct rjd_dict* dict, rjd_hash64 hash, void* item);
-void* rjd_dict_erase(struct rjd_dict* dict, rjd_hash64 hash);
-void* rjd_dict_get(const struct rjd_dict* dict, rjd_hash64 hash);
-bool rjd_dict_has(const struct rjd_dict* dict, rjd_hash64 hash);
+void rjd_dict_insert(struct rjd_dict* dict, struct rjd_hash64 hash, void* item);
+void* rjd_dict_erase(struct rjd_dict* dict, struct rjd_hash64 hash);
+void* rjd_dict_get(const struct rjd_dict* dict, struct rjd_hash64 hash);
+bool rjd_dict_has(const struct rjd_dict* dict, struct rjd_hash64 hash);
 void rjd_dict_free(struct rjd_dict* dict);
 
 static inline void rjd_dict_insert_hashstr(struct rjd_dict* dict, const char* key, void* item);
@@ -53,7 +53,7 @@ enum rjd_dict_findmode
 };
 
 static void rjd_dict_grow(struct rjd_dict* dict, size_t capacity);
-static int32_t rjd_dict_findindex(const rjd_hash64* hashes, rjd_hash64 hash, enum rjd_dict_findmode mode);
+static int32_t rjd_dict_findindex(const struct rjd_hash64* hashes, struct rjd_hash64 hash, enum rjd_dict_findmode mode);
  
 struct rjd_dict rjd_dict_init(struct rjd_mem_allocator* allocator, size_t initial_capacity)
 {
@@ -68,7 +68,7 @@ struct rjd_dict rjd_dict_init(struct rjd_mem_allocator* allocator, size_t initia
 	return dict;
 }
 
-void rjd_dict_insert(struct rjd_dict* dict, rjd_hash64 hash, void* value)
+void rjd_dict_insert(struct rjd_dict* dict, struct rjd_hash64 hash, void* value)
 {
 	RJD_ASSERT(dict);
 	RJD_ASSERT(rjd_hash64_valid(hash));
@@ -88,7 +88,7 @@ void rjd_dict_insert(struct rjd_dict* dict, rjd_hash64 hash, void* value)
 	++dict->count;
 }
 
-void* rjd_dict_erase(struct rjd_dict* dict, rjd_hash64 hash)
+void* rjd_dict_erase(struct rjd_dict* dict, struct rjd_hash64 hash)
 {
 	RJD_ASSERT(dict);
 	
@@ -106,7 +106,7 @@ void* rjd_dict_erase(struct rjd_dict* dict, rjd_hash64 hash)
 	return v;
 }
 
-void* rjd_dict_get(const struct rjd_dict* dict, rjd_hash64 hash)
+void* rjd_dict_get(const struct rjd_dict* dict, struct rjd_hash64 hash)
 {
 	RJD_ASSERT(dict);
 
@@ -118,7 +118,7 @@ void* rjd_dict_get(const struct rjd_dict* dict, rjd_hash64 hash)
 	return dict->values[index];
 }
 
-bool rjd_dict_has(const struct rjd_dict* dict, rjd_hash64 hash)
+bool rjd_dict_has(const struct rjd_dict* dict, struct rjd_hash64 hash)
 {
 	RJD_ASSERT(dict);
 
@@ -150,7 +150,7 @@ static void rjd_dict_grow(struct rjd_dict* dict, size_t capacity)
 	RJD_ASSERT(capacity > 0);
 	RJD_ASSERT(dict);
 
-	rjd_hash64* hashes = rjd_array_alloc(rjd_hash64, (uint32_t)capacity, dict->allocator);
+	struct rjd_hash64* hashes = rjd_array_alloc(struct rjd_hash64, (uint32_t)capacity, dict->allocator);
 	void** values = rjd_array_alloc(void*, (uint32_t)capacity, dict->allocator);
 
 	rjd_array_resize(hashes, (uint32_t)capacity);
@@ -172,7 +172,7 @@ static void rjd_dict_grow(struct rjd_dict* dict, size_t capacity)
 	dict->values = values;
 }
 
-static int32_t rjd_dict_findindex(const rjd_hash64* hashes, rjd_hash64 hash, enum rjd_dict_findmode mode)
+static int32_t rjd_dict_findindex(const struct rjd_hash64* hashes, struct rjd_hash64 hash, enum rjd_dict_findmode mode)
 {
 	if (!hashes) {
 		return -1;

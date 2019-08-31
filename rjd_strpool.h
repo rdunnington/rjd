@@ -103,7 +103,7 @@ void rjd_strref_release(struct rjd_strref* ref)
 
 	struct rjd_strpool* pool = ref->owner;
 
-	rjd_hash64 hash = rjd_hash64_data((const uint8_t*)ref->str, -1);
+	struct rjd_hash64 hash = rjd_hash64_data((const uint8_t*)ref->str, -1);
 	RJD_ASSERTMSG(rjd_dict_get(&pool->storage, hash) == ref, "ref was not contained in string pool");
 
 	--ref->refcount;
@@ -130,7 +130,7 @@ static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const ch
 	RJD_ASSERT(pool);
 	RJD_ASSERT(str);
 
-	rjd_hash64 hash = rjd_hash64_data((const uint8_t*)str, -1);
+	struct rjd_hash64 hash = rjd_hash64_data((const uint8_t*)str, -1);
 	struct rjd_strref* ref = rjd_dict_get(&pool->storage, hash);
 	if (!ref) {
 		uint8_t* mem = rjd_mem_alloc_array(uint8_t, sizeof(struct rjd_strref) + strlen(str) + 1, pool->storage.allocator);

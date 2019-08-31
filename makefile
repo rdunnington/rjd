@@ -1,6 +1,6 @@
 all:
 	# -Wno-unused-local-typedefs to suppress locally defined typedefs coming from RJD_STATIC_ASSERT
-	gcc --std=c11 -pedantic -Wall -Wextra -g -march=native -Wno-unused-local-typedefs -fsanitize=undefined -fsanitize=address tests.c 
+	gcc --std=c11 -pedantic -Wall -Wextra -g -march=native -Wno-unused-local-typedefs -fsanitize=undefined -fsanitize=address tests.c tests_rjd.m -framework Foundation
 
 clean:
 	rm *.exe

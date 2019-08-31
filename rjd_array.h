@@ -28,7 +28,7 @@
 													--*rjd_array_count_impl(buf), 	\
 													*(buf + rjd_array_count(buf)))
 #define rjd_array_insert(buf, ptr, index)			(buf = rjd_array_insert_impl((buf), (ptr), sizeof(*(buf)), index))
-#define rjd_array_get(buf, index)					(rjd_array_get_validate((buf), (index)), (buf)[(index)])
+#define rjd_array_get(buf, index)					(rjd_array_get_validate((buf), (index)), (buf + index))
 #define rjd_array_first(buf)						(rjd_array_get_validate((buf), 0), (buf)[0])
 #define rjd_array_last(buf)							(rjd_array_get_validate((buf), 0), (buf)[rjd_array_count(buf) - 1])
 
@@ -40,7 +40,7 @@ enum { RJD_ARRAY_NOT_FOUND = -1 };
 
 #define rjd_array_find(buf, ptr)						rjd_array_find_impl((buf), (ptr), sizeof(*(buf)), RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
 #define rjd_array_contains(buf, ptr)					rjd_array_contains_impl((buf), (ptr), sizeof(*(buf)), RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
-														
+
 // These functions sort or deal with sorted data
 #define rjd_array_sort(buf, comparer) \
 		rjd_array_sort_impl((buf), sizeof(*(buf)), comparer)

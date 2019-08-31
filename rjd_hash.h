@@ -2,19 +2,43 @@
 
 #define RJD_HASH_H 1
 
-typedef struct {
+struct rjd_hash32
+{
 	uint32_t value;
-} rjd_hash32;
+};
 
-typedef struct {
+struct rjd_hash64
+{
 	uint64_t value;
-} rjd_hash64;
+};
+
+enum
+{
+	RJD_HASH_NULLTERMINATED_BUFFER = -1,
+};
 
 // You can pass -1 as the length to indicate a NULL-terminated buffer (e.g. c-style string)
-rjd_hash32 rjd_hash32_data(const uint8_t* key, int length);
-rjd_hash64 rjd_hash64_data(const uint8_t* key, int length);
-bool rjd_hash32_valid(rjd_hash32 hash);
-bool rjd_hash64_valid(rjd_hash64 hash);
+struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length);
+struct rjd_hash64 rjd_hash64_data(const uint8_t* key, int length);
+static inline struct rjd_hash32 rjd_hash32_str(const char* key);
+static inline struct rjd_hash64 rjd_hash64_str(const char* key);
+bool rjd_hash32_valid(struct rjd_hash32 hash);
+bool rjd_hash64_valid(struct rjd_hash64 hash);
+
+////////////////////////////////////////////////////////////////////////////////
+// Inline implementation
+
+static inline struct rjd_hash32 rjd_hash32_str(const char* key)
+{
+	const void* data = key;
+	return rjd_hash32_data(data, -1);
+}
+
+static inline struct rjd_hash64 rjd_hash64_str(const char* key)
+{
+	const void* data = key;
+	return rjd_hash64_data(data, -1);
+}
 
 #if RJD_IMPL
 
@@ -27,19 +51,19 @@ bool rjd_hash64_valid(rjd_hash64 hash);
 //
 // prime/seed from http://isthe.com/chongo/tech/comp/fnv/
 
-rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
+struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 {
 	RJD_ASSERT(length >= -1);
 
 	if (key == NULL || length == 0 || (length == -1 && *key == '\0')) {
-		rjd_hash32 hash = {0};
+		struct rjd_hash32 hash = {0};
 		return hash;
 	}
 
 	const uint32_t PRIME = 16777619;
 	const uint32_t SEED  = 2166136261;
 
-	rjd_hash32 hash = { SEED };
+	struct rjd_hash32 hash = { SEED };
 	if (length == -1) {
 		while (*key) {
 			hash.value = (*key++ ^ hash.value) * PRIME;
@@ -54,19 +78,19 @@ rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 	return hash;
 }
 
-rjd_hash64 rjd_hash64_data(const uint8_t* key, int length)
+struct rjd_hash64 rjd_hash64_data(const uint8_t* key, int length)
 {
 	RJD_ASSERT(length >= -1);
 
 	if (key == NULL || length == 0 || (length == -1 && *key == '\0')) {
-		rjd_hash64 hash = {0};
+		struct rjd_hash64 hash = {0};
 		return hash;
 	}
 
 	const uint64_t PRIME = 1099511628211ull;
 	const uint64_t SEED  = 14695981039346656037ull;
 
-	rjd_hash64 hash = { SEED };
+	struct rjd_hash64 hash = { SEED };
 	if (length == -1) {
 		while (*key) {
 			hash.value = (*key++ ^ hash.value) * PRIME;
@@ -81,12 +105,12 @@ rjd_hash64 rjd_hash64_data(const uint8_t* key, int length)
 	return hash;
 }
 
-bool rjd_hash32_valid(rjd_hash32 hash)
+bool rjd_hash32_valid(struct rjd_hash32 hash)
 {
 	return hash.value != 0;
 }
 
-bool rjd_hash64_valid(rjd_hash64 hash)
+bool rjd_hash64_valid(struct rjd_hash64 hash)
 {
 	return hash.value != 0;
 }

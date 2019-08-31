@@ -269,17 +269,23 @@ void test_enum()
 
 void test_hash()
 {
-	const uint8_t* data1 = (const uint8_t*)"test1";
-	const uint8_t* data2 = (const uint8_t*)"a longer string that has a bunch of characters in it!!$%^&*(";
+	const char* str1 = "test1";
+	const char* str2 = "a longer string that has a bunch of characters in it!!$%^&*(";
+	const uint8_t* data1 = (const uint8_t*)str1;
+	const uint8_t* data2 = (const uint8_t*)str2;
 	const uint8_t* data3 = NULL;
 
 	expect_uint32(rjd_hash32_data(data1, (uint32_t)strlen((const char*)data1)).value, rjd_hash32_data(data1, -1).value);
 	expect_uint32(rjd_hash32_data(data2, (uint32_t)strlen((const char*)data2)).value, rjd_hash32_data(data2, -1).value);
 	expect_uint32(rjd_hash32_data(data3, 0).value, rjd_hash32_data(data3, -1).value);
+	expect_uint32(rjd_hash32_str(str1).value, rjd_hash32_data(data1, -1).value);
+	expect_uint32(rjd_hash32_str(str2).value, rjd_hash32_data(data2, -1).value);
 
 	expect_uint64(rjd_hash64_data(data1, (uint32_t)strlen((const char*)data1)).value, rjd_hash64_data(data1, -1).value);
 	expect_uint64(rjd_hash64_data(data2, (uint32_t)strlen((const char*)data2)).value, rjd_hash64_data(data2, -1).value);
 	expect_uint64(rjd_hash64_data(data3, 0).value, rjd_hash64_data(data3, -1).value);
+	expect_uint32(rjd_hash64_str(str1).value, rjd_hash64_data(data1, -1).value);
+	expect_uint32(rjd_hash64_str(str2).value, rjd_hash64_data(data2, -1).value);
 }
 
 void test_mem()
@@ -508,7 +514,7 @@ void test_array()
 		expect_true(rjd_array_full(a));
 
 		for (uint32_t i = 0; i < rjd_array_count(a); ++i) {
-			expect_uint32(i, rjd_array_get(a, i).a);
+			expect_uint32(i, rjd_array_get(a, i)->a);
 		}
 
 		rjd_array_erase(a, 0);
