@@ -2,7 +2,9 @@
 
 #define RJD_RESOURCE_LOADER_H 1
 
-typedef struct rjd_result rjd_resource_loader_destroy_func(struct rjd_resource_loader* loader);
+struct rjd_resource_loader;
+
+typedef void rjd_resource_loader_destroy_func(struct rjd_resource_loader* loader);
 typedef struct rjd_result rjd_resource_loader_get_type_func(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
 typedef struct rjd_result rjd_resource_loader_load_func(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, void** out);
 
@@ -37,6 +39,7 @@ struct rjd_resource_loader_desc
 			const char* root;
 			const struct rjd_resource_extension_to_type_id* type_mappings;
 			uint32_t type_mappings_count;
+			uint32_t manifest_capacity;
 		} filesystem;
 	};
 };
@@ -108,13 +111,13 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 
 	if (desc.type == RJD_RESOURCE_LOADER_TYPE_FILESYSTEM)
 	{
-		uint32_t manifest_capacity = desc.manifest_capacity == 0 ? 1024 : desc.manifest_capacity;
+		uint32_t manifest_capacity = desc.filesystem.manifest_capacity == 0 ? 1024 : desc.filesystem.manifest_capacity;
 
 		struct rjd_resource_loader_filesystem* impl = rjd_mem_alloc(struct rjd_resource_loader_filesystem, desc.allocator);
 		impl->debug_sentinel = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM;
 		impl->strpool = rjd_strpool_init(desc.allocator, 64);
 		impl->type_mappings = rjd_array_alloc(struct rjd_resource_extension_to_type_id, desc.filesystem.type_mappings_count, desc.allocator);
-		impl->root = rjd_strpool_add(desc.filesystem.root);
+		impl->root = rjd_strpool_add(&impl->strpool, desc.filesystem.root);
 		impl->manifest_entries = rjd_array_alloc(struct rjd_resource_manifest_entry_filesystem, manifest_capacity, desc.allocator);
 
 		for (uint32_t i = 0; i < desc.filesystem.type_mappings_count; ++i)
@@ -137,13 +140,13 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 					}
 				}
 
-				if (type.hash.hash != 0)
+				if (type.hash.hash.value != 0)
 				{
-					struct rjd_strref* pathref = rjd_strpool_add(path);
+					struct rjd_strref* pathref = rjd_strpool_add(&impl->strpool, path);
 					struct rjd_resource_manifest_entry_filesystem entry = {
-						.id = rjd_strhash_init(path);
+						.id = rjd_strhash_init(path),
 						.type = type,
-						.path = entry,
+						.path = pathref,
 					};
 					rjd_array_push(impl->manifest_entries, entry);
 				}
@@ -186,7 +189,7 @@ static void rjd_resource_loader_filesystem_destroy(struct rjd_resource_loader* l
 	struct rjd_resource_loader_filesystem* impl = rjd_resource_loader_to_filesystem_loader(loader);
 	rjd_array_free(impl->manifest_entries);
 	rjd_array_free(impl->type_mappings);
-	rjd_strpool_free(impl->strpool);
+	rjd_strpool_free(&impl->strpool);
 	rjd_mem_free(impl);
 	memset(loader, 0, sizeof(*loader));
 }
@@ -195,7 +198,7 @@ static struct rjd_result rjd_resource_loader_filesystem_get_type(struct rjd_reso
 {
 	struct rjd_resource_loader_filesystem* impl = rjd_resource_loader_to_filesystem_loader(loader);
 	for (uint32_t i = 0; i < rjd_array_count(impl->manifest_entries); ++i) {
-		if (impl->manifest_entries[i].id == id) {
+		if (rjd_resource_id_equals(impl->manifest_entries[i].id, id)) {
 			*out = impl->manifest_entries[i].type;
 			return RJD_RESULT_OK();
 		}
@@ -208,7 +211,7 @@ static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource
 {
 	struct rjd_resource_loader_filesystem* impl = rjd_resource_loader_to_filesystem_loader(loader);
 	for (uint32_t i = 0; i < rjd_array_count(impl->manifest_entries); ++i) {
-		if (impl->manifest_entries[i].id == id) {
+		if (rjd_resource_id_equals(impl->manifest_entries[i].id, id)) {
 			const char* path = rjd_strref_str(impl->manifest_entries[i].path);
 			struct rjd_result result = rjd_fio_read(path, (char**)out, allocator);
 			return result;

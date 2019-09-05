@@ -39,6 +39,7 @@ files = [
     "rjd_stream.h",
     "rjd_binrw.h",
     "rjd_strhash.h",
+    "rjd_resource_types.h",
     "rjd_resource_loader.h",
     "rjd_resource.h"
 ]

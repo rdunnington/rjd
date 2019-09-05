@@ -35,5 +35,6 @@
 #include "rjd_stream.h"
 #include "rjd_binrw.h"
 #include "rjd_strhash.h"
+#include "rjd_resource_types.h"
 #include "rjd_resource_loader.h"
 #include "rjd_resource.h"

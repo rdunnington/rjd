@@ -5226,6 +5226,30 @@ int rjd_strhash_compare(const struct rjd_strhash* a, const struct rjd_strhash* b
 
 
 ////////////////////////////////////////////////////////////////////////////////
+// rjd_resource_types.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#define RJD_RESOURCE_TYPES_H 1
+
+struct rjd_resource_id
+{
+	struct rjd_strhash hash;
+};
+
+struct rjd_resource_type_id
+{
+	struct rjd_strhash hash;
+};
+
+struct rjd_resource_handle
+{
+	struct rjd_slot slot;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
 // rjd_resource_loader.h
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -5499,16 +5523,6 @@ enum rjd_resource_status
 	RJD_RESOURCE_STATUS_READY,
 };
 
-struct rjd_resource_id
-{
-	struct rjd_strhash hash;
-};
-
-struct rjd_resource_type_id
-{
-	struct rjd_strhash hash;
-};
-
 // Loading takes place in 2 passes, where resources get a chance to declare any dependencies they want loaded before
 // their load function gets called. TODO need to figure out a good place to store these dependencies - ideally you
 // want them stored in the typed_resource_data structure, but need to call them out as dependencies somehow
@@ -5575,11 +5589,6 @@ struct rjd_resource_lib
 	} load_stage_queues;
 
 	struct rjd_resource_handle* unload_queue;
-};
-
-struct rjd_resource_handle
-{
-	struct rjd_slot slot;
 };
 
 struct rjd_resource_id rjd_resource_id_from_path(const char* path);
