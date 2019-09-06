@@ -284,8 +284,8 @@ void test_hash()
 	expect_uint64(rjd_hash64_data(data1, (uint32_t)strlen((const char*)data1)).value, rjd_hash64_data(data1, -1).value);
 	expect_uint64(rjd_hash64_data(data2, (uint32_t)strlen((const char*)data2)).value, rjd_hash64_data(data2, -1).value);
 	expect_uint64(rjd_hash64_data(data3, 0).value, rjd_hash64_data(data3, -1).value);
-	expect_uint32(rjd_hash64_str(str1).value, rjd_hash64_data(data1, -1).value);
-	expect_uint32(rjd_hash64_str(str2).value, rjd_hash64_data(data2, -1).value);
+	expect_uint64(rjd_hash64_str(str1).value, rjd_hash64_data(data1, -1).value);
+	expect_uint64(rjd_hash64_str(str2).value, rjd_hash64_data(data2, -1).value);
 }
 
 void test_mem()
@@ -2017,6 +2017,143 @@ void test_binrw()
 	expect_int32(0, memcmp(&expected_max, &actual_max, sizeof(actual_max)));
 }
 
+void test_strhash()
+{
+	// TODO
+}
+
+void test_resource()
+{
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+    rjd_strhash_global_init(&allocator, 32);
+
+	// rjd_resource types
+	{
+		{
+			struct rjd_resource_id id1 = rjd_resource_id_from_str(NULL);
+			struct rjd_resource_id id2 = rjd_resource_id_from_str("");
+			struct rjd_resource_id id3 = rjd_resource_id_from_str("some_asset.txt");
+
+			expect_true(rjd_resource_id_equals(id1, id2));
+			expect_false(rjd_resource_id_equals(id1, id3));
+			expect_false(rjd_resource_id_equals(id2, id3));
+
+			expect_false(rjd_resource_id_isvalid(id1));
+			expect_false(rjd_resource_id_isvalid(id2));
+			expect_true(rjd_resource_id_isvalid(id3));
+		}
+
+		{
+			struct rjd_resource_type_id id1 = rjd_resource_type_id_from_str(NULL);
+			struct rjd_resource_type_id id2 = rjd_resource_type_id_from_str("");
+			struct rjd_resource_type_id id3 = rjd_resource_type_id_from_str("texture");
+
+			expect_true(rjd_resource_type_id_equals(id1, id2));
+			expect_false(rjd_resource_type_id_equals(id1, id3));
+			expect_false(rjd_resource_type_id_equals(id2, id3));
+
+			expect_false(rjd_resource_type_id_isvalid(id1));
+			expect_false(rjd_resource_type_id_isvalid(id2));
+			expect_true(rjd_resource_type_id_isvalid(id3));
+		}
+
+		{
+			struct rjd_resource_handle handle1 = { .slot = { .salt = 0 } };
+			struct rjd_resource_handle handle2 = { .slot = { .salt = 0 } };
+			struct rjd_resource_handle handle3 = { .slot = { .salt = 1 } };
+			struct rjd_resource_handle handle4 = { .slot = { .salt = 2 } };
+			struct rjd_resource_handle handle5 = { .slot = { .salt = 2 } };
+
+			expect_true(rjd_resource_handle_equals(handle1, handle2));
+			expect_true(rjd_resource_handle_equals(handle4, handle5));
+			expect_false(rjd_resource_handle_equals(handle2, handle3));
+			expect_false(rjd_resource_handle_equals(handle3, handle4));
+
+			expect_false(rjd_resource_handle_isvalid(handle1));
+			expect_false(rjd_resource_handle_isvalid(handle2));
+			expect_true(rjd_resource_handle_isvalid(handle3));
+			expect_true(rjd_resource_handle_isvalid(handle4));
+			expect_true(rjd_resource_handle_isvalid(handle5));
+		}
+	}
+
+	// rjd_resource_loader
+	{
+		const struct rjd_resource_extension_to_type_id type_mappings[] = {
+			{ .type = rjd_strhash_init("config"), .extension = ".cfg" },
+			{ .type = rjd_strhash_init("level"), .extension = ".lvl" },
+			{ .type = rjd_strhash_init("shader"), .extension = ".shader" },
+			{ .type = rjd_strhash_init("texture"), .extension = ".bmp" },
+		};
+
+		const struct rjd_resource_loader_desc desc = {
+			.type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
+			.allocator = &allocator,
+			.filesystem = {
+				.root = "test_data/resource/loader_filesystem",
+				.type_mappings = type_mappings,
+				.type_mappings_count = rjd_countof(type_mappings),
+			},
+		};
+
+		struct rjd_resource_loader loader;
+		struct rjd_result result = rjd_resource_loader_create(&loader, desc);
+		expect_result_ok(result);
+
+		struct expected_resource_data
+		{
+			struct rjd_resource_id id;
+			int32_t mapping_index;
+			const char* data;
+		};
+
+		const struct expected_resource_data expected_data[] = {
+			{ rjd_resource_id_from_str("init.cfg"),					0,	"some init data is in here\n" },
+			{ rjd_resource_id_from_str("bootstrap.lvl"),		    1,	"bootstrap level\n" },
+			{ rjd_resource_id_from_str("levels/mainmenu.lvl"),	    1,	"the main menu and ui\n" },
+			{ rjd_resource_id_from_str("levels/dungeon.lvl"),	    1,	"first dungeon level\n" },
+			{ rjd_resource_id_from_str("gfx/quad.shader"),		    2,	"shader code here\n" },
+			{ rjd_resource_id_from_str("gfx/invalid.bmp"),		    3,	"placeholder bitmap\n" },
+			{ rjd_resource_id_from_str("does_not_exist.bmp"),	    -1, NULL },
+			{ rjd_resource_id_from_str("unregistered_type.txt"),    -1, NULL },
+		};
+
+		for (uint32_t i = 0; i < rjd_countof(expected_data); ++i) {
+			struct rjd_resource_type_id out_type = {0};
+
+			struct rjd_result result = rjd_resource_loader_get_type(&loader, expected_data[i].id, &out_type);
+			int32_t mapping_index = expected_data[i].mapping_index;
+			if (mapping_index == -1) {
+				expect_result_notok(result);
+			} else {
+				expect_result_ok(result);
+				expect_true(rjd_resource_type_id_equals(type_mappings[mapping_index].type, out_type));
+			}
+
+			int8_t* data = NULL;
+			result = rjd_resource_loader_load(&loader, expected_data[i].id, &allocator, &data);
+			if (mapping_index == -1) {
+				expect_result_notok(result);
+			} else {
+				const char* expected_str = expected_data[i].data;
+				expect_result_ok(result);
+				expect_int64(strlen(expected_str), rjd_array_count(data));
+				expect_int32(0, memcmp(expected_str, data, rjd_array_count(data)));
+			}
+			rjd_array_free(data);
+		}
+
+		rjd_resource_loader_destroy(&loader);
+	}
+
+	// rjd_resource
+	{
+
+	}
+    
+    rjd_strhash_global_destroy();
+}
+
 int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
 {
 	test_logging();
@@ -2039,6 +2176,8 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_path();
 	test_stream();
 	test_binrw();
+	test_strhash();
+	test_resource();
 
 	return 0;
 }

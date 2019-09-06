@@ -395,7 +395,7 @@ static void rjd_resource_lib_load_stage_begin(struct rjd_resource_lib* lib, stru
 	RJD_ASSERT(resource);
 	RJD_ASSERT(resource->status == RJD_RESOURCE_STATUS_LOAD_BEGIN);
 
-	void* raw_data = NULL;
+	int8_t* raw_data = NULL;
 	struct rjd_result result = rjd_resource_loader_load(lib->loader, resource->id, lib->scratch_allocator, &raw_data);
 	if (rjd_result_isok(result))
 	{

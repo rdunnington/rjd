@@ -9,7 +9,7 @@ struct rjd_strhash
 };
 
 void rjd_strhash_global_init(struct rjd_mem_allocator* debug_allocator, uint32_t initial_capacity);
-void rjd_strhash_global_destroy();
+void rjd_strhash_global_destroy(void);
 
 struct rjd_strhash rjd_strhash_init(const char* str);
 bool rjd_strhash_isequal(struct rjd_strhash a, struct rjd_strhash b);
@@ -31,7 +31,7 @@ void rjd_strhash_global_init(struct rjd_mem_allocator* debug_allocator, uint32_t
 	*g_strhash_strpool = rjd_strpool_init(debug_allocator, initial_capacity);
 }
 
-void rjd_strhash_global_destroy()
+void rjd_strhash_global_destroy(void)
 {
 	rjd_strpool_free(g_strhash_strpool);
 	rjd_mem_free(g_strhash_strpool);
@@ -45,7 +45,7 @@ struct rjd_strhash rjd_strhash_init(const char* str)
 
 	if (str != NULL) {
 		hash = rjd_hash64_str(str);
-		if (g_strhash_strpool)
+		if (g_strhash_strpool && hash.value != 0)
 		{
 			// TODO make threadsafe
 			debug_string = rjd_strpool_add(g_strhash_strpool, str);
