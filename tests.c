@@ -1873,7 +1873,15 @@ void test_stream()
         result = rjd_istream_read(&stream, file_contents, sizeof(file_contents) / 2);
         expect_result_ok(result);
 		result = rjd_istream_read(&stream, file_contents + sizeof(file_contents) / 2, sizeof(file_contents) / 2);
-        expect_result_notok(result); // end of stream message
+        expect_result_ok(result);
+        {
+            char expected[256] = {0};
+            char tmp[256];
+            memset(tmp, 1, sizeof(tmp));
+            result = rjd_istream_read(&stream, tmp, sizeof(tmp));
+            expect_result_notok(result); // end of file message
+            expect_int32(0, memcmp(expected, tmp, sizeof(tmp)));
+        }
 		expect_int32(0, memcmp(file_expected, file_contents, sizeof(file_expected)));
         
         char after_feof[50];

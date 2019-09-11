@@ -304,11 +304,11 @@ static struct rjd_result rjd_istream_refill_file(struct rjd_istream* stream)
 		if (feof(file)) {
 			if (bytes_read == 0) {
 				rjd_istream_close_file(stream);
-				rjd_istream_fail(stream, "attempt to read past end of file");
+				rjd_istream_fail(stream, "end of file reached, no more data available");
 			} else {
 				stream->end = stream->start + bytes_read;
                 stream->cursor = stream->start;
-                stream->result = RJD_RESULT("end of file reached, no more data available");
+                stream->result = RJD_RESULT_OK();
 			}
 		} else {
 			rjd_istream_close_file(stream);
