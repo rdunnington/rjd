@@ -6,7 +6,7 @@ struct rjd_resource_loader;
 
 typedef void rjd_resource_loader_destroy_func(struct rjd_resource_loader* loader);
 typedef struct rjd_result rjd_resource_loader_get_type_func(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
-typedef struct rjd_result rjd_resource_loader_load_func(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, int8_t** out);
+typedef struct rjd_result rjd_resource_loader_load_func(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out);
 
 struct rjd_resource_loader
 {
@@ -47,8 +47,8 @@ struct rjd_resource_loader_desc
 struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, struct rjd_resource_loader_desc desc);
 static inline void rjd_resource_loader_destroy(struct rjd_resource_loader* loader);
 static inline struct rjd_result rjd_resource_loader_get_type(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
-static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, int8_t** out);
-// TODO update load() to return an rjd_stream instead of loading the entire file at once?
+static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out);
+// TODO update load() to return an rjd_istream instead of loading the entire file at once?
 
 ////////////////////////////////////////////////////////////////////////////////
 // Inline implementation
@@ -69,7 +69,7 @@ static inline struct rjd_result rjd_resource_loader_get_type(struct rjd_resource
 	return loader->get_type_func(loader, id, out);
 }
 
-static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, int8_t** out)
+static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out)
 {
 	RJD_ASSERT(loader);
 	RJD_ASSERT(loader->load_func);
@@ -101,7 +101,7 @@ struct rjd_resource_loader_filesystem
 static struct rjd_resource_loader_filesystem* rjd_resource_loader_to_filesystem_loader(struct rjd_resource_loader* loader);
 static void rjd_resource_loader_filesystem_destroy(struct rjd_resource_loader* loader);
 static struct rjd_result rjd_resource_loader_filesystem_get_type(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
-static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, int8_t** out);
+static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out);
 
 // public implementation
 
@@ -207,7 +207,7 @@ static struct rjd_result rjd_resource_loader_filesystem_get_type(struct rjd_reso
 	return RJD_RESULT("Resource id not found in loader manifest.");
 }
 
-static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, int8_t** out)
+static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out)
 {
 	struct rjd_resource_loader_filesystem* impl = rjd_resource_loader_to_filesystem_loader(loader);
 	for (uint32_t i = 0; i < rjd_array_count(impl->manifest_entries); ++i) {
@@ -218,9 +218,9 @@ static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource
             struct rjd_path fullpath = rjd_path_create();
             rjd_path_append(&fullpath, root);
             rjd_path_append(&fullpath, relative_path);
-            
-			struct rjd_result result = rjd_fio_read(rjd_path_get(&fullpath), (char**)out, allocator);
-			return result;
+
+			*out = rjd_istream_from_file(rjd_path_get(&fullpath), allocator, 1024 * 512);
+			return out->result;
 		}
 	}
 

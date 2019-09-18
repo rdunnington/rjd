@@ -18,13 +18,16 @@ struct rjd_resource_handle
 };
 
 static inline struct rjd_resource_id rjd_resource_id_from_str(const char* str);
+static inline struct rjd_resource_id rjd_resource_id_none(void);
 static inline bool rjd_resource_id_equals(struct rjd_resource_id a, struct rjd_resource_id b);
 static inline bool rjd_resource_id_isvalid(struct rjd_resource_id id);
 
 static inline struct rjd_resource_type_id rjd_resource_type_id_from_str(const char* str);
+static inline struct rjd_resource_type_id rjd_resource_type_id_none(void);
 static inline bool rjd_resource_type_id_equals(struct rjd_resource_type_id a, struct rjd_resource_type_id b);
 static inline bool rjd_resource_type_id_isvalid(struct rjd_resource_type_id id);
 
+static inline struct rjd_resource_handle rjd_resource_handle_none(void);
 static inline bool rjd_resource_handle_equals(struct rjd_resource_handle a, struct rjd_resource_handle b);
 static inline bool rjd_resource_handle_isvalid(struct rjd_resource_handle handle);
 
@@ -37,6 +40,11 @@ static inline struct rjd_resource_id rjd_resource_id_from_str(const char* str)
 		.hash = rjd_strhash_init(str),
 	};
 	return id;
+}
+
+static inline struct rjd_resource_id rjd_resource_id_none(void)
+{
+	return rjd_resource_id_from_str(NULL);
 }
 
 static inline bool rjd_resource_id_equals(struct rjd_resource_id a, struct rjd_resource_id b)
@@ -57,6 +65,11 @@ static inline struct rjd_resource_type_id rjd_resource_type_id_from_str(const ch
 	return id;
 }
 
+static inline struct rjd_resource_type_id rjd_resource_type_id_none(void)
+{
+	return rjd_resource_type_id_from_str(NULL);
+}
+
 static inline bool rjd_resource_type_id_equals(struct rjd_resource_type_id a, struct rjd_resource_type_id b)
 {
 	return a.hash.hash.value == b.hash.hash.value;
@@ -65,6 +78,14 @@ static inline bool rjd_resource_type_id_equals(struct rjd_resource_type_id a, st
 static inline bool rjd_resource_type_id_isvalid(struct rjd_resource_type_id id)
 {
 	return id.hash.hash.value != 0;
+}
+
+static inline struct rjd_resource_handle rjd_resource_handle_none(void)
+{
+	struct rjd_resource_handle handle;
+	handle.slot.index = 0;
+	handle.slot.salt = 0;
+	return handle;
 }
 
 static inline bool rjd_resource_handle_equals(struct rjd_resource_handle a, struct rjd_resource_handle b)

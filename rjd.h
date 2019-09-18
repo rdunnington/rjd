@@ -5567,8 +5567,6 @@ struct rjd_resource_lib_desc
 	struct rjd_mem_allocator* scratch_allocator;
 	struct rjd_resource_loader* loader;
 
-	struct rjd_resource_type_desc* types;
-	uint32_t count_types;
 	uint32_t initial_capacity_types;
 	uint32_t initial_capacity_resources;
 	uint32_t initial_capacity_buffers;

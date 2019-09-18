@@ -2027,8 +2027,156 @@ void test_binrw()
 
 void test_strhash()
 {
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+    rjd_strhash_global_init(&allocator, 32);
+
 	// TODO
+
+	rjd_strhash_global_destroy();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// resource test data and functions
+struct test_material
+{
+	struct rjd_resource_handle shader;
+	struct rjd_resource_handle texture;
+};
+
+struct test_shader
+{
+	char test_data[64];
+};
+
+struct test_texture
+{
+	uint32_t width;
+	uint32_t height;
+};
+
+struct did_call_load_stages
+{
+	bool begin;
+	bool end;
+	bool unload;
+};
+
+void verify_shader_data(struct test_shader* shader)
+{
+	expect_str("shader_code_here", shader->test_data);
+}
+
+void verify_texture_data(struct test_texture* texture)
+{
+	expect_uint32(64, texture->width);
+	expect_uint32(64, texture->height);
+}
+
+struct rjd_result test_material_load(struct rjd_resource_load_begin_params* params)
+{
+	struct did_call_load_stages* did_call_stages = (struct did_call_load_stages*)params->userdata;
+	did_call_stages->begin = true;
+
+	struct test_material* material = params->typed_resource_data;
+	
+	// all resources should be initialized to zeroes by the resource system
+	const char zeroes[sizeof(struct test_material)] = {0};
+	expect_int32(0, memcmp(zeroes, material, sizeof(zeroes)));
+
+	char path1[256] = {0};
+	char path2[256] = {0};
+
+	int read = sscanf((char*)params->stream_data.start, "%s\n", path1);
+	sscanf((char*)params->stream_data.start + read - 1, "%s\n", path2);
+
+	struct rjd_resource_id res1 = rjd_resource_id_from_str(path1);
+	struct rjd_resource_id res2 = rjd_resource_id_from_str(path2);
+
+	material->shader = rjd_resource_handle_none();
+	material->texture = rjd_resource_handle_none();
+
+	struct rjd_result result1 = params->load_dependency_func(params->dependency_params, res1, &material->shader);
+	struct rjd_result result2 = params->load_dependency_func(params->dependency_params, res2, &material->texture);
+
+	expect_result_ok(result1);
+	expect_result_ok(result2);
+
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result test_material_load_end(struct rjd_resource_load_end_params* params)
+{
+	struct did_call_load_stages* did_call_stages = (struct did_call_load_stages*)params->userdata;
+	did_call_stages->end = true;
+
+	struct test_material* material = (struct test_material*)params->typed_resource_data;
+	struct test_shader* shader = (struct test_shader*)params->resource_get_func(params->resource_get_params, material->shader);
+	struct test_texture* texture = (struct test_texture*)params->resource_get_func(params->resource_get_params, material->texture);
+
+	verify_shader_data(shader);
+	verify_texture_data(texture);
+
+	// TODO test shader, texture
+
+	return RJD_RESULT_OK();
+}
+
+void test_material_unload(struct rjd_resource_unload_params* params)
+{
+	struct test_material* material = (struct test_material*)params->typed_resource_data;
+	// child resources should still be loaded
+	expect_true(params->resource_get_func(params->resource_get_params, material->shader) != NULL);
+	expect_true(params->resource_get_func(params->resource_get_params, material->texture) != NULL);
+
+	struct did_call_load_stages* did_call_stages = (struct did_call_load_stages*)params->userdata;
+	did_call_stages->unload = true;
+}
+
+struct rjd_result test_shader_load(struct rjd_resource_load_begin_params* params)
+{
+	struct did_call_load_stages* did_call_stages = (struct did_call_load_stages*)params->userdata;
+	did_call_stages->begin = true;
+
+	struct test_shader* shader = (struct test_shader*)params->typed_resource_data;
+
+	const char zeroes[sizeof(struct test_shader)] = {0};
+	expect_int32(0, memcmp(zeroes, shader, sizeof(zeroes)));
+
+	int read = sscanf((char*)params->stream_data.start, "%s\n", shader->test_data);
+	expect_true(read > 0);
+
+	verify_shader_data(shader);
+
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result test_texture_load(struct rjd_resource_load_begin_params* params)
+{
+	struct did_call_load_stages* did_call_stages = (struct did_call_load_stages*)params->userdata;
+	did_call_stages->begin = true;
+
+	struct test_texture* texture = (struct test_texture*)params->typed_resource_data;
+
+	const char zeroes[sizeof(struct test_texture)] = {0};
+	expect_int32(0, memcmp(zeroes, texture, sizeof(zeroes)));
+
+	int read = sscanf((char*)params->stream_data.start, "%u\n", &texture->width);
+	expect_true(read > 0);
+	sscanf((char*)params->stream_data.start + read, "%u\n", &texture->height);
+
+	verify_texture_data(texture);
+
+	return RJD_RESULT_OK();
+}
+
+void test_texture_unload(struct rjd_resource_unload_params* params)
+{
+	struct did_call_load_stages* did_call_stages = (struct did_call_load_stages*)params->userdata;
+	did_call_stages->unload = true;
+}
+
+// 
+////////////////////////////////////////////////////////////////////////////////
 
 void test_resource()
 {
@@ -2093,7 +2241,7 @@ void test_resource()
 			{ .type = rjd_strhash_init("shader"), .extension = ".shader" },
 			{ .type = rjd_strhash_init("texture"), .extension = ".bmp" },
 		};
-
+	
 		const struct rjd_resource_loader_desc desc = {
 			.type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
 			.allocator = &allocator,
@@ -2126,39 +2274,191 @@ void test_resource()
 			{ rjd_resource_id_from_str("unregistered_type.txt"),    -1, NULL },
 		};
 
-		for (uint32_t i = 0; i < rjd_countof(expected_data); ++i) {
-			struct rjd_resource_type_id out_type = {0};
+		{
+			for (uint32_t i = 0; i < rjd_countof(expected_data); ++i) {
+				struct rjd_resource_type_id out_type = {0};
+	
+				struct rjd_result result = rjd_resource_loader_get_type(&loader, expected_data[i].id, &out_type);
+				int32_t mapping_index = expected_data[i].mapping_index;
+				if (mapping_index == -1) {
+					expect_result_notok(result);
+				} else {
+					expect_result_ok(result);
+					expect_true(rjd_resource_type_id_equals(type_mappings[mapping_index].type, out_type));
+				}
+	
+				struct rjd_istream stream = {0};
+				result = rjd_resource_loader_load(&loader, expected_data[i].id, &allocator, &stream);
+				if (mapping_index == -1) {
+					expect_result_notok(result);
+				} else {
+					const char* expected_str = expected_data[i].data;
+					expect_result_ok(result);
 
-			struct rjd_result result = rjd_resource_loader_get_type(&loader, expected_data[i].id, &out_type);
-			int32_t mapping_index = expected_data[i].mapping_index;
-			if (mapping_index == -1) {
-				expect_result_notok(result);
-			} else {
-				expect_result_ok(result);
-				expect_true(rjd_resource_type_id_equals(type_mappings[mapping_index].type, out_type));
+					uint64_t length = stream.end - stream.start;
+					expect_int64(strlen(expected_str), length);
+					expect_int32(0, memcmp(expected_str, stream.start, length));
+				}
+				rjd_istream_close(&stream);
 			}
-
-			int8_t* data = NULL;
-			result = rjd_resource_loader_load(&loader, expected_data[i].id, &allocator, &data);
-			if (mapping_index == -1) {
-				expect_result_notok(result);
-			} else {
-				const char* expected_str = expected_data[i].data;
-				expect_result_ok(result);
-				expect_int64(strlen(expected_str), rjd_array_count(data));
-				expect_int32(0, memcmp(expected_str, data, rjd_array_count(data)));
-			}
-			rjd_array_free(data);
 		}
-
-		rjd_resource_loader_destroy(&loader);
 	}
 
 	// rjd_resource
 	{
+		const struct rjd_resource_extension_to_type_id type_material = { .type = rjd_strhash_init("test_material"), .extension = ".material" };
+		const struct rjd_resource_extension_to_type_id type_shader = { .type = rjd_strhash_init("test_shader"), .extension = ".shader" };
+		const struct rjd_resource_extension_to_type_id type_texture = { .type = rjd_strhash_init("test_texture"), .extension = ".bmp" };
 
+		const struct rjd_resource_extension_to_type_id type_mappings[] = {
+			type_material,
+			type_shader,
+			type_texture,
+		};
+
+		const struct rjd_resource_loader_desc desc = {
+			.type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
+			.allocator = &allocator,
+			.filesystem = {
+				.root = "test_data/resource/lib",
+				.type_mappings = type_mappings,
+				.type_mappings_count = rjd_countof(type_mappings),
+			},
+		};
+
+		struct rjd_resource_loader loader;
+        {
+            struct rjd_result result = rjd_resource_loader_create(&loader, desc);
+            expect_result_ok(result);
+        }
+
+		struct rjd_resource_lib lib;
+		{
+			struct rjd_resource_lib_desc desc = {
+				.allocator = &allocator,
+				.loader = &loader,
+			};
+
+			rjd_resource_lib_create(&lib, desc);
+		}
+
+		struct did_call_load_stages did_call_stages_material = {0};
+		struct did_call_load_stages did_call_stages_shader = {0};
+		struct did_call_load_stages did_call_stages_texture = {0};
+
+		struct rjd_resource_type resource_types[] = 
+		{
+			{
+				.id = type_material.type,
+				.userdata = &did_call_stages_material,
+				.load_begin_func = test_material_load,
+				.optional_load_end_func = test_material_load_end,
+				.optional_unload_func = test_material_unload,
+				.in_memory_size = sizeof(struct test_material),
+			},
+			{
+				.id = type_shader.type,
+				.userdata = &did_call_stages_shader,
+				.load_begin_func = test_shader_load,
+				.optional_load_end_func = NULL,
+				.optional_unload_func = NULL,
+				.in_memory_size = sizeof(struct test_shader),
+			},
+			{
+				.id = type_texture.type,
+				.userdata = &did_call_stages_texture,
+				.load_begin_func = test_texture_load,
+				.optional_load_end_func = NULL,
+				.optional_unload_func = test_texture_unload,
+				.in_memory_size = sizeof(struct test_texture),
+			},
+		};
+
+		for (uint32_t i = 0; i < rjd_countof(resource_types); ++i)
+		{
+			struct rjd_result result = rjd_resource_lib_register_type(&lib, resource_types[i]);
+			expect_result_ok(result);
+		}
+
+		// these should have all been registered already
+		for (uint32_t i = 0; i < rjd_countof(resource_types); ++i)
+		{
+			struct rjd_result result = rjd_resource_lib_register_type(&lib, resource_types[i]);
+			expect_result_notok(result);
+		}
+        
+        // does not exist test
+        {
+            const struct rjd_resource_id id_does_not_exist = rjd_resource_id_from_str("gfx/does_not_exist.shader");
+            struct rjd_resource_handle handle_does_not_exist = rjd_resource_handle_none();
+            
+            struct rjd_result result = rjd_resource_load(&lib, id_does_not_exist, &handle_does_not_exist);
+            expect_result_notok(result);
+            
+            enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_does_not_exist);
+            expect_int32(RJD_RESOURCE_STATUS_INVALID, status);
+        }
+        
+        const struct rjd_resource_id id_material = rjd_resource_id_from_str("gfx/test.material");
+        const struct rjd_resource_id id_shader = rjd_resource_id_from_str("gfx/test.shader");
+        const struct rjd_resource_id id_texture = rjd_resource_id_from_str("gfx/textures/test.bmp");
+        
+        struct rjd_resource_handle handle_material = rjd_resource_handle_none();
+        struct rjd_resource_handle handle_shader = rjd_resource_handle_none();
+        struct rjd_resource_handle handle_texture = rjd_resource_handle_none();
+
+        // material
+        {
+            struct rjd_result result = rjd_resource_load(&lib, id_material, &handle_material);
+            expect_result_ok(result);
+            
+            enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_material);
+            expect_int32(RJD_RESOURCE_STATUS_LOAD_BEGIN, status);
+            
+            rjd_resource_lib_wait(&lib, &handle_material, 1);
+            
+            status = rjd_resource_lib_status(&lib, handle_material);
+            expect_int32(RJD_RESOURCE_STATUS_READY, status);
+            
+            expect_true(did_call_stages_material.begin);
+            expect_true(did_call_stages_material.end);
+            expect_false(did_call_stages_material.unload);
+        }
+
+        // shader
+        {
+            struct rjd_result result = rjd_resource_load(&lib, id_shader, &handle_shader);
+            
+            enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_shader);
+            expect_int32(RJD_RESOURCE_STATUS_READY, status); // should have been loaded by the material
+            
+            expect_result_ok(result);
+            expect_true(did_call_stages_material.begin);
+            expect_false(did_call_stages_material.end); // doesn't have a load end function
+            expect_false(did_call_stages_material.unload);
+            verify_shader_data((struct test_shader*)rjd_resource_get(&lib, handle_shader));
+        }
+
+        // texture
+        {
+            struct rjd_result result = rjd_resource_load(&lib, id_texture, &handle_texture);
+            
+            enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_texture);
+            expect_int32(RJD_RESOURCE_STATUS_READY, status); // should have been loaded by the material
+
+            expect_result_ok(result);
+            expect_true(did_call_stages_material.begin);
+            expect_false(did_call_stages_material.end); // doesn't have a load end function
+            expect_false(did_call_stages_material.unload);
+            verify_texture_data((struct test_texture*)rjd_resource_get(&lib, handle_texture));
+        }
+
+		// TODO unload each resource individually starting with material and make sure it refcounts them properly
+		// TODO add refcounting via stringhash id system - a bit more expensive but better for debugging
+
+		rjd_resource_lib_destroy(&lib);
+		rjd_resource_loader_destroy(&loader);
 	}
-    
     rjd_strhash_global_destroy();
 }
 
