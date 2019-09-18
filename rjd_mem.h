@@ -21,6 +21,13 @@ struct rjd_mem_allocator_stats
 	} lifetime;
 };
 
+enum
+{
+	RJD_KB = 1024,
+	RJD_MB = 1024 * 1024,
+	RJD_GB = 1024 * 1024 * 1024,
+};
+
 // TODO realloc
 typedef const char* (*rjd_mem_allocator_type_func)(void);
 typedef void* (*rjd_mem_allocator_alloc_func)(size_t size, void* optional_heap);
