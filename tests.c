@@ -2110,13 +2110,14 @@ struct rjd_result test_material_load_end(struct rjd_resource_load_end_params* pa
 	did_call_stages->end = true;
 
 	struct test_material* material = (struct test_material*)params->typed_resource_data;
-	struct test_shader* shader = (struct test_shader*)params->resource_get_func(params->resource_get_params, material->shader);
-	struct test_texture* texture = (struct test_texture*)params->resource_get_func(params->resource_get_params, material->texture);
+	struct rjd_resource_dependency shader = params->get_dependency_func(params->get_dependency_params, material->shader);
+	struct rjd_resource_dependency texture = params->get_dependency_func(params->get_dependency_params, material->texture);
+    
+    expect_int32(RJD_RESOURCE_STATUS_READY, shader.status);
+    expect_int32(RJD_RESOURCE_STATUS_READY, texture.status);
 
-	verify_shader_data(shader);
-	verify_texture_data(texture);
-
-	// TODO test shader, texture
+	verify_shader_data((struct test_shader*)shader.typed_resource_data);
+	verify_texture_data((struct test_texture*)texture.typed_resource_data);
 
 	return RJD_RESULT_OK();
 }
@@ -2124,9 +2125,16 @@ struct rjd_result test_material_load_end(struct rjd_resource_load_end_params* pa
 void test_material_unload(struct rjd_resource_unload_params* params)
 {
 	struct test_material* material = (struct test_material*)params->typed_resource_data;
+
 	// child resources should still be loaded
-	expect_true(params->resource_get_func(params->resource_get_params, material->shader) != NULL);
-	expect_true(params->resource_get_func(params->resource_get_params, material->texture) != NULL);
+    struct rjd_resource_dependency shader = params->get_dependency_func(params->get_dependency_params, material->shader);
+    struct rjd_resource_dependency texture = params->get_dependency_func(params->get_dependency_params, material->shader);
+    
+    expect_int32(RJD_RESOURCE_STATUS_READY, shader.status);
+    expect_int32(RJD_RESOURCE_STATUS_READY, texture.status);
+    
+	expect_true(shader.typed_resource_data != NULL);
+	expect_true(texture.typed_resource_data != NULL);
 
 	struct did_call_load_stages* did_call_stages = (struct did_call_load_stages*)params->userdata;
 	did_call_stages->unload = true;

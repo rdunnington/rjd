@@ -11,7 +11,7 @@ struct rjd_resource_load_begin_params;
 struct rjd_resource_load_end_params;
 struct rjd_resource_unload_params;
 struct rjd_resource_load_dependency_params;
-struct rjd_resource_get_params;
+struct rjd_resource_get_dependency_params;
 
 enum rjd_resource_status
 {
@@ -23,13 +23,19 @@ enum rjd_resource_status
 	RJD_RESOURCE_STATUS_READY,
 };
 
+struct rjd_resource_dependency
+{
+    enum rjd_resource_status status;
+    void* typed_resource_data;
+};
+
 // Loading takes place in 2 passes, where resources get a chance to declare any dependencies they want loaded before
 // their load function gets called.
 typedef struct rjd_result rjd_resource_load_begin_func(struct rjd_resource_load_begin_params* params);
 typedef struct rjd_result rjd_resource_load_end_func(struct rjd_resource_load_end_params* params);
 typedef void rjd_resource_unload_func(struct rjd_resource_unload_params* params);
 typedef struct rjd_result rjd_resource_add_dependency_func(struct rjd_resource_load_dependency_params* params, struct rjd_resource_id dependency, struct rjd_resource_handle* child);
-typedef void* rjd_resource_get_func(struct rjd_resource_get_params* params, struct rjd_resource_handle handle);
+typedef struct rjd_resource_dependency rjd_resource_get_dependency_func(struct rjd_resource_get_dependency_params* params, struct rjd_resource_handle handle);
 
 struct rjd_resource_load_begin_params
 {
@@ -52,8 +58,8 @@ struct rjd_resource_load_end_params
 	struct rjd_mem_allocator* allocator;
 	struct rjd_mem_allocator* scratch_allocator;
 
-	struct rjd_resource_get_params* resource_get_params;
-	rjd_resource_get_func* resource_get_func;
+	struct rjd_resource_get_dependency_params* get_dependency_params;
+	rjd_resource_get_dependency_func* get_dependency_func;
 };
 
 struct rjd_resource_unload_params
@@ -61,8 +67,8 @@ struct rjd_resource_unload_params
 	void* typed_resource_data;
 	void* userdata;
 
-	struct rjd_resource_get_params* resource_get_params;
-	rjd_resource_get_func* resource_get_func;
+	struct rjd_resource_get_dependency_params* get_dependency_params;
+	rjd_resource_get_dependency_func* get_dependency_func;
 };
 
 struct rjd_resource_type
@@ -143,7 +149,7 @@ struct rjd_resource_load_dependency_params
 static void rjd_resource_lib_load_stage_begin(struct rjd_resource_lib* lib, struct rjd_mem_allocator* scratch_allocator, struct rjd_resource_handle handle);
 static void rjd_resource_lib_load_stage_end(struct rjd_resource_lib* lib, struct rjd_mem_allocator* scratch_allocator, struct rjd_resource_handle handle);
 static struct rjd_result rjd_resource_add_dependency(struct rjd_resource_load_dependency_params* params, struct rjd_resource_id id, struct rjd_resource_handle* child);
-static void* rjd_resource_get_thunk(struct rjd_resource_get_params* params, struct rjd_resource_handle handle);
+static struct rjd_resource_dependency rjd_resource_get_dependency(struct rjd_resource_get_dependency_params* params, struct rjd_resource_handle handle);
 
 void rjd_resource_lib_create(struct rjd_resource_lib* lib, struct rjd_resource_lib_desc desc)
 {
@@ -218,19 +224,16 @@ void rjd_resource_lib_pump(struct rjd_resource_lib* lib, struct rjd_mem_allocato
 			struct rjd_resource_handle handle = res->dependencies[i];
 			struct rjd_resource* dependency = rjd_slotmap_get(lib->resources, handle.slot);
 			RJD_ASSERT(dependency);
-			if (dependency->status == RJD_RESOURCE_STATUS_FAILED) {
-				res->status = RJD_RESOURCE_STATUS_FAILED;
-				//RJD_LOG("Failed resolving dependencies for resource '%s': failed to load dependency '%s'", 
-				//		res->filepath, dependency->filepath);
-				rjd_array_pop(lib->load_stage_queues.resolving_dependencies);
-				break;
-			} else if (dependency->status != RJD_RESOURCE_STATUS_READY) {
+            // failures to load dependencies don't automatically fail this resource -
+            // we leave it up to the resource to decide what to do
+            // TODO use the "backup resource" as a replacement?
+			if (dependency->status != RJD_RESOURCE_STATUS_READY && dependency->status != RJD_RESOURCE_STATUS_FAILED) {
 				all_loaded = false;
 				break;
 			}
 		}
 
-		if (all_loaded && res->status != RJD_RESOURCE_STATUS_FAILED) {
+		if (all_loaded) {
 			struct rjd_resource_handle handle = rjd_array_pop(lib->load_stage_queues.resolving_dependencies);
             res->status = RJD_RESOURCE_STATUS_LOAD_END;
 			rjd_array_push(lib->load_stage_queues.end, handle);
@@ -240,7 +243,6 @@ void rjd_resource_lib_pump(struct rjd_resource_lib* lib, struct rjd_mem_allocato
 	if (!rjd_array_empty(lib->load_stage_queues.begin)) {
 		struct rjd_resource_handle handle = rjd_array_pop(lib->load_stage_queues.begin);
 		rjd_resource_lib_load_stage_begin(lib, scratch_allocator, handle);
-		rjd_array_push(lib->load_stage_queues.resolving_dependencies, handle);
 	}
 
 	if (!rjd_array_empty(lib->unload_queue)) {
@@ -255,8 +257,8 @@ void rjd_resource_lib_pump(struct rjd_resource_lib* lib, struct rjd_mem_allocato
 				struct rjd_resource_unload_params params = {
 					.typed_resource_data = resource->typed_resource_data,
 					.userdata = type->userdata,
-					.resource_get_params = (struct rjd_resource_get_params*)lib,
-					.resource_get_func = rjd_resource_get_thunk,
+					.get_dependency_params = (struct rjd_resource_get_dependency_params*)lib,
+					.get_dependency_func = rjd_resource_get_dependency,
 				};
 				type->optional_unload_func(&params);
 			}
@@ -448,6 +450,7 @@ static void rjd_resource_lib_load_stage_begin(struct rjd_resource_lib* lib, stru
 
         if (rjd_result_isok(result)) {
             resource->status = RJD_RESOURCE_STATUS_LOAD_RESOLVE;
+            rjd_array_push(lib->load_stage_queues.resolving_dependencies, handle);
         } else {
             //RJD_LOG("Failed beginning load for resource '%s': %s", resource->filepath, result.error);
             resource->status = RJD_RESOURCE_STATUS_FAILED;
@@ -476,8 +479,8 @@ static void rjd_resource_lib_load_stage_end(struct rjd_resource_lib* lib, struct
 			.userdata = type->userdata,
 			.allocator = lib->allocator,
 			.scratch_allocator = scratch_allocator,
-			.resource_get_params = (struct rjd_resource_get_params*)lib,
-			.resource_get_func = rjd_resource_get_thunk,
+			.get_dependency_params = (struct rjd_resource_get_dependency_params*)lib,
+			.get_dependency_func = rjd_resource_get_dependency,
 		};
 		result = type->optional_load_end_func(&params);
 	}
@@ -509,10 +512,17 @@ static struct rjd_result rjd_resource_add_dependency(struct rjd_resource_load_de
 	return result;
 }
 
-static void* rjd_resource_get_thunk(struct rjd_resource_get_params* params, struct rjd_resource_handle handle)
+static struct rjd_resource_dependency rjd_resource_get_dependency(struct rjd_resource_get_dependency_params* params, struct rjd_resource_handle handle)
 {
 	struct rjd_resource_lib* lib = (struct rjd_resource_lib*)params;
-	return rjd_resource_get(lib, handle);
+    enum rjd_resource_status status = rjd_resource_lib_status(lib, handle);
+	void* typed_resource_data = rjd_resource_get(lib, handle);
+    
+    struct rjd_resource_dependency dependency = {
+        .status = status,
+        .typed_resource_data = typed_resource_data,
+    };
+    return dependency;
 }
 
 #endif // RJD_IMPL
