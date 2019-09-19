@@ -2094,7 +2094,9 @@ struct rjd_result test_material_load(struct rjd_resource_load_begin_params* para
 	char path2[256] = {0};
 
 	int read = sscanf((char*)params->stream_data.start, "%s\n", path1);
-	sscanf((char*)params->stream_data.start + read - 1, "%s\n", path2);
+    expect_uint32(1, read);
+	read = sscanf((char*)params->stream_data.start + strlen(path1) + 1, "%s\n", path2);
+    expect_uint32(1, read);
 
 	struct rjd_resource_id res1 = rjd_resource_id_from_str(path1);
 	struct rjd_resource_id res2 = rjd_resource_id_from_str(path2);
@@ -2176,8 +2178,9 @@ struct rjd_result test_texture_load(struct rjd_resource_load_begin_params* param
 	expect_int32(0, memcmp(zeroes, texture, sizeof(zeroes)));
 
 	int read = sscanf((char*)params->stream_data.start, "%u\n", &texture->width);
-	expect_true(read > 0);
-	sscanf((char*)params->stream_data.start + read, "%u\n", &texture->height);
+	expect_uint32(1, read);
+	read = sscanf(strstr((char*)params->stream_data.start, "\n") + 1, "%u\n", &texture->height);
+    expect_uint32(1, read);
 
 	verify_texture_data(texture);
 
@@ -2256,7 +2259,7 @@ void test_resource()
 			{ .type = rjd_strhash_init("shader"), .extension = ".shader" },
 			{ .type = rjd_strhash_init("texture"), .extension = ".bmp" },
 		};
-	
+
 		const struct rjd_resource_loader_desc desc = {
 			.type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
 			.allocator = &allocator,
@@ -2413,16 +2416,16 @@ void test_resource()
             enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_does_not_exist);
             expect_int32(RJD_RESOURCE_STATUS_INVALID, status);
         }
-        
+
         const struct rjd_resource_id id_material = rjd_resource_id_from_str("gfx/test.material");
         const struct rjd_resource_id id_shader = rjd_resource_id_from_str("gfx/test.shader");
-        const struct rjd_resource_id id_texture = rjd_resource_id_from_str("gfx/textures/test.bmp");
-        
+        const struct rjd_resource_id id_texture = rjd_resource_id_from_str("gfx/test.bmp");
+
         struct rjd_resource_handle handle_material = rjd_resource_handle_none();
         struct rjd_resource_handle handle_shader = rjd_resource_handle_none();
         struct rjd_resource_handle handle_texture = rjd_resource_handle_none();
 
-        // material
+        // load material
         {
             struct rjd_result result = rjd_resource_load(&lib, id_material, &handle_material);
             expect_result_ok(result);
@@ -2440,7 +2443,7 @@ void test_resource()
             expect_false(did_call_stages_material.unload);
         }
 
-        // shader
+        // load shader
         {
             struct rjd_result result = rjd_resource_load(&lib, id_shader, &handle_shader);
             
@@ -2448,13 +2451,13 @@ void test_resource()
             expect_int32(RJD_RESOURCE_STATUS_READY, status); // should have been loaded by the material
             
             expect_result_ok(result);
-            expect_true(did_call_stages_material.begin);
-            expect_false(did_call_stages_material.end); // doesn't have a load end function
-            expect_false(did_call_stages_material.unload);
+            expect_true(did_call_stages_shader.begin);
+            expect_false(did_call_stages_shader.end); // doesn't have a load end function
+            expect_false(did_call_stages_shader.unload);
             verify_shader_data((struct test_shader*)rjd_resource_get(&lib, handle_shader));
         }
 
-        // texture
+        // load texture
         {
             struct rjd_result result = rjd_resource_load(&lib, id_texture, &handle_texture);
             
@@ -2462,17 +2465,50 @@ void test_resource()
             expect_int32(RJD_RESOURCE_STATUS_READY, status); // should have been loaded by the material
 
             expect_result_ok(result);
-            expect_true(did_call_stages_material.begin);
-            expect_false(did_call_stages_material.end); // doesn't have a load end function
-            expect_false(did_call_stages_material.unload);
+            expect_true(did_call_stages_texture.begin);
+            expect_false(did_call_stages_texture.end); // doesn't have a load end function
+            expect_false(did_call_stages_texture.unload);
             verify_texture_data((struct test_texture*)rjd_resource_get(&lib, handle_texture));
         }
 
-		// TODO unload each resource individually starting with material and make sure it refcounts them properly
-		// TODO add refcounting via stringhash id system - a bit more expensive but better for debugging
+        // unload material
+        {
+            rjd_resource_unload(&lib, handle_material);
+            
+            enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_material);
+            expect_uint32(RJD_RESOURCE_STATUS_READY, status);
+            
+            rjd_resource_lib_waitall(&lib);
+
+            status = rjd_resource_lib_status(&lib, handle_material);
+            expect_uint32(RJD_RESOURCE_STATUS_INVALID, status);
+        }
+
+		// unload shader (refcount should be 1 now)
+		{
+			enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_shader);
+			expect_uint32(RJD_RESOURCE_STATUS_READY, status);
+
+			rjd_resource_unload(&lib, handle_shader);
+			rjd_resource_lib_waitall(&lib);
+
+			status = rjd_resource_lib_status(&lib, handle_shader);
+            expect_uint32(RJD_RESOURCE_STATUS_INVALID, status);
+		}
+
+		// unload texture (refcount should be 1 now)
+		{
+			enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_texture);
+			expect_uint32(RJD_RESOURCE_STATUS_READY, status);
+
+			rjd_resource_unload(&lib, handle_texture);
+			rjd_resource_lib_waitall(&lib);
+
+			status = rjd_resource_lib_status(&lib, handle_texture);
+            expect_uint32(RJD_RESOURCE_STATUS_INVALID, status);
+		}
 
 		rjd_resource_lib_destroy(&lib);
-		rjd_resource_loader_destroy(&loader);
 	}
     rjd_strhash_global_destroy();
 }
