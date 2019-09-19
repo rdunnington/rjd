@@ -136,7 +136,8 @@ struct rjd_resource
 	struct rjd_resource_id id;
 	void* typed_resource_data;
 	struct rjd_resource_handle* dependencies;
-	enum rjd_resource_status status; // TODO atomic?
+	enum rjd_resource_status status;
+	uint32_t refcount; // TODO atomic
 	uint32_t registry_index;
 };
 
@@ -224,8 +225,8 @@ void rjd_resource_lib_pump(struct rjd_resource_lib* lib, struct rjd_mem_allocato
 			struct rjd_resource_handle handle = res->dependencies[i];
 			struct rjd_resource* dependency = rjd_slotmap_get(lib->resources, handle.slot);
 			RJD_ASSERT(dependency);
-            // failures to load dependencies don't automatically fail this resource -
-            // we leave it up to the resource to decide what to do
+            // failures to load dependencies don't automatically fail resources; we leave it up to
+            // the resource to decide what to do in the end stage
             // TODO use the "backup resource" as a replacement?
 			if (dependency->status != RJD_RESOURCE_STATUS_READY && dependency->status != RJD_RESOURCE_STATUS_FAILED) {
 				all_loaded = false;
@@ -319,8 +320,9 @@ struct rjd_result rjd_resource_load(struct rjd_resource_lib* lib, struct rjd_res
 	// return the resource handle if it has been queued already
 	for (struct rjd_slot s = rjd_slotmap_next(lib->resources, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(lib->resources, &s))
 	{
-		const struct rjd_resource* resource = rjd_slotmap_get(lib->resources, s);
+		struct rjd_resource* resource = rjd_slotmap_get(lib->resources, s);
 		if (rjd_strhash_isequal(resource->id.hash, id.hash)) {
+			++resource->refcount;
 			out->slot = s;
 			return RJD_RESULT_OK();
 		}
@@ -347,6 +349,7 @@ struct rjd_result rjd_resource_load(struct rjd_resource_lib* lib, struct rjd_res
 				.registry_index = registry_index,
 				.dependencies = NULL,
 				.typed_resource_data = NULL,
+				.refcount = 1,
 			};
 
 			rjd_slotmap_insert(lib->resources, resource, &out->slot);
@@ -399,9 +402,12 @@ void rjd_resource_unload(struct rjd_resource_lib* lib, struct rjd_resource_handl
 
 	struct rjd_resource* resource = rjd_slotmap_get(lib->resources, handle.slot);
 	if (resource) {
-		rjd_array_push(lib->unload_queue, handle);
-		for (uint32_t i = 0; i < rjd_array_count(resource->dependencies); ++i) {
-			rjd_resource_unload(lib, resource->dependencies[i]);
+		--resource->refcount;
+		if (resource->refcount == 0) {
+			rjd_array_push(lib->unload_queue, handle);
+			for (uint32_t i = 0; i < rjd_array_count(resource->dependencies); ++i) {
+				rjd_resource_unload(lib, resource->dependencies[i]);
+			}
 		}
 	}
 }
