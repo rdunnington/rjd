@@ -14,6 +14,7 @@ static inline void rjd_slot_invalidate(struct rjd_slot* slot);
 #define rjd_slotmap_alloc(type, count, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), count, allocator))
 #define rjd_slotmap_insert(map, data, out_slot)		(rjd_slotmap_insert_impl((void**)(&map), (out_slot)), \
 													 (map)[(out_slot)->index] = data)
+#define rjd_slotmap_contains(map, slot)				(rjd_slotmap_contains_impl((map), (slot)))
 #define rjd_slotmap_get(map, slot)					((map) + rjd_slotmap_get_impl((map), (slot)))
 #define rjd_slotmap_count(map)						(rjd_slotmap_count_impl(map))
 #define rjd_slotmap_erase(map, slot)				(rjd_slotmap_erase_impl((map), slot))
@@ -22,6 +23,7 @@ static inline void rjd_slot_invalidate(struct rjd_slot* slot);
 
 void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator);
 void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot);
+bool rjd_slotmap_contains_impl(const void* map, struct rjd_slot slot);
 uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot);
 uint32_t rjd_slotmap_count_impl(const void* map);
 void rjd_slotmap_erase_impl(void* map, struct rjd_slot slot);
@@ -99,6 +101,18 @@ void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot)
 	out_slot->salt = *salt;
 }
 
+bool rjd_slotmap_contains_impl(const void* map, struct rjd_slot slot)
+{
+	RJD_ASSERT(map);
+
+	const struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
+	if (slot.index >= header->count) {
+		return false;
+	}
+	uint32_t index = slot.index;
+	return !rjd_array_contains(header->freelist, &index);
+}
+
 uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot)
 {
 	RJD_ASSERT(map);
@@ -106,7 +120,7 @@ uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot)
 	const struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
 	RJD_ASSERT(slot.index < header->count);
 	uint32_t index = slot.index;
-	RJD_ASSERTMSG(!rjd_array_contains(header->freelist, &index), "This slot is unallocated.");
+	RJD_ASSERTMSG(!rjd_array_contains(header->freelist, &index), "This slot is unallocated. Use rjd_slotmap_contains to check if the slot is valid first.");
     int16_t salt = header->salts[slot.index];
 	RJD_ASSERT(salt == slot.salt);
 	return slot.index;

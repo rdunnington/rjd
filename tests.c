@@ -1647,6 +1647,13 @@ void test_slotmap(void)
 			rjd_slotmap_erase(map, slots[i]);
 		}
 
+		for (uint32_t i = 0; i < rjd_countof(slots); ++i)
+		{
+			bool actual = rjd_slotmap_contains(map, slots[i]);
+			bool expected = (i % 5) != 0;
+			expect_uint32(expected, actual);
+		}
+
 		visited = 0;
 		for (struct rjd_slot s = rjd_slotmap_next(map, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(map, &s))
 		{
