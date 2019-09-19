@@ -571,6 +571,13 @@ struct rjd_mem_allocator_stats
 	} lifetime;
 };
 
+enum
+{
+	RJD_KB = 1024,
+	RJD_MB = 1024 * 1024,
+	RJD_GB = 1024 * 1024 * 1024,
+};
+
 // TODO realloc
 typedef const char* (*rjd_mem_allocator_type_func)(void);
 typedef void* (*rjd_mem_allocator_alloc_func)(size_t size, void* optional_heap);
@@ -4197,6 +4204,7 @@ static inline void rjd_slot_invalidate(struct rjd_slot* slot);
 #define rjd_slotmap_alloc(type, count, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), count, allocator))
 #define rjd_slotmap_insert(map, data, out_slot)		(rjd_slotmap_insert_impl((void**)(&map), (out_slot)), \
 													 (map)[(out_slot)->index] = data)
+#define rjd_slotmap_contains(map, slot)				(rjd_slotmap_contains_impl((map), (slot)))
 #define rjd_slotmap_get(map, slot)					((map) + rjd_slotmap_get_impl((map), (slot)))
 #define rjd_slotmap_count(map)						(rjd_slotmap_count_impl(map))
 #define rjd_slotmap_erase(map, slot)				(rjd_slotmap_erase_impl((map), slot))
@@ -4205,6 +4213,7 @@ static inline void rjd_slot_invalidate(struct rjd_slot* slot);
 
 void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator);
 void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot);
+bool rjd_slotmap_contains_impl(const void* map, struct rjd_slot slot);
 uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot);
 uint32_t rjd_slotmap_count_impl(const void* map);
 void rjd_slotmap_erase_impl(void* map, struct rjd_slot slot);
@@ -4282,6 +4291,18 @@ void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot)
 	out_slot->salt = *salt;
 }
 
+bool rjd_slotmap_contains_impl(const void* map, struct rjd_slot slot)
+{
+	RJD_ASSERT(map);
+
+	const struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
+	if (slot.index >= header->count) {
+		return false;
+	}
+	uint32_t index = slot.index;
+	return !rjd_array_contains(header->freelist, &index);
+}
+
 uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot)
 {
 	RJD_ASSERT(map);
@@ -4289,7 +4310,7 @@ uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot)
 	const struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
 	RJD_ASSERT(slot.index < header->count);
 	uint32_t index = slot.index;
-	RJD_ASSERTMSG(!rjd_array_contains(header->freelist, &index), "This slot is unallocated.");
+	RJD_ASSERTMSG(!rjd_array_contains(header->freelist, &index), "This slot is unallocated. Use rjd_slotmap_contains to check if the slot is valid first.");
     int16_t salt = header->salts[slot.index];
 	RJD_ASSERT(salt == slot.salt);
 	return slot.index;
@@ -5013,11 +5034,11 @@ static struct rjd_result rjd_istream_refill_file(struct rjd_istream* stream)
 		if (feof(file)) {
 			if (bytes_read == 0) {
 				rjd_istream_close_file(stream);
-				rjd_istream_fail(stream, "attempt to read past end of file");
+				rjd_istream_fail(stream, "end of file reached, no more data available");
 			} else {
 				stream->end = stream->start + bytes_read;
                 stream->cursor = stream->start;
-                stream->result = RJD_RESULT("end of file reached, no more data available");
+                stream->result = RJD_RESULT_OK();
 			}
 		} else {
 			rjd_istream_close_file(stream);
@@ -5162,7 +5183,7 @@ struct rjd_strhash
 };
 
 void rjd_strhash_global_init(struct rjd_mem_allocator* debug_allocator, uint32_t initial_capacity);
-void rjd_strhash_global_destroy();
+void rjd_strhash_global_destroy(void);
 
 struct rjd_strhash rjd_strhash_init(const char* str);
 bool rjd_strhash_isequal(struct rjd_strhash a, struct rjd_strhash b);
@@ -5184,7 +5205,7 @@ void rjd_strhash_global_init(struct rjd_mem_allocator* debug_allocator, uint32_t
 	*g_strhash_strpool = rjd_strpool_init(debug_allocator, initial_capacity);
 }
 
-void rjd_strhash_global_destroy()
+void rjd_strhash_global_destroy(void)
 {
 	rjd_strpool_free(g_strhash_strpool);
 	rjd_mem_free(g_strhash_strpool);
@@ -5198,7 +5219,7 @@ struct rjd_strhash rjd_strhash_init(const char* str)
 
 	if (str != NULL) {
 		hash = rjd_hash64_str(str);
-		if (g_strhash_strpool)
+		if (g_strhash_strpool && hash.value != 0)
 		{
 			// TODO make threadsafe
 			debug_string = rjd_strpool_add(g_strhash_strpool, str);
@@ -5248,6 +5269,88 @@ struct rjd_resource_handle
 	struct rjd_slot slot;
 };
 
+static inline struct rjd_resource_id rjd_resource_id_from_str(const char* str);
+static inline struct rjd_resource_id rjd_resource_id_none(void);
+static inline bool rjd_resource_id_equals(struct rjd_resource_id a, struct rjd_resource_id b);
+static inline bool rjd_resource_id_isvalid(struct rjd_resource_id id);
+
+static inline struct rjd_resource_type_id rjd_resource_type_id_from_str(const char* str);
+static inline struct rjd_resource_type_id rjd_resource_type_id_none(void);
+static inline bool rjd_resource_type_id_equals(struct rjd_resource_type_id a, struct rjd_resource_type_id b);
+static inline bool rjd_resource_type_id_isvalid(struct rjd_resource_type_id id);
+
+static inline struct rjd_resource_handle rjd_resource_handle_none(void);
+static inline bool rjd_resource_handle_equals(struct rjd_resource_handle a, struct rjd_resource_handle b);
+static inline bool rjd_resource_handle_isvalid(struct rjd_resource_handle handle);
+
+////////////////////////////////////////////////////////////////////////////////
+// static inline implementation
+
+static inline struct rjd_resource_id rjd_resource_id_from_str(const char* str)
+{
+	struct rjd_resource_id id = {
+		.hash = rjd_strhash_init(str),
+	};
+	return id;
+}
+
+static inline struct rjd_resource_id rjd_resource_id_none(void)
+{
+	return rjd_resource_id_from_str(NULL);
+}
+
+static inline bool rjd_resource_id_equals(struct rjd_resource_id a, struct rjd_resource_id b)
+{
+	return a.hash.hash.value == b.hash.hash.value;
+}
+
+static inline bool rjd_resource_id_isvalid(struct rjd_resource_id id)
+{
+	return id.hash.hash.value != 0;
+}
+
+static inline struct rjd_resource_type_id rjd_resource_type_id_from_str(const char* str)
+{
+	struct rjd_resource_type_id id = {
+		.hash = rjd_strhash_init(str),
+	};
+	return id;
+}
+
+static inline struct rjd_resource_type_id rjd_resource_type_id_none(void)
+{
+	return rjd_resource_type_id_from_str(NULL);
+}
+
+static inline bool rjd_resource_type_id_equals(struct rjd_resource_type_id a, struct rjd_resource_type_id b)
+{
+	return a.hash.hash.value == b.hash.hash.value;
+}
+
+static inline bool rjd_resource_type_id_isvalid(struct rjd_resource_type_id id)
+{
+	return id.hash.hash.value != 0;
+}
+
+static inline struct rjd_resource_handle rjd_resource_handle_none(void)
+{
+	struct rjd_resource_handle handle;
+	handle.slot.index = 0;
+	handle.slot.salt = 0;
+	return handle;
+}
+
+static inline bool rjd_resource_handle_equals(struct rjd_resource_handle a, struct rjd_resource_handle b)
+{
+	return a.slot.index == b.slot.index &&
+			a.slot.salt == b.slot.salt;
+}
+
+static inline bool rjd_resource_handle_isvalid(struct rjd_resource_handle handle)
+{
+	return rjd_slot_isvalid(handle.slot);
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // rjd_resource_loader.h
@@ -5257,9 +5360,11 @@ struct rjd_resource_handle
 
 #define RJD_RESOURCE_LOADER_H 1
 
-typedef struct rjd_result rjd_resource_loader_destroy_func(struct rjd_resource_loader* loader);
+struct rjd_resource_loader;
+
+typedef void rjd_resource_loader_destroy_func(struct rjd_resource_loader* loader);
 typedef struct rjd_result rjd_resource_loader_get_type_func(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
-typedef struct rjd_result rjd_resource_loader_load_func(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, void** out);
+typedef struct rjd_result rjd_resource_loader_load_func(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out);
 
 struct rjd_resource_loader
 {
@@ -5292,6 +5397,7 @@ struct rjd_resource_loader_desc
 			const char* root;
 			const struct rjd_resource_extension_to_type_id* type_mappings;
 			uint32_t type_mappings_count;
+			uint32_t manifest_capacity;
 		} filesystem;
 	};
 };
@@ -5299,8 +5405,8 @@ struct rjd_resource_loader_desc
 struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, struct rjd_resource_loader_desc desc);
 static inline void rjd_resource_loader_destroy(struct rjd_resource_loader* loader);
 static inline struct rjd_result rjd_resource_loader_get_type(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
-static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, void** out);
-// TODO update load() to return an rjd_stream instead of loading the entire file at once?
+static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out);
+// TODO update load() to return an rjd_istream instead of loading the entire file at once?
 
 ////////////////////////////////////////////////////////////////////////////////
 // Inline implementation
@@ -5321,7 +5427,7 @@ static inline struct rjd_result rjd_resource_loader_get_type(struct rjd_resource
 	return loader->get_type_func(loader, id, out);
 }
 
-static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, void** out)
+static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out)
 {
 	RJD_ASSERT(loader);
 	RJD_ASSERT(loader->load_func);
@@ -5353,7 +5459,7 @@ struct rjd_resource_loader_filesystem
 static struct rjd_resource_loader_filesystem* rjd_resource_loader_to_filesystem_loader(struct rjd_resource_loader* loader);
 static void rjd_resource_loader_filesystem_destroy(struct rjd_resource_loader* loader);
 static struct rjd_result rjd_resource_loader_filesystem_get_type(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
-static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, void** out);
+static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out);
 
 // public implementation
 
@@ -5363,13 +5469,13 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 
 	if (desc.type == RJD_RESOURCE_LOADER_TYPE_FILESYSTEM)
 	{
-		uint32_t manifest_capacity = desc.manifest_capacity == 0 ? 1024 : desc.manifest_capacity;
+		uint32_t manifest_capacity = desc.filesystem.manifest_capacity == 0 ? 1024 : desc.filesystem.manifest_capacity;
 
 		struct rjd_resource_loader_filesystem* impl = rjd_mem_alloc(struct rjd_resource_loader_filesystem, desc.allocator);
 		impl->debug_sentinel = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM;
 		impl->strpool = rjd_strpool_init(desc.allocator, 64);
 		impl->type_mappings = rjd_array_alloc(struct rjd_resource_extension_to_type_id, desc.filesystem.type_mappings_count, desc.allocator);
-		impl->root = rjd_strpool_add(desc.filesystem.root);
+		impl->root = rjd_strpool_add(&impl->strpool, desc.filesystem.root);
 		impl->manifest_entries = rjd_array_alloc(struct rjd_resource_manifest_entry_filesystem, manifest_capacity, desc.allocator);
 
 		for (uint32_t i = 0; i < desc.filesystem.type_mappings_count; ++i)
@@ -5392,13 +5498,13 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 					}
 				}
 
-				if (type.hash.hash != 0)
+				if (type.hash.hash.value != 0)
 				{
-					struct rjd_strref* pathref = rjd_strpool_add(path);
+					struct rjd_strref* pathref = rjd_strpool_add(&impl->strpool, path);
 					struct rjd_resource_manifest_entry_filesystem entry = {
-						.id = rjd_strhash_init(path);
+						.id = rjd_strhash_init(path),
 						.type = type,
-						.path = entry,
+						.path = pathref,
 					};
 					rjd_array_push(impl->manifest_entries, entry);
 				}
@@ -5441,7 +5547,7 @@ static void rjd_resource_loader_filesystem_destroy(struct rjd_resource_loader* l
 	struct rjd_resource_loader_filesystem* impl = rjd_resource_loader_to_filesystem_loader(loader);
 	rjd_array_free(impl->manifest_entries);
 	rjd_array_free(impl->type_mappings);
-	rjd_strpool_free(impl->strpool);
+	rjd_strpool_free(&impl->strpool);
 	rjd_mem_free(impl);
 	memset(loader, 0, sizeof(*loader));
 }
@@ -5450,7 +5556,7 @@ static struct rjd_result rjd_resource_loader_filesystem_get_type(struct rjd_reso
 {
 	struct rjd_resource_loader_filesystem* impl = rjd_resource_loader_to_filesystem_loader(loader);
 	for (uint32_t i = 0; i < rjd_array_count(impl->manifest_entries); ++i) {
-		if (impl->manifest_entries[i].id == id) {
+		if (rjd_resource_id_equals(impl->manifest_entries[i].id, id)) {
 			*out = impl->manifest_entries[i].type;
 			return RJD_RESULT_OK();
 		}
@@ -5459,14 +5565,20 @@ static struct rjd_result rjd_resource_loader_filesystem_get_type(struct rjd_reso
 	return RJD_RESULT("Resource id not found in loader manifest.");
 }
 
-static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, void** out)
+static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out)
 {
 	struct rjd_resource_loader_filesystem* impl = rjd_resource_loader_to_filesystem_loader(loader);
 	for (uint32_t i = 0; i < rjd_array_count(impl->manifest_entries); ++i) {
-		if (impl->manifest_entries[i].id == id) {
-			const char* path = rjd_strref_str(impl->manifest_entries[i].path);
-			struct rjd_result result = rjd_fio_read(path, (char**)out, allocator);
-			return result;
+		if (rjd_resource_id_equals(impl->manifest_entries[i].id, id)) {
+            const char* root = rjd_strref_str(impl->root);
+            const char* relative_path = rjd_strref_str(impl->manifest_entries[i].path);
+            
+            struct rjd_path fullpath = rjd_path_create();
+            rjd_path_append(&fullpath, root);
+            rjd_path_append(&fullpath, relative_path);
+
+			*out = rjd_istream_from_file(rjd_path_get(&fullpath), allocator, 1024 * 512);
+			return out->result;
 		}
 	}
 
@@ -5484,26 +5596,6 @@ static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource
 
 #define RJD_RESOURCE_H 1
 
-// TODO delete this example code
-//struct rjd_result rjd_gfx_material_load_dependencies(struct rjd_resource_load_params params)
-//{
-//	struct rjd_serializer s = rjd_serializer_init(RJD_SERIALIZER_MODE_READ, params.load_params.filedata, params.load_params.filesize);
-//	const char* k_default = NULL;
-//	const char* shader = rjd_serialize_string(s, params.load_params.filedata, "shader", k_default);
-//	const char* texture = rjd_serialize_string(s, params.load_params.filedata, "texture");
-//
-//	struct* rjd_gfx_material* material = params.typed_resource_data;
-//	material->shader = params.load_dependency(params.dependency_params, shader);
-//	material->texture = params.load_dependency(params.dependency_params, texture);
-//}
-
-//struct rjd_result rjd_gfx_material_load_resource(struct rjd_resource_load_params params)
-//{
-//	struct* rjd_gfx_material* material = params.typed_resource_data;
-//	
-//}
-
-
 // TODO update all the RJD_LOGs to a resource channel
 struct rjd_result;
 struct rjd_resource_type;
@@ -5511,7 +5603,9 @@ struct rjd_resource;
 struct rjd_resource_loader;
 struct rjd_resource_load_begin_params;
 struct rjd_resource_load_end_params;
+struct rjd_resource_unload_params;
 struct rjd_resource_load_dependency_params;
+struct rjd_resource_get_dependency_params;
 
 enum rjd_resource_status
 {
@@ -5523,19 +5617,26 @@ enum rjd_resource_status
 	RJD_RESOURCE_STATUS_READY,
 };
 
+struct rjd_resource_dependency
+{
+    enum rjd_resource_status status;
+    void* typed_resource_data;
+};
+
 // Loading takes place in 2 passes, where resources get a chance to declare any dependencies they want loaded before
-// their load function gets called. TODO need to figure out a good place to store these dependencies - ideally you
-// want them stored in the typed_resource_data structure, but need to call them out as dependencies somehow
+// their load function gets called.
 typedef struct rjd_result rjd_resource_load_begin_func(struct rjd_resource_load_begin_params* params);
 typedef struct rjd_result rjd_resource_load_end_func(struct rjd_resource_load_end_params* params);
-typedef void rjd_resource_unload_func(void* typed_resource_data);
-typedef struct rjd_resource_handle rjd_resource_add_dependency_func(const struct rjd_resource_load_dependency_params* params, struct rjd_resource_id dependency);
+typedef void rjd_resource_unload_func(struct rjd_resource_unload_params* params);
+typedef struct rjd_result rjd_resource_add_dependency_func(struct rjd_resource_load_dependency_params* params, struct rjd_resource_id dependency, struct rjd_resource_handle* child);
+typedef struct rjd_resource_dependency rjd_resource_get_dependency_func(struct rjd_resource_get_dependency_params* params, struct rjd_resource_handle handle);
 
 struct rjd_resource_load_begin_params
 {
-	void* filedata;
+	struct rjd_istream stream_data;
 	uint32_t filesize;
 	void* typed_resource_data;
+	void* userdata;
 	struct rjd_mem_allocator* allocator;
 	struct rjd_mem_allocator* scratch_allocator;
 
@@ -5547,26 +5648,41 @@ struct rjd_resource_load_begin_params
 struct rjd_resource_load_end_params
 {
 	void* typed_resource_data;
+	void* userdata;
 	struct rjd_mem_allocator* allocator;
 	struct rjd_mem_allocator* scratch_allocator;
+
+	struct rjd_resource_get_dependency_params* get_dependency_params;
+	rjd_resource_get_dependency_func* get_dependency_func;
+};
+
+struct rjd_resource_unload_params
+{
+	void* typed_resource_data;
+	void* userdata;
+
+	struct rjd_resource_get_dependency_params* get_dependency_params;
+	rjd_resource_get_dependency_func* get_dependency_func;
 };
 
 struct rjd_resource_type
 {
 	struct rjd_resource_type_id id;
 	struct rjd_mem_allocator* optional_allocator;
+	void* userdata;
 	rjd_resource_load_begin_func* load_begin_func;
 	rjd_resource_load_end_func* optional_load_end_func;
-	rjd_resource_unload_func* unload_func;
+	rjd_resource_unload_func* optional_unload_func;
 	uint32_t in_memory_size;
 };
 
 struct rjd_resource_lib_desc
 {
 	struct rjd_mem_allocator* allocator;
-	struct rjd_mem_allocator* scratch_allocator;
 	struct rjd_resource_loader* loader;
 
+	struct rjd_resource_type* types;
+	uint32_t count_types;
 	uint32_t initial_capacity_types;
 	uint32_t initial_capacity_resources;
 	uint32_t initial_capacity_buffers;
@@ -5575,11 +5691,11 @@ struct rjd_resource_lib_desc
 struct rjd_resource_lib
 {
 	struct rjd_mem_allocator* allocator;
-	struct rjd_mem_allocator* scratch_allocator;
 	struct rjd_resource_loader* loader;
-	struct rjd_resource_type* registered_types;
-	struct rjd_resource* resources;
+	struct rjd_resource_type* registered_types; // should only be accessed from one thread, TODO enforce
+	struct rjd_resource* resources; // TODO make threadsafe
 
+	// TODO make these threadsafe queues
 	struct {
 		struct rjd_resource_handle* begin;
 		struct rjd_resource_handle* resolving_dependencies;
@@ -5594,7 +5710,9 @@ struct rjd_resource_id rjd_resource_id_from_path(const char* path);
 void rjd_resource_lib_create(struct rjd_resource_lib* lib, struct rjd_resource_lib_desc desc);
 struct rjd_result rjd_resource_lib_destroy(struct rjd_resource_lib* lib);
 struct rjd_result rjd_resource_lib_register_type(struct rjd_resource_lib* lib, struct rjd_resource_type type);
-void rjd_resource_lib_pump(struct rjd_resource_lib* lib);
+// TODO have the system return fallback handles for resources that failed to load
+//struct rjd_result rjd_resource_lib_register_fallback(struct rjd_resource_lib* lib, struct rjd_resource_type type, struct rjd_resource_handle fallback);
+void rjd_resource_lib_pump(struct rjd_resource_lib* lib, struct rjd_mem_allocator* scratch_allocator);
 void rjd_resource_lib_wait(struct rjd_resource_lib* lib, struct rjd_resource_handle* resources, size_t count);
 void rjd_resource_lib_waitall(struct rjd_resource_lib* lib);
 
@@ -5612,7 +5730,8 @@ struct rjd_resource
 	struct rjd_resource_id id;
 	void* typed_resource_data;
 	struct rjd_resource_handle* dependencies;
-	enum rjd_resource_status status; // TODO atomic?
+	enum rjd_resource_status status;
+	uint32_t refcount; // TODO atomic
 	uint32_t registry_index;
 };
 
@@ -5622,9 +5741,8 @@ struct rjd_resource_load_dependency_params
 	struct rjd_resource_handle parent;
 };
 
-static void rjd_resource_lib_load_stage_begin(struct rjd_resource_lib* lib, struct rjd_resource_handle handle);
-static void rjd_resource_lib_load_stage_end(struct rjd_resource_lib* lib, struct rjd_resource_handle handle);
-static struct rjd_resource_handle rjd_resource_add_dependency(struct rjd_resource_load_dependency_params* params, struct rjd_resource_id id, struct rjd_resource_handle* child);
+static struct rjd_result rjd_resource_add_dependency(struct rjd_resource_load_dependency_params* params, struct rjd_resource_id id, struct rjd_resource_handle* child);
+static struct rjd_resource_dependency rjd_resource_get_dependency(struct rjd_resource_get_dependency_params* params, struct rjd_resource_handle handle);
 
 void rjd_resource_lib_create(struct rjd_resource_lib* lib, struct rjd_resource_lib_desc desc)
 {
@@ -5643,7 +5761,6 @@ void rjd_resource_lib_create(struct rjd_resource_lib* lib, struct rjd_resource_l
 	RJD_ASSERTMSG(desc.loader, "You must create a loader with rjd_resource_loader_create() and set it in rjd_resource_lib_desc");
 
 	lib->allocator = desc.allocator;
-	lib->scratch_allocator = desc.scratch_allocator;
 	lib->loader = desc.loader;
 	lib->registered_types = rjd_array_alloc(struct rjd_resource_type, desc.initial_capacity_types, desc.allocator);
 	lib->resources = rjd_slotmap_alloc(struct rjd_resource, desc.initial_capacity_resources, desc.allocator);
@@ -5655,18 +5772,27 @@ void rjd_resource_lib_create(struct rjd_resource_lib* lib, struct rjd_resource_l
 
 struct rjd_result rjd_resource_lib_destroy(struct rjd_resource_lib* lib)
 {
-	RJD_UNUSED_PARAM(lib);
+	RJD_ASSERT(lib);
 
-	// todo return bad result if there are still resources hanging around
-	return RJD_RESULT("implement me");
+	if (rjd_slotmap_count(lib->resources) > 0) {
+		return RJD_RESULT("You must unload all resources before destroying the lib");
+	}
+
+	rjd_array_free(lib->unload_queue);
+	rjd_array_free(lib->load_stage_queues.end);
+	rjd_array_free(lib->load_stage_queues.resolving_dependencies);
+	rjd_array_free(lib->load_stage_queues.begin);
+	rjd_slotmap_free(lib->resources);
+	rjd_array_free(lib->registered_types);
+	rjd_resource_loader_destroy(lib->loader);
+
+	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_resource_lib_register_type(struct rjd_resource_lib* lib, struct rjd_resource_type type)
 {
 	RJD_ASSERT(lib);
 	RJD_ASSERT(type.load_begin_func);
-	RJD_ASSERT(type.optional_load_end_func);
-	RJD_ASSERT(type.unload_func);
 	RJD_ASSERT(type.in_memory_size > 0);
 
 	for (uint32_t i = 0; i < rjd_array_count(lib->registered_types); ++i)
@@ -5682,13 +5808,37 @@ struct rjd_result rjd_resource_lib_register_type(struct rjd_resource_lib* lib, s
 	return RJD_RESULT_OK();
 }
 
-void rjd_resource_lib_pump(struct rjd_resource_lib* lib)
+void rjd_resource_lib_pump(struct rjd_resource_lib* lib, struct rjd_mem_allocator* scratch_allocator)
 {
 	RJD_ASSERT(lib);
 
 	if (!rjd_array_empty(lib->load_stage_queues.end)) {
 		struct rjd_resource_handle handle = rjd_array_pop(lib->load_stage_queues.end);
-		rjd_resource_lib_load_stage_end(lib, handle);
+		struct rjd_resource* resource = rjd_slotmap_get(lib->resources, handle.slot);
+		RJD_ASSERT(resource);
+		RJD_ASSERT(resource->status == RJD_RESOURCE_STATUS_LOAD_END);
+	
+		struct rjd_result result = RJD_RESULT_OK();
+		const struct rjd_resource_type* type = lib->registered_types + resource->registry_index;
+		if (type->optional_load_end_func) {
+			struct rjd_resource_load_end_params params = {
+				.typed_resource_data = resource->typed_resource_data,
+				.userdata = type->userdata,
+				.allocator = lib->allocator,
+				.scratch_allocator = scratch_allocator,
+				.get_dependency_params = (struct rjd_resource_get_dependency_params*)lib,
+				.get_dependency_func = rjd_resource_get_dependency,
+			};
+			result = type->optional_load_end_func(&params);
+		}
+	
+		if (rjd_result_isok(result)) {
+			resource->status = RJD_RESOURCE_STATUS_READY;
+			//RJD_LOG("Loaded resource '%s'", resource->filepath);
+		} else {
+			resource->status = RJD_RESOURCE_STATUS_FAILED;
+			//RJD_LOG("Failed ending load for resource '%s'", resource->filepath);
+		}
 	}
 
 	if (!rjd_array_empty(lib->load_stage_queues.resolving_dependencies)) {
@@ -5702,13 +5852,10 @@ void rjd_resource_lib_pump(struct rjd_resource_lib* lib)
 			struct rjd_resource_handle handle = res->dependencies[i];
 			struct rjd_resource* dependency = rjd_slotmap_get(lib->resources, handle.slot);
 			RJD_ASSERT(dependency);
-			if (dependency->status == RJD_RESOURCE_STATUS_FAILED) {
-				res->status = RJD_RESOURCE_STATUS_FAILED;
-				//RJD_LOG("Failed resolving dependencies for resource '%s': failed to load dependency '%s'", 
-				//		res->filepath, dependency->filepath);
-				rjd_array_pop(lib->load_stage_queues.resolving_dependencies);
-				break;
-			} else if (dependency->status != RJD_RESOURCE_STATUS_READY) {
+            // failures to load dependencies don't automatically fail resources; we leave it up to
+            // the resource to decide what to do in the end stage
+            // TODO use the "backup resource" as a replacement?
+			if (dependency->status != RJD_RESOURCE_STATUS_READY && dependency->status != RJD_RESOURCE_STATUS_FAILED) {
 				all_loaded = false;
 				break;
 			}
@@ -5716,29 +5863,84 @@ void rjd_resource_lib_pump(struct rjd_resource_lib* lib)
 
 		if (all_loaded) {
 			struct rjd_resource_handle handle = rjd_array_pop(lib->load_stage_queues.resolving_dependencies);
+            res->status = RJD_RESOURCE_STATUS_LOAD_END;
 			rjd_array_push(lib->load_stage_queues.end, handle);
 		}
 	}
 
 	if (!rjd_array_empty(lib->load_stage_queues.begin)) {
-		struct rjd_resource_handle handle = rjd_array_pop(lib->load_stage_queues.end);
-		rjd_resource_lib_load_stage_begin(lib, handle);
-		rjd_array_push(lib->load_stage_queues.resolving_dependencies, handle);
-
-		// TODO when to clear scratch data?
+		struct rjd_resource_handle handle = rjd_array_pop(lib->load_stage_queues.begin);
+		struct rjd_resource* resource = rjd_slotmap_get(lib->resources, handle.slot);
+		RJD_ASSERT(resource);
+		RJD_ASSERT(resource->status == RJD_RESOURCE_STATUS_LOAD_BEGIN);
+	
+		struct rjd_istream stream = {0};
+		struct rjd_result result = rjd_resource_loader_load(lib->loader, resource->id, scratch_allocator, &stream);
+		if (rjd_result_isok(result))
+		{
+	        struct rjd_resource_type* type = rjd_array_get(lib->registered_types, resource->registry_index);
+	        struct rjd_mem_allocator* resource_allocator = type->optional_allocator ? type->optional_allocator : lib->allocator;
+	        
+	        resource->typed_resource_data = rjd_mem_alloc_array(uint8_t, type->in_memory_size, resource_allocator);
+	        memset(resource->typed_resource_data, 0, type->in_memory_size);
+	        
+	        struct rjd_result result = RJD_RESULT_OK();
+			if (type->load_begin_func)
+			{
+				struct rjd_resource_load_dependency_params dependency_params = {
+					.lib = lib,
+					.parent = handle,
+				};
+	
+				struct rjd_resource_load_begin_params load_params = {
+					.stream_data = stream,
+					.typed_resource_data = resource->typed_resource_data,
+					.userdata = type->userdata,
+					.allocator = resource_allocator,
+					.scratch_allocator = scratch_allocator,
+					.load_dependency_func = &rjd_resource_add_dependency,
+					.dependency_params = &dependency_params,
+				};
+	
+				result = type->load_begin_func(&load_params);
+			}
+	
+	        if (rjd_result_isok(result)) {
+	            resource->status = RJD_RESOURCE_STATUS_LOAD_RESOLVE;
+	            rjd_array_push(lib->load_stage_queues.resolving_dependencies, handle);
+	        } else {
+	            //RJD_LOG("Failed beginning load for resource '%s': %s", resource->filepath, result.error);
+	            resource->status = RJD_RESOURCE_STATUS_FAILED;
+	        }
+	
+			rjd_istream_close(&stream);
+		}
+		else
+		{
+			//RJD_LOG("Failed loading resource '%s': %s", resource_id.hash.debug_string, result.error);
+			resource->status = RJD_RESOURCE_STATUS_FAILED;
+		}
 	}
 
 	if (!rjd_array_empty(lib->unload_queue)) {
 		struct rjd_resource_handle handle = rjd_array_pop(lib->unload_queue);
 		struct rjd_resource* resource = rjd_slotmap_get(lib->resources, handle.slot);
 
-		// The resource could have been already freed if it was inserted into the unload queue twice
+		// The resource could have been already freed if it was inserted into the unload queue more than once
 		if (resource)
 		{
 			struct rjd_resource_type* type = rjd_array_get(lib->registered_types, resource->registry_index);
-			if (type->unload_func) {
-				type->unload_func(resource->typed_resource_data);
+			if (type->optional_unload_func) {
+				struct rjd_resource_unload_params params = {
+					.typed_resource_data = resource->typed_resource_data,
+					.userdata = type->userdata,
+					.get_dependency_params = (struct rjd_resource_get_dependency_params*)lib,
+					.get_dependency_func = rjd_resource_get_dependency,
+				};
+				type->optional_unload_func(&params);
 			}
+            rjd_mem_free(resource->typed_resource_data);
+            rjd_array_free(resource->dependencies);
 			rjd_slotmap_erase(lib->resources, handle.slot);
 		}
 	}
@@ -5749,24 +5951,39 @@ void rjd_resource_lib_pump(struct rjd_resource_lib* lib)
 
 void rjd_resource_lib_wait(struct rjd_resource_lib* lib, struct rjd_resource_handle* resources, size_t count)
 {
+	const size_t K_SCRATCH_SIZE = RJD_MB * 4;
+	void* scratch_buffer = rjd_mem_alloc_array_noclear(char, K_SCRATCH_SIZE, lib->allocator);
+	struct rjd_mem_allocator scratch_allocator = rjd_mem_allocator_init_linear(scratch_buffer, K_SCRATCH_SIZE);
+
 	for (uint32_t i = 0; i < count; ++i)
 	{
 		while (rjd_resource_is_loading(lib, resources[i])) {
-			rjd_resource_lib_pump(lib);
+			rjd_resource_lib_pump(lib, &scratch_allocator);
+			rjd_mem_allocator_reset(&scratch_allocator);
 		}
 	}
+
+	rjd_mem_free(scratch_buffer);
 }
 
 void rjd_resource_lib_waitall(struct rjd_resource_lib* lib)
 {
 	RJD_ASSERT(lib);
 
-	while (!rjd_array_empty(lib->load_stage_queues.begin) &&
-			!rjd_array_empty(lib->load_stage_queues.resolving_dependencies) && 
-			!rjd_array_empty(lib->load_stage_queues.end))
+	const size_t K_SCRATCH_SIZE = RJD_MB * 4;
+	void* scratch_buffer = rjd_mem_alloc_array_noclear(char, K_SCRATCH_SIZE, lib->allocator);
+	struct rjd_mem_allocator scratch_allocator = rjd_mem_allocator_init_linear(scratch_buffer, K_SCRATCH_SIZE);
+
+	while (!rjd_array_empty(lib->load_stage_queues.begin) ||
+			!rjd_array_empty(lib->load_stage_queues.resolving_dependencies) ||
+			!rjd_array_empty(lib->load_stage_queues.end) ||
+            !rjd_array_empty(lib->unload_queue))
 	{
-		rjd_resource_lib_pump(lib);
+		rjd_resource_lib_pump(lib, &scratch_allocator);
+		rjd_mem_allocator_reset(&scratch_allocator);
 	}
+
+	rjd_mem_free(scratch_buffer);
 }
 
 struct rjd_result rjd_resource_load(struct rjd_resource_lib* lib, struct rjd_resource_id id, struct rjd_resource_handle* out)
@@ -5774,26 +5991,38 @@ struct rjd_result rjd_resource_load(struct rjd_resource_lib* lib, struct rjd_res
 	RJD_ASSERT(lib);
 	RJD_ASSERT(out);
 
-	// TODO cancel an unload if it's happening?
-
-	// return the resource handle if it has been queued already
+	// exists already
 	for (struct rjd_slot s = rjd_slotmap_next(lib->resources, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(lib->resources, &s))
 	{
-		const struct rjd_resource* resource = rjd_slotmap_get(lib->resources, s);
-		if (rjd_strhash_isequal(resource->id.hash, id.hash)) {
+		struct rjd_resource* resource = rjd_slotmap_get(lib->resources, s);
+		if (rjd_resource_id_equals(resource->id, id)) {
+			++resource->refcount;
 			out->slot = s;
 			return RJD_RESULT_OK();
 		}
 	}
 
-	// lookup the type from  t
+	// cancel unload
+	for (uint32_t i = 0; i < rjd_array_count(lib->unload_queue); ++i)
+	{
+		struct rjd_resource_handle handle = lib->unload_queue[i];
+		struct rjd_resource* resource = rjd_slotmap_get(lib->resources, handle.slot);
+		if (rjd_resource_id_equals(resource->id, id)) {
+			rjd_array_erase_unordered(lib->resources, i);
+			++resource->refcount;
+			*out = handle;
+			return RJD_RESULT_OK();
+		}
+	}
+
+	// kickoff the load
 	struct rjd_resource_type_id type = {0};
 	struct rjd_result result = rjd_resource_loader_get_type(lib->loader, id, &type);
 	if (rjd_result_isok(result))
 	{
 		int32_t registry_index = RJD_ARRAY_NOT_FOUND;
 		for (uint32_t i = 0; i < rjd_array_count(lib->registered_types); ++i) {
-			if (lib->registered_types[i].id == type.hash) {
+			if (rjd_resource_type_id_equals(lib->registered_types[i].id, type)) {
 				registry_index = (int32_t)i;
 				break;
 			}
@@ -5802,19 +6031,20 @@ struct rjd_result rjd_resource_load(struct rjd_resource_lib* lib, struct rjd_res
 		if (registry_index == RJD_ARRAY_NOT_FOUND) {
 			return RJD_RESULT("No resource type was found for the given type id. Did you forget to register it?");
 		} else {
-			struct rjd_resource res = {
+			struct rjd_resource resource = {
 				.id = id,
 				.status = RJD_RESOURCE_STATUS_LOAD_BEGIN,
 				.registry_index = registry_index,
 				.dependencies = NULL,
 				.typed_resource_data = NULL,
+				.refcount = 1,
 			};
 
-			rjd_slotmap_insert(lib->resources, data, &handle.slot);
+			rjd_slotmap_insert(lib->resources, resource, &out->slot);
 
-			rjd_array_push(lib->load_stage_queues.begin, &handle.slot);
+			rjd_array_push(lib->load_stage_queues.begin, *out);
 
-			return RJD_RESULT_OK();
+			result = RJD_RESULT_OK();
 		}
 	}
 
@@ -5825,10 +6055,15 @@ enum rjd_resource_status rjd_resource_lib_status(struct rjd_resource_lib* lib, s
 {
 	RJD_ASSERT(lib);
 
-	struct rjd_resource* res = rjd_slotmap_get(lib->resources, handle.slot);
-	if (res) {
-		return res->status;
-	}
+    if (rjd_slot_isvalid(handle.slot))
+    {
+        if (rjd_slotmap_contains(lib->resources, handle.slot)) {
+            struct rjd_resource* res = rjd_slotmap_get(lib->resources, handle.slot);
+            if (res) {
+                return res->status;
+            }
+        }
+    }
 	return RJD_RESOURCE_STATUS_INVALID;
 }
 
@@ -5840,7 +6075,7 @@ bool rjd_resource_is_loading(struct rjd_resource_lib* lib, struct rjd_resource_h
 			status == RJD_RESOURCE_STATUS_LOAD_END;
 }
 
-void* rjd_resource_get_impl(struct rjd_resource_lib* lib, struct rjd_resource_handle handle)
+void* rjd_resource_get(struct rjd_resource_lib* lib, struct rjd_resource_handle handle)
 {
 	RJD_ASSERT(lib);
 
@@ -5857,9 +6092,12 @@ void rjd_resource_unload(struct rjd_resource_lib* lib, struct rjd_resource_handl
 
 	struct rjd_resource* resource = rjd_slotmap_get(lib->resources, handle.slot);
 	if (resource) {
-		rjd_array_push(lib->unload_queue, handle.slot);
-		for (uint32_t i = 0; i < rjd_array_count(resource->dependencies); ++i) {
-			rjd_resource_unload(lib, resource->dependencies[i]);
+		--resource->refcount;
+		if (resource->refcount == 0) {
+			rjd_array_push(lib->unload_queue, handle);
+			for (uint32_t i = 0; i < rjd_array_count(resource->dependencies); ++i) {
+				rjd_resource_unload(lib, resource->dependencies[i]);
+			}
 		}
 	}
 }
@@ -5867,101 +6105,35 @@ void rjd_resource_unload(struct rjd_resource_lib* lib, struct rjd_resource_handl
 ////////////////////////////////////////////////////////////////////////////////
 // private implementation
 
-static void rjd_resource_lib_load_stage_begin(struct rjd_resource_lib* lib, struct rjd_resource_handle handle)
-{
-	RJD_ASSERT(lib);
-
-	struct rjd_resource* res = rjd_slotmap_get(lib->resources, slots[i]);
-	RJD_ASSERT(res);
-	RJD_ASSERT(res->status == RJD_RESOURCE_STATUS_LOAD_BEGIN);
-
-	void* data = NULL;
-	struct rjd_result result = rjd_resource_loader_load(lib->loader, resource_id, lib->scratch_allocator, &data);
-	if (rjd_result_isok(result))
-	{
-		struct rjd_resource_type* type = rjd_array_get(lib->registered_types, res->registry_index);
-		if (type->func_load)
-		{
-			struct rjd_resource_load_dependency_params dependency_params = {
-				.lib = lib,
-				.parent = slots[i],
-			};
-
-			struct rjd_mem_allocator* resource_allocator = type->optional_allocator ? type->optional_allocator : lib->allocator;
-
-			struct rjd_resource_load_begin_params load_params = {
-				.filedata = filedata,
-				.filesize = rjd_array_count(filedata),
-				.typed_resource_data = rjd_mem_alloc_array(uint8_t, type->in_memory_size, allocator),
-				.allocator = resource_allocator,
-				.scratch_allocator = lib->scratch_allocator,
-				.load_dependency_func = rjd_resource_add_dependency,
-				.dependency_params = &dependency_params,
-			};
-
-			// TODO should we zero the resource memory ahead of time?
-			memset(params.typed_resource_data, type->in_memory_size, 0);
-
-			struct rjd_result result = type->load_begin_func(filedata, rjd_array_count(filedata), lib->scratch_allocator);
-			if (RJD_RESULT_OK(result)) {
-				res->status = RJD_RESOURCE_STATUS_LOAD_RESOLVE;
-			} else {
-				RJD_LOG("Failed beginning load for resource '%s': %s", res->filepath, result.error);
-				res->status = RJD_RESOURCE_STATUS_FAILED;
-			}
-		}
-		rjd_mem_allocator_reset(&lib->scratch_allocator);
-	}
-	else
-	{
-		RJD_LOG("Failed loading resource '%s': %s", resource_id.hash.debug_string, result.error);
-		res->status = RJD_RESOURCE_STATUS_FAILED;
-	}
-}
-
-static void rjd_resource_lib_load_stage_end(struct rjd_resource_lib* lib, struct rjd_resource_handle handle)
-{
-	struct rjd_resource* resource = rjd_slotmap_get(lib->resources, slot);
-	RJD_ASSERT(resource);
-	RJD_ASSERT(resource->stage == RJD_RESOURCE_STATUS_LOAD_END);
-
-	bool failed = false;
-	const struct rjd_resource_type* type = lib->registered_types + resource->registry_index;
-	if (type->optional_load_end_func) {
-		struct rjd_resource_load_end_params params = {
-			.typed_resource_data = resource->typed_resource_data,
-			.allocator = lib->allocator,
-			.scratch_allocator = lib->scratch_allocator,
-		};
-		failed = type->optional_load_end_func(params);
-
-		rjd_mem_allocator_reset(&lib->scratch_allocator);
-	}
-
-	if (failed) {
-		resource->status == RJD_RESOURCE_STATUS_FAILED
-		RJD_LOG("Failed ending load for resource '%s'", resource->filepath);
-	} else {
-		resource->status = RJD_RESOURCE_STATUS_READY;
-		RJD_LOG("Loaded resource '%s'", resource->filepath);
-	}
-}
-
-static struct rjd_resource_handle rjd_resource_add_dependency(struct rjd_resource_load_dependency_params* params, struct rjd_resource_id id, struct rjd_resource_handle* child)
+static struct rjd_result rjd_resource_add_dependency(struct rjd_resource_load_dependency_params* params, struct rjd_resource_id id, struct rjd_resource_handle* child)
 {
 	RJD_ASSERT(params);
 
-	struct rjd_result = RJD_RESULT_OK();
-
 	struct rjd_resource* parent = rjd_slotmap_get(params->lib->resources, params->parent.slot);
-	I343_ASSERT(parent);
+	RJD_ASSERT(parent);
 
-	struct rjd_result result = rjd_resource_load(params->lib, id, &child);
+	struct rjd_result result = rjd_resource_load(params->lib, id, child);
 	if (rjd_result_isok(result)) {
-		rjd_array_push(parent->dependencies, child);
+        if (parent->dependencies == NULL) {
+            parent->dependencies = rjd_array_alloc(struct rjd_resource_handle, 8, params->lib->allocator);
+        }
+		rjd_array_push(parent->dependencies, *child);
 	}
 
 	return result;
+}
+
+static struct rjd_resource_dependency rjd_resource_get_dependency(struct rjd_resource_get_dependency_params* params, struct rjd_resource_handle handle)
+{
+	struct rjd_resource_lib* lib = (struct rjd_resource_lib*)params;
+    enum rjd_resource_status status = rjd_resource_lib_status(lib, handle);
+	void* typed_resource_data = rjd_resource_get(lib, handle);
+    
+    struct rjd_resource_dependency dependency = {
+        .status = status,
+        .typed_resource_data = typed_resource_data,
+    };
+    return dependency;
 }
 
 #endif // RJD_IMPL
