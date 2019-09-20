@@ -2037,9 +2037,44 @@ void test_strhash()
 	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
     rjd_strhash_global_init(&allocator, 32);
 
-	// TODO
-
-	rjd_strhash_global_destroy();
+    {
+        const char* str1 = "test ok my friend";
+        const char* str2 = "a different string! !@#$^&*()";
+        
+        struct rjd_strhash hash1 = rjd_strhash_init(NULL);
+        struct rjd_strhash hash2 = rjd_strhash_init("");
+        struct rjd_strhash hash3 = rjd_strhash_init(str1);
+        struct rjd_strhash hash4 = rjd_strhash_init(str1);
+        struct rjd_strhash hash5 = rjd_strhash_init(str2);
+        
+        expect_true(hash1.hash.value == hash2.hash.value);
+        expect_false(hash1.hash.value == hash3.hash.value);
+        expect_false(hash1.hash.value == hash4.hash.value);
+        expect_false(hash1.hash.value == hash5.hash.value);
+        expect_true(hash3.hash.value == hash4.hash.value);
+        expect_false(hash4.hash.value == hash5.hash.value);
+        
+        expect_pointer(NULL, hash1.debug_string);
+        expect_pointer(NULL, hash2.debug_string);
+        expect_str(str1, rjd_strref_str(hash3.debug_string));
+        expect_str(str1, rjd_strref_str(hash4.debug_string));
+        expect_str(str2, rjd_strref_str(hash5.debug_string));
+    }
+    
+    rjd_strhash_global_destroy();
+    
+    {
+        struct rjd_strhash hash1 = rjd_strhash_init(NULL);
+        struct rjd_strhash hash2 = rjd_strhash_init("");
+        struct rjd_strhash hash3 = rjd_strhash_init("test ok my friend");
+        
+        expect_true(hash1.hash.value == hash2.hash.value);
+        expect_false(hash1.hash.value == hash3.hash.value);
+        
+        expect_pointer(NULL, hash1.debug_string);
+        expect_pointer(NULL, hash2.debug_string);
+        expect_pointer(NULL, hash3.debug_string);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

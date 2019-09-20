@@ -40,17 +40,13 @@ void rjd_strhash_global_destroy(void)
 
 struct rjd_strhash rjd_strhash_init(const char* str)
 {
-	struct rjd_hash64 hash = {0};
-	struct rjd_strref* debug_string = NULL;
-
-	if (str != NULL) {
-		hash = rjd_hash64_str(str);
-		if (g_strhash_strpool && hash.value != 0)
-		{
-			// TODO make threadsafe
-			debug_string = rjd_strpool_add(g_strhash_strpool, str);
-		}
-	}
+    struct rjd_hash64 hash = rjd_hash64_str(str);
+    struct rjd_strref* debug_string = NULL;
+    if (g_strhash_strpool && hash.value != 0)
+    {
+        // TODO make threadsafe
+        debug_string = rjd_strpool_add(g_strhash_strpool, str);
+    }
 
 	struct rjd_strhash strhash = {
 		.debug_string = debug_string,
