@@ -16,6 +16,9 @@ all:
 	# -Wno-unused-local-typedefs to suppress locally defined typedefs coming from RJD_STATIC_ASSERT
 	gcc --std=c11 -pedantic -Wall -Wextra -g -march=native -Wno-unused-local-typedefs $(PLATFORM_FLAGS) tests.c $(PLATFORM_FILES) 
 
+tags:
+	ctags -f tags *
+
 clean:
 	rm *.exe
 	rm *.ilk
