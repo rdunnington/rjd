@@ -1674,7 +1674,7 @@ void test_utf8(void)
 {
 	// rjd_utf8_bom_skip
 	{
-		const char buffer_with_bom[] = { 0xEF, 0xBB, 0xBF, 0 };
+		const char buffer_with_bom[] = { (char)0xEF, (char)0xBB, (char)0xBF, 0 };
 		const char buffer_no_bom[] = "hey this is a normal string";
 
 		const char* expected_with_bom = buffer_with_bom + 3;
@@ -1705,7 +1705,7 @@ void test_utf8(void)
 		const char ascii[] = "12345";
 		const char utf8[] = "aæ࠳ab߉නc𐤈𐤀";
         //const char invalid_utf8[] = { 0b11111100, 0b11111110, 0b11111001, 0 };
-        const char invalid_utf8[] = { 0xFB, 0xFE, 0xF9, 0 };
+        const char invalid_utf8[] = { (char)0xFB, (char)0xFE, (char)0xF9, 0 };
 
 		const char* p = NULL;
 

@@ -51,11 +51,13 @@ struct rjd_path rjd_path_create()
 struct rjd_path rjd_path_create_with(const char* initial_contents)
 {
 	struct rjd_path path;
-	char* end = stpncpy(path.str, initial_contents, RJD_PATH_BUFFER_LENGTH - 1);
-	*end = '\0';
-	path.length = (uint32_t)(end - path.str);
-	RJD_ASSERT(path.length <= RJD_PATH_BUFFER_LENGTH);
+	path.length = (uint32_t)strlen(initial_contents);
+	RJD_ASSERTMSG(path.length < RJD_PATH_BUFFER_LENGTH, 
+				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the passed string (%u).",
+				RJD_PATH_BUFFER_LENGTH, path.length);
 
+	strncpy(path.str, initial_contents, path.length);
+	path.str[path.length] = 0;
 	path.length = rjd_path_normalize_slashes(path.str, path.length);
 	return path;
 }
@@ -71,10 +73,14 @@ void rjd_path_append(struct rjd_path* path, const char* str)
 		++start;
 	}
 
-	char* end = stpncpy(path->str + start, str, max_length - start);
-    uint32_t length = (uint32_t)(end - path->str);
-
-	path->length = rjd_path_normalize_slashes(path->str, length);
+	uint32_t append_length = strlen(str);
+	uint32_t new_length = append_length + path->length;
+	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH, 
+				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u).",
+				RJD_PATH_BUFFER_LENGTH, new_length);
+	strncpy(path->str + path->length, str, append_length);
+	path->str[new_length] = 0;
+	path->length = rjd_path_normalize_slashes(path->str, new_length);
 }
 
 void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2)

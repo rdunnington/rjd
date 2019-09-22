@@ -202,8 +202,11 @@ struct rjd_mem_allocator_stats rjd_mem_allocator_getstats(const struct rjd_mem_a
 void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint32_t alignment, bool clear)
 {
 	RJD_ASSERT(allocator);
-    RJD_ASSERT(size >= 0)
 	RJD_ASSERT(alignment >= 8);
+
+	if (size == 0) {
+		size = 8;
+	}
 
 	const uint32_t header_size = sizeof(struct rjd_mem_allocation_header);
     const uint32_t alignment_padding = alignment * 2;

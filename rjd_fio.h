@@ -18,7 +18,7 @@ bool rjd_fio_exists(const char* path);
 
 #if RJD_IMPL
 
-#if RJD_PLATFORM_OSX
+#if RJD_COMPILER_GCC || RJD_COMPILER_CLANG
 #include <sys/stat.h>
 #include <ftw.h>
 #endif
@@ -100,7 +100,7 @@ struct rjd_result rjd_fio_size(const char* path, size_t* out_size)
 	return RJD_RESULT_OK();
 }
 
-#if RJD_PLATFORM_WINDOWS
+#if RJD_COMPILER_MSVC
 struct rjd_result rjd_fio_delete(const char* path)
 {
 	return RJD_RESULT("not implmented");
@@ -116,7 +116,8 @@ bool rjd_fio_exists(const char* path)
 	return false;
 }
 
-#elif RJD_PLATFORM_OSX
+#else
+
 static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
 {
 	RJD_UNUSED_PARAM(sb);
