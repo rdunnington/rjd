@@ -67,6 +67,12 @@ void expect_result_notok(struct rjd_result actual)
 	RJD_ASSERTMSG(actual.error != NULL, "Expected bad result, but got OK");
 }
 
+void expect_no_leaks(const struct rjd_mem_allocator* allocator)
+{
+	struct rjd_mem_allocator_stats stats = rjd_mem_allocator_getstats(allocator);
+	RJD_ASSERTMSG(stats.current.used == 0, "Found some leaks");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 static int compare_int32(const void* a, const void* b)
@@ -342,32 +348,32 @@ void test_mem()
 
 	// default allocator
 	{
-		struct rjd_mem_allocator a = rjd_mem_allocator_init_default();
-		int32_t* p0 = rjd_mem_alloc(int32_t, &a);
+		struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+		int32_t* p0 = rjd_mem_alloc(int32_t, &allocator);
 		expect_true(p0 != NULL);
 		*p0 = 1337;
 
-		char* p1 = rjd_mem_alloc_array(char, 128, &a);
+		char* p1 = rjd_mem_alloc_array(char, 128, &allocator);
 		expect_true(p1 != NULL);
 		strncpy(p1, "thequickbrownfoxjumpedoverthesuperdeduperlazydog!", 128);
 		p1[127] = 0;
 
-		char* p2 = rjd_mem_alloc_array(char, 64, &a);
+		char* p2 = rjd_mem_alloc_array(char, 64, &allocator);
 		expect_true(p2 != NULL);
 		strncpy(p2, "this fox wasn't as quick as the last one", 64);
 		p2[63] = 0;
 
-		char* p3 = rjd_mem_alloc_aligned(char, &a, 64);
+		char* p3 = rjd_mem_alloc_aligned(char, &allocator, 64);
 		expect_true(p3 != NULL);
 		expect_uint64(RJD_MEM_ALIGN((uint64_t)p3, 64), (uint64_t)p3);
 
 		struct aligned_struct {
-			double a;
+			double allocator;
 			double b;
 			double c;
 			double e;
 		};
-		char* p4 = rjd_mem_alloc_array_aligned(char, 8, &a, 32);
+		char* p4 = rjd_mem_alloc_array_aligned(char, 8, &allocator, 32);
 		expect_true(p4 != NULL);
 		expect_uint64(RJD_MEM_ALIGN((uint64_t)p4, 32), (uint64_t)p4);
 
@@ -377,55 +383,56 @@ void test_mem()
 		rjd_mem_free(p3);
 		rjd_mem_free(p4);
 
-		expect_false(rjd_mem_allocator_reset(&a));
+		expect_no_leaks(&allocator);
+		expect_false(rjd_mem_allocator_reset(&allocator));
 	}
 
 	// linear allocator
 	{
 		char stackmem[1024];
-		struct rjd_mem_allocator a = rjd_mem_allocator_init_linear(stackmem, sizeof(stackmem));
+		struct rjd_mem_allocator allocator = rjd_mem_allocator_init_linear(stackmem, sizeof(stackmem));
 
-		expect_true(rjd_mem_allocator_type(&a) != NULL);
+		expect_true(rjd_mem_allocator_type(&allocator) != NULL);
 
-		expect_true(rjd_mem_alloc_array(char, 256, &a) != NULL);
-		expect_true(rjd_mem_alloc_array(char, 256, &a) != NULL);
-		expect_true(rjd_mem_alloc_array(char, 256, &a) != NULL);
+		expect_true(rjd_mem_alloc_array(char, 256, &allocator) != NULL);
+		expect_true(rjd_mem_alloc_array(char, 256, &allocator) != NULL);
+		expect_true(rjd_mem_alloc_array(char, 256, &allocator) != NULL);
 
-		expect_true(a.stats.total_size <= sizeof(stackmem));
+		expect_true(allocator.stats.total_size <= sizeof(stackmem));
 		{
-			const uint32_t total = a.stats.total_size;
-			expect_uint32(a.stats.current.used - a.stats.current.overhead, 256 * 3);
-			expect_uint32(a.stats.current.peak, a.stats.current.used);
-			expect_uint32(a.stats.current.unused, total - ((256 * 3) + a.stats.current.overhead));
-			expect_uint32(a.stats.current.allocs, 3);
-			expect_uint32(a.stats.current.frees, 0);
+			const uint32_t total = allocator.stats.total_size;
+			expect_uint32(allocator.stats.current.used - allocator.stats.current.overhead, 256 * 3);
+			expect_uint32(allocator.stats.current.peak, allocator.stats.current.used);
+			expect_uint32(allocator.stats.current.unused, total - ((256 * 3) + allocator.stats.current.overhead));
+			expect_uint32(allocator.stats.current.allocs, 3);
+			expect_uint32(allocator.stats.current.frees, 0);
 
-			expect_uint32(a.stats.lifetime.peak, a.stats.current.peak);
-			expect_uint32(a.stats.lifetime.allocs, 3);
-			expect_uint32(a.stats.lifetime.frees, 0);
-			expect_uint32(a.stats.lifetime.resets, 0);
+			expect_uint32(allocator.stats.lifetime.peak, allocator.stats.current.peak);
+			expect_uint32(allocator.stats.lifetime.allocs, 3);
+			expect_uint32(allocator.stats.lifetime.frees, 0);
+			expect_uint32(allocator.stats.lifetime.resets, 0);
 		}
 
-        const uint32_t old_peak = a.stats.lifetime.peak;
-		expect_true(rjd_mem_allocator_reset(&a));
+        const uint32_t old_peak = allocator.stats.lifetime.peak;
+		expect_true(rjd_mem_allocator_reset(&allocator));
 
-		expect_true(rjd_mem_alloc_array(char, 512, &a) != NULL);
+		expect_true(rjd_mem_alloc_array(char, 512, &allocator) != NULL);
 		{
-			const uint32_t total = a.stats.total_size;
-			expect_uint32(a.stats.current.used - a.stats.current.overhead, 512);
-			expect_uint32(a.stats.current.peak, a.stats.current.used);
-			expect_uint32(a.stats.current.unused, total - (512 + a.stats.current.overhead));
-			expect_uint32(a.stats.current.allocs, 1);
-			expect_uint32(a.stats.current.frees, 0);
+			const uint32_t total = allocator.stats.total_size;
+			expect_uint32(allocator.stats.current.used - allocator.stats.current.overhead, 512);
+			expect_uint32(allocator.stats.current.peak, allocator.stats.current.used);
+			expect_uint32(allocator.stats.current.unused, total - (512 + allocator.stats.current.overhead));
+			expect_uint32(allocator.stats.current.allocs, 1);
+			expect_uint32(allocator.stats.current.frees, 0);
 
-			expect_uint32(a.stats.lifetime.peak, old_peak);
-			expect_uint32(a.stats.lifetime.allocs, 4);
-			expect_uint32(a.stats.lifetime.frees, 0);
-			expect_uint32(a.stats.lifetime.resets, 1);
+			expect_uint32(allocator.stats.lifetime.peak, old_peak);
+			expect_uint32(allocator.stats.lifetime.allocs, 4);
+			expect_uint32(allocator.stats.lifetime.frees, 0);
+			expect_uint32(allocator.stats.lifetime.resets, 1);
 		}
 
-		expect_true(rjd_mem_allocator_reset(&a));
-		expect_uint32(a.stats.lifetime.resets, 2);
+		expect_true(rjd_mem_allocator_reset(&allocator));
+		expect_uint32(allocator.stats.lifetime.resets, 2);
 	}
 
 	// mem_swap
@@ -542,6 +549,8 @@ void test_array()
 
 		rjd_array_free(a);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// clone
 	{
@@ -559,6 +568,8 @@ void test_array()
 		rjd_array_free(a);
 		rjd_array_free(b);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// growing from push test
 	{
@@ -576,6 +587,8 @@ void test_array()
 
 		rjd_array_free(a);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// reserve
 	{
@@ -596,6 +609,8 @@ void test_array()
 
 		rjd_array_free(a);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// insert
 	{
@@ -640,6 +655,8 @@ void test_array()
 
 		rjd_array_free(a);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// find and sort tests
 	{
@@ -768,6 +785,8 @@ void test_array()
 		rjd_array_free(shuffled);
 		rjd_array_free(shuffled2);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// functional-style tests
 	{
@@ -818,8 +837,11 @@ void test_array()
 		expect_int32(0, b[4]);
 
 		rjd_array_free(b);
+        rjd_array_free(mapped);
 	}
 
+    expect_no_leaks(&allocator);
+    
 	// rng tests
 	{
 		struct rjd_rng rng = rjd_rng_init(0x1337C0DE);
@@ -840,7 +862,11 @@ void test_array()
 		expect_int32(4, a[5]);
 		expect_int32(1, a[6]);
 		expect_int32(5, a[7]);
+        
+        rjd_array_free(a);
 	}
+
+	expect_no_leaks(&allocator);
 }
 
 void expect_vec4(rjd_math_vec4 expected, rjd_math_vec4 actual) 
@@ -1318,9 +1344,9 @@ void test_easing()
 
 void test_strbuf(void)
 {	
-	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 
-	struct rjd_strbuf builder = rjd_strbuf_init(&context);
+	struct rjd_strbuf builder = rjd_strbuf_init(&allocator);
 
 	// regular append
 	rjd_strbuf_append(&builder, "test");
@@ -1354,6 +1380,8 @@ void test_strbuf(void)
 	// append substring
 	rjd_strbuf_appendl(&builder, "only see this, no comma", (uint32_t)strlen("only see this"));
 	expect_str("only see this", rjd_strbuf_str(&builder));
+
+	expect_no_leaks(&allocator);
 }
 
 void test_profiler(void)
@@ -1369,10 +1397,10 @@ void test_profiler(void)
 
 void test_cmd()
 {
-	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 	
 	const char* argv0[] = { "test.exe", NULL };
-	struct rjd_cmd cmd = rjd_cmd_init(rjd_countof(argv0), argv0, &context);
+	struct rjd_cmd cmd = rjd_cmd_init(rjd_countof(argv0), argv0, &allocator);
 
 	expect_true(rjd_cmd_ok(&cmd));
 
@@ -1425,6 +1453,8 @@ void test_cmd()
 	rjd_cmd_help(&cmd);
 
 	rjd_cmd_free(&cmd);
+
+	expect_no_leaks(&allocator);
 }
 
 void test_rng()
@@ -1449,9 +1479,9 @@ void test_rng()
 
 void test_dict()
 {
-	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 	
-	struct rjd_dict dict = rjd_dict_init(&context, 0);
+	struct rjd_dict dict = rjd_dict_init(&allocator, 0);
 	expect_str(NULL, (char*)rjd_dict_get_hashstr(&dict, "key"));
 	expect_str(NULL, (char*)rjd_dict_erase_hashstr(&dict, "key"));
 
@@ -1493,6 +1523,8 @@ void test_dict()
 	}
 
 	rjd_dict_free(&dict);
+
+	expect_no_leaks(&allocator);
 }
 
 void expect_fio_ok(bool expected_ok, struct rjd_result actual)
@@ -1506,7 +1538,7 @@ void expect_fio_ok(bool expected_ok, struct rjd_result actual)
 
 void test_fio()
 {
-	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 
 	const char expected_contents[] = "this is a test file that has ä utf-8 character!";
 
@@ -1516,9 +1548,9 @@ void test_fio()
 	expect_fio_ok(true, result);
 
 	char* buffer;
-	result = rjd_fio_read("does_not_exist.txt", &buffer, &context);
+	result = rjd_fio_read("does_not_exist.txt", &buffer, &allocator);
 	expect_fio_ok(false, result);
-	result = rjd_fio_read("test.txt", &buffer, &context);
+	result = rjd_fio_read("test.txt", &buffer, &allocator);
 	expect_fio_ok(true, result);
 	expect_uint32(sizeof(expected_contents), rjd_array_count(buffer));
 	expect_true(!memcmp(buffer, expected_contents, sizeof(expected_contents)));
@@ -1527,7 +1559,7 @@ void test_fio()
 	expect_fio_ok(true, result);
 	result = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_APPEND);
 	char* buffer2;
-	result = rjd_fio_read("test2.txt", &buffer2, &context);
+	result = rjd_fio_read("test2.txt", &buffer2, &allocator);
 	expect_fio_ok(true, result);
 	expect_uint32(sizeof(expected_contents)*2, rjd_array_count(buffer2));
 
@@ -1560,6 +1592,8 @@ void test_fio()
     result = rjd_fio_delete("test_folder");
     expect_result_ok(result);
     expect_false(rjd_fio_exists("test_folder"));
+
+	expect_no_leaks(&allocator);
 }
 
 enum test_thread_stage
@@ -1732,6 +1766,8 @@ void test_thread()
 	expect_result_ok(result);
 	result = rjd_rwlock_destroy(&thread_data.rwlock);
 	expect_result_ok(result);
+	
+	expect_no_leaks(&allocator);
 }
 
 void test_strpool()
@@ -1783,6 +1819,8 @@ void test_strpool()
 	expect_str(rjd_strref_str(ref5), test5);
 
 	rjd_strpool_free(&pool);
+
+	expect_no_leaks(&allocator);
 }
 
 void test_slotmap(void)
@@ -1840,6 +1878,8 @@ void test_slotmap(void)
 
 		rjd_slotmap_free(map);
 	}
+
+	expect_no_leaks(&allocator);
 }
 
 void test_utf8(void)
@@ -2121,6 +2161,8 @@ void test_stream()
         result = rjd_fio_delete("test.txt");
         expect_result_ok(result);
     }
+
+	expect_no_leaks(&allocator);
 }
 
 struct test
@@ -2247,6 +2289,8 @@ void test_strhash()
         expect_pointer(NULL, hash2.debug_string);
         expect_pointer(NULL, hash3.debug_string);
     }
+
+	expect_no_leaks(&allocator);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2718,6 +2762,8 @@ void test_resource()
 		rjd_resource_lib_destroy(&lib);
 	}
     rjd_strhash_global_destroy();
+
+	expect_no_leaks(&allocator);
 }
 
 int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
