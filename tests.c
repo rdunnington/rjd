@@ -59,12 +59,12 @@ void expect_path(const char* expected, struct rjd_path path)
 
 void expect_result_ok(struct rjd_result actual)
 {
-	RJD_ASSERT(actual.error == NULL);
+	RJD_ASSERTMSG(actual.error == NULL, "Expected OK result, but got error '%s'", actual.error);
 }
 
 void expect_result_notok(struct rjd_result actual)
 {
-	RJD_ASSERT(actual.error != NULL);
+	RJD_ASSERTMSG(actual.error != NULL, "Expected bad result, but got OK");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1562,6 +1562,178 @@ void test_fio()
     expect_false(rjd_fio_exists("test_folder"));
 }
 
+enum test_thread_stage
+{
+	TEST_THREAD_STAGE_PENDING,
+	TEST_THREAD_STAGE_STARTED,
+	TEST_THREAD_STAGE_ACQUIRE_LOCK,
+    TEST_THREAD_STAGE_ACQUIRE_READ_LOCK,
+    TEST_THREAD_STAGE_ACQUIRE_WRITE_LOCK,
+	TEST_THREAD_STAGE_FINISHED,
+};
+
+struct test_thread_data
+{
+	struct rjd_condvar goto_next_main;
+	struct rjd_condvar goto_next_thread;
+	struct rjd_lock lock;
+	struct rjd_rwlock rwlock;
+	enum test_thread_stage stage;
+};
+
+void test_thread_entrypoint(void* userdata)
+{
+	struct test_thread_data* data = (struct test_thread_data*)userdata;
+	struct rjd_result result = RJD_RESULT_OK();
+
+	data->stage = TEST_THREAD_STAGE_STARTED;
+    result = rjd_condvar_lock(&data->goto_next_thread);
+    expect_result_ok(result);
+	result = rjd_condvar_signal_single(&data->goto_next_main);
+    expect_result_ok(result);
+	result = rjd_condvar_wait(&data->goto_next_thread);
+	expect_result_ok(result);
+    
+    data->stage = TEST_THREAD_STAGE_ACQUIRE_LOCK;
+	result = rjd_lock_acquire(&data->lock);
+	expect_result_ok(result);
+    result = rjd_condvar_signal_single(&data->goto_next_main);
+    expect_result_ok(result);
+	result = rjd_condvar_wait(&data->goto_next_thread);
+	expect_result_ok(result);
+    
+    data->stage = TEST_THREAD_STAGE_ACQUIRE_READ_LOCK;
+	result = rjd_lock_release(&data->lock);
+	expect_result_ok(result);
+    result = rjd_rwlock_acquire_reader(&data->rwlock);
+    expect_result_ok(result);
+    result = rjd_condvar_signal_single(&data->goto_next_main);
+    expect_result_ok(result);
+	result = rjd_condvar_wait(&data->goto_next_thread);
+	expect_result_ok(result);
+    
+    // promote reader to writer lock
+    data->stage = TEST_THREAD_STAGE_ACQUIRE_WRITE_LOCK;
+    result = rjd_rwlock_try_acquire_writer(&data->rwlock);
+    expect_result_notok(result);
+    result = rjd_rwlock_release(&data->rwlock);
+    expect_result_ok(result);
+    result = rjd_rwlock_acquire_writer(&data->rwlock);
+    expect_result_ok(result);
+    result = rjd_condvar_signal_single(&data->goto_next_main);
+    expect_result_ok(result);
+    result = rjd_condvar_wait(&data->goto_next_thread);
+    expect_result_ok(result);
+
+	data->stage = TEST_THREAD_STAGE_FINISHED;
+    result = rjd_rwlock_release(&data->rwlock);
+    expect_result_ok(result);
+    result = rjd_condvar_signal_all(&data->goto_next_main); // testing signal_all
+    expect_result_ok(result);
+    result = rjd_condvar_unlock(&data->goto_next_thread);
+    expect_result_ok(result);
+}
+
+void test_thread()
+{
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+
+    struct rjd_result result = RJD_RESULT_OK();
+	struct test_thread_data thread_data = {0};
+	struct rjd_thread_desc desc =
+	{
+		.entrypoint_func = test_thread_entrypoint,
+		.allocator = &allocator,
+		.userdata = &thread_data,
+        .name = "my_cool_thread!" // 16 bytes including null terminator
+	};
+
+	result = rjd_condvar_create(&thread_data.goto_next_main);
+	expect_result_ok(result);
+	result = rjd_condvar_create(&thread_data.goto_next_thread);
+	expect_result_ok(result);
+	result = rjd_lock_create(&thread_data.lock);
+	expect_result_ok(result);
+	result = rjd_rwlock_create(&thread_data.rwlock);
+	expect_result_ok(result);
+    
+    result = rjd_condvar_lock(&thread_data.goto_next_main);
+    expect_result_ok(result);
+
+	struct rjd_thread thread = {0};
+	result = rjd_thread_create(&thread, desc);
+	expect_result_ok(result);
+    
+    const uint32_t TIMEOUT = 1;
+
+	result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
+	expect_result_ok(result);
+    
+	expect_uint32(TEST_THREAD_STAGE_STARTED, thread_data.stage);
+    // now the main and child threads are in lockstep
+    {
+        char outname[32] = {0};
+        result = rjd_thread_getname(&thread, sizeof(outname), outname);
+        expect_result_ok(result);
+        expect_str("my_cool_thread!", outname);
+    }
+	result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
+	expect_result_ok(result);
+	result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
+	expect_result_ok(result);
+    
+	expect_uint32(TEST_THREAD_STAGE_ACQUIRE_LOCK, thread_data.stage);
+    result = rjd_lock_try_acquire(&thread_data.lock);
+    expect_result_notok(result); // thread should have the lock
+	result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
+	expect_result_ok(result);
+	result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
+	expect_result_ok(result);
+    
+    expect_uint32(TEST_THREAD_STAGE_ACQUIRE_READ_LOCK, thread_data.stage);
+    result = rjd_lock_try_acquire(&thread_data.lock);
+    expect_result_ok(result);
+    result = rjd_lock_release(&thread_data.lock);
+    expect_result_ok(result);
+    result = rjd_rwlock_try_acquire_reader(&thread_data.rwlock);
+    expect_result_ok(result);
+    result = rjd_rwlock_release(&thread_data.rwlock);
+    expect_result_ok(result);
+    result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
+    expect_result_ok(result);
+    result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
+    expect_result_ok(result);
+    
+    expect_uint32(TEST_THREAD_STAGE_ACQUIRE_WRITE_LOCK, thread_data.stage);
+    result = rjd_rwlock_try_acquire_writer(&thread_data.rwlock);
+    expect_result_notok(result);
+    result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
+    expect_result_ok(result);
+    result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
+    expect_result_ok(result);
+    
+    expect_uint32(TEST_THREAD_STAGE_FINISHED, thread_data.stage);
+    result = rjd_rwlock_try_acquire_writer(&thread_data.rwlock);
+    expect_result_ok(result);
+    result = rjd_rwlock_release(&thread_data.rwlock);
+    expect_result_ok(result);
+    
+    result = rjd_thread_join(&thread);
+    expect_result_ok(result);
+    
+    result = rjd_condvar_unlock(&thread_data.goto_next_main);
+    expect_result_ok(result);
+
+	result = rjd_condvar_destroy(&thread_data.goto_next_main);
+	expect_result_ok(result);
+	result = rjd_condvar_destroy(&thread_data.goto_next_thread);
+	expect_result_ok(result);
+	result = rjd_lock_destroy(&thread_data.lock);
+	expect_result_ok(result);
+	result = rjd_rwlock_destroy(&thread_data.rwlock);
+	expect_result_ok(result);
+}
+
 void test_strpool()
 {
 	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
@@ -2563,6 +2735,7 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_profiler();
 	test_cmd();
 	test_dict();
+	test_thread();
 	test_fio();
 	test_strpool();
 	test_slotmap();

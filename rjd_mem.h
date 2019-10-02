@@ -63,6 +63,7 @@ void rjd_mem_swap(void* restrict mem1, void* restrict mem2, size_t size);
 #define rjd_mem_alloc_array(type, count, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, 8, true))
 #define rjd_mem_alloc_array_noclear(type, count, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, 8, false))
 #define rjd_mem_alloc_array_aligned(type, count, allocator, alignment) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, alignment, true))
+#define rjd_mem_alloc_array_aligned_noclear(type, count, allocator, alignment) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, alignment, false))
 
 #define RJD_MEM_ISALIGNED(p, align) (((uintptr_t)(p) & ((align)-1)) == 0)
 #define RJD_MEM_ALIGN(size, align) ((size) + (RJD_MEM_ISALIGNED(size, align) ? 0 : ((align) - ((size) & ((align)-1)))))
