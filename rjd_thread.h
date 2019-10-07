@@ -3,7 +3,7 @@
 #define RJD_THREAD
 
 #ifndef RJD_THREAD_STACKSIZE_DEFAULT
-	#define RJD_THREAD_STACKSIZE_DEFAULT (32 * RJD_MB)
+	#define RJD_THREAD_STACKSIZE_DEFAULT (4 * RJD_MB)
 #endif
 
 #define RJD_THREAD_NAME_MAX_LENGTH (16u)
@@ -26,7 +26,7 @@ struct rjd_thread_id
 
 struct rjd_thread_platform
 {
-	char platform_impl[8];
+	char platform_impl[16];
 };
 
 struct rjd_thread
@@ -102,6 +102,7 @@ struct rjd_result rjd_lock_create(struct rjd_lock* lock)
 struct rjd_thread_osx
 {
 	pthread_t handle;
+	void* stack;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_thread_osx) <= sizeof(struct rjd_thread_platform));
 RJD_STATIC_ASSERT(sizeof(pthread_t) <= sizeof(uint64_t));
@@ -148,6 +149,7 @@ static void* rjd_thread_entrypoint_osx(void* userdata);
 struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc)
 {
 	struct rjd_thread_osx* thread_osx = rjd_thread_get_osx(thread);
+	thread_osx->stack = NULL;
 
 	if (desc.stacksize == 0) {
 		desc.stacksize = RJD_THREAD_STACKSIZE_DEFAULT;
@@ -182,6 +184,7 @@ struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread
 			result = rjd_error_to_result(error);
 			if (rjd_result_isok(result)) {
 				thread->id.id = (uint64_t)thread_osx->handle;
+				thread_osx->stack = stack;
 			}
 		}
 	}
@@ -200,6 +203,9 @@ struct rjd_result rjd_thread_join(struct rjd_thread* thread)
 
 	void* unused_return_value = NULL;
     int error = pthread_join(thread_osx->handle, &unused_return_value);
+
+	rjd_mem_free(thread_osx->stack);
+
 	return rjd_error_to_result(error);
 }
 

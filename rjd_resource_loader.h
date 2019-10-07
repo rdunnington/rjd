@@ -48,7 +48,6 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 static inline void rjd_resource_loader_destroy(struct rjd_resource_loader* loader);
 static inline struct rjd_result rjd_resource_loader_get_type(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
 static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out);
-// TODO update load() to return an rjd_istream instead of loading the entire file at once?
 
 ////////////////////////////////////////////////////////////////////////////////
 // Inline implementation
