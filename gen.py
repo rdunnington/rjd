@@ -33,6 +33,7 @@ files = [
     "rjd_dict.h",
     "rjd_fio.h",
     "rjd_thread.h",
+    "rjd_atomic.h",
     "rjd_strpool.h",
     "rjd_slotmap.h",
     "rjd_utf8.h",

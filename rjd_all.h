@@ -29,6 +29,7 @@
 #include "rjd_dict.h"
 #include "rjd_fio.h"
 #include "rjd_thread.h"
+#include "rjd_atomic.h"
 #include "rjd_strpool.h"
 #include "rjd_slotmap.h"
 #include "rjd_utf8.h"

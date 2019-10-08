@@ -486,8 +486,8 @@ struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 		return hash;
 	}
 
-	const uint32_t PRIME = 16777619;
-	const uint32_t SEED  = 2166136261;
+	const uint64_t PRIME = 16777619;
+	const uint64_t SEED  = 2166136261;
 
 	struct rjd_hash32 hash = { SEED };
 	if (length == -1) {
@@ -498,7 +498,7 @@ struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 		while (length > 0)
 		{
 			--length;
-			hash.value = (*key++ ^ hash.value) * PRIME;
+			hash.value = (uint32_t)((*key++ ^ hash.value) * PRIME);
 		}
 	}
 	return hash;
@@ -635,7 +635,7 @@ struct rjd_mem_heap_linear
 struct rjd_mem_allocation_header
 {
 	struct rjd_mem_allocator* allocator;
-	uint8_t offset_to_block_begin_from_user;
+	uint16_t offset_to_block_begin_from_user;
 	uint32_t total_blocksize;
 	uint32_t debug_sentinel;
 };
@@ -771,10 +771,13 @@ void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint3
 
 	uintptr_t aligned_user = RJD_MEM_ALIGN((uintptr_t)raw + alignment + header_size, alignment);
 
+    const ptrdiff_t offset_to_block_begin_from_user = aligned_user - (uintptr_t)raw;
+    RJD_ASSERT(offset_to_block_begin_from_user < UINT16_MAX);
+    
 	struct rjd_mem_allocation_header* header = (void*)(aligned_user - header_size);
 	header->allocator = allocator;
 	header->total_blocksize = (uint32_t)total_size;
-	header->offset_to_block_begin_from_user = aligned_user - (uintptr_t)raw;
+    header->offset_to_block_begin_from_user = offset_to_block_begin_from_user;
 	header->debug_sentinel = allocator->debug_sentinel;
 
 	{
@@ -4034,7 +4037,7 @@ struct rjd_result rjd_fio_mkdir(const char* path)
 #define RJD_THREAD
 
 #ifndef RJD_THREAD_STACKSIZE_DEFAULT
-	#define RJD_THREAD_STACKSIZE_DEFAULT (32 * RJD_MB)
+	#define RJD_THREAD_STACKSIZE_DEFAULT (4 * RJD_MB)
 #endif
 
 #define RJD_THREAD_NAME_MAX_LENGTH (16u)
@@ -4057,7 +4060,7 @@ struct rjd_thread_id
 
 struct rjd_thread_platform
 {
-	char platform_impl[8];
+	char platform_impl[16];
 };
 
 struct rjd_thread
@@ -4133,6 +4136,7 @@ struct rjd_result rjd_lock_create(struct rjd_lock* lock)
 struct rjd_thread_osx
 {
 	pthread_t handle;
+	void* stack;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_thread_osx) <= sizeof(struct rjd_thread_platform));
 RJD_STATIC_ASSERT(sizeof(pthread_t) <= sizeof(uint64_t));
@@ -4179,6 +4183,7 @@ static void* rjd_thread_entrypoint_osx(void* userdata);
 struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc)
 {
 	struct rjd_thread_osx* thread_osx = rjd_thread_get_osx(thread);
+	thread_osx->stack = NULL;
 
 	if (desc.stacksize == 0) {
 		desc.stacksize = RJD_THREAD_STACKSIZE_DEFAULT;
@@ -4213,6 +4218,7 @@ struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread
 			result = rjd_error_to_result(error);
 			if (rjd_result_isok(result)) {
 				thread->id.id = (uint64_t)thread_osx->handle;
+				thread_osx->stack = stack;
 			}
 		}
 	}
@@ -4231,6 +4237,9 @@ struct rjd_result rjd_thread_join(struct rjd_thread* thread)
 
 	void* unused_return_value = NULL;
     int error = pthread_join(thread_osx->handle, &unused_return_value);
+
+	rjd_mem_free(thread_osx->stack);
+
 	return rjd_error_to_result(error);
 }
 
@@ -4519,6 +4528,611 @@ static void* rjd_thread_entrypoint_osx(void* params_untyped)
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
+// rjd_atomic.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+struct rjd_atomic_int64  { char impl[8]; };
+struct rjd_atomic_int32  { char impl[4]; };
+struct rjd_atomic_int16  { char impl[2]; };
+struct rjd_atomic_int8   { char impl[1]; };
+struct rjd_atomic_uint64 { char impl[8]; };
+struct rjd_atomic_uint32 { char impl[4]; };
+struct rjd_atomic_uint16 { char impl[2]; };
+struct rjd_atomic_uint8  { char impl[1]; };
+
+struct rjd_atomic_int64 rjd_atomic_int64_init (int64_t  value);
+int64_t rjd_atomic_int64_get(struct rjd_atomic_int64* atomic);
+void rjd_atomic_int64_set(struct rjd_atomic_int64* atomic, int64_t value);
+int64_t rjd_atomic_int64_add(struct rjd_atomic_int64* atomic, int64_t value);
+int64_t rjd_atomic_int64_sub(struct rjd_atomic_int64* atomic, int64_t value);
+int64_t rjd_atomic_int64_inc(struct rjd_atomic_int64* atomic);
+int64_t rjd_atomic_int64_dec(struct rjd_atomic_int64* atomic);
+bool rjd_atomic_int64_compare_exchange_weak(struct rjd_atomic_int64* atomic, int64_t* expected, int64_t desired);
+bool rjd_atomic_int64_compare_exchange_strong(struct rjd_atomic_int64* atomic, int64_t* expected, int64_t desired);
+
+struct rjd_atomic_int32 rjd_atomic_int32_init (int32_t  value);
+int32_t rjd_atomic_int32_get(struct rjd_atomic_int32* atomic);
+void rjd_atomic_int32_set(struct rjd_atomic_int32* atomic, int32_t value);
+int32_t rjd_atomic_int32_add(struct rjd_atomic_int32* atomic, int32_t value);
+int32_t rjd_atomic_int32_sub(struct rjd_atomic_int32* atomic, int32_t value);
+int32_t rjd_atomic_int32_inc(struct rjd_atomic_int32* atomic);
+int32_t rjd_atomic_int32_dec(struct rjd_atomic_int32* atomic);
+bool rjd_atomic_int32_compare_exchange_weak(struct rjd_atomic_int32* atomic, int32_t* expected, int32_t desired);
+bool rjd_atomic_int32_compare_exchange_strong(struct rjd_atomic_int32* atomic, int32_t* expected, int32_t desired);
+
+struct rjd_atomic_int16 rjd_atomic_int16_init (int16_t  value);
+int16_t rjd_atomic_int16_get(struct rjd_atomic_int16* atomic);
+void rjd_atomic_int16_set(struct rjd_atomic_int16* atomic, int16_t value);
+int16_t rjd_atomic_int16_add(struct rjd_atomic_int16* atomic, int16_t value);
+int16_t rjd_atomic_int16_sub(struct rjd_atomic_int16* atomic, int16_t value);
+int16_t rjd_atomic_int16_inc(struct rjd_atomic_int16* atomic);
+int16_t rjd_atomic_int16_dec(struct rjd_atomic_int16* atomic);
+bool rjd_atomic_int16_compare_exchange_weak(struct rjd_atomic_int16* atomic, int16_t* expected, int16_t desired);
+bool rjd_atomic_int16_compare_exchange_strong(struct rjd_atomic_int16* atomic, int16_t* expected, int16_t desired);
+
+struct rjd_atomic_int8 rjd_atomic_int8_init (int8_t  value);
+int8_t rjd_atomic_int8_get(struct rjd_atomic_int8* atomic);
+void rjd_atomic_int8_set(struct rjd_atomic_int8* atomic, int8_t value);
+int8_t rjd_atomic_int8_add(struct rjd_atomic_int8* atomic, int8_t value);
+int8_t rjd_atomic_int8_sub(struct rjd_atomic_int8* atomic, int8_t value);
+int8_t rjd_atomic_int8_inc(struct rjd_atomic_int8* atomic);
+int8_t rjd_atomic_int8_dec(struct rjd_atomic_int8* atomic);
+bool rjd_atomic_int8_compare_exchange_weak(struct rjd_atomic_int8* atomic, int8_t* expected, int8_t desired);
+bool rjd_atomic_int8_compare_exchange_strong(struct rjd_atomic_int8* atomic, int8_t* expected, int8_t desired);
+
+struct rjd_atomic_uint64 rjd_atomic_uint64_init (uint64_t  value);
+uint64_t rjd_atomic_uint64_get(struct rjd_atomic_uint64* atomic);
+void rjd_atomic_uint64_set(struct rjd_atomic_uint64* atomic, uint64_t value);
+uint64_t rjd_atomic_uint64_add(struct rjd_atomic_uint64* atomic, uint64_t value);
+uint64_t rjd_atomic_uint64_sub(struct rjd_atomic_uint64* atomic, uint64_t value);
+uint64_t rjd_atomic_uint64_inc(struct rjd_atomic_uint64* atomic);
+uint64_t rjd_atomic_uint64_dec(struct rjd_atomic_uint64* atomic);
+bool rjd_atomic_uint64_compare_exchange_weak(struct rjd_atomic_uint64* atomic, uint64_t* expected, uint64_t desired);
+bool rjd_atomic_uint64_compare_exchange_strong(struct rjd_atomic_uint64* atomic, uint64_t* expected, uint64_t desired);
+
+struct rjd_atomic_uint32 rjd_atomic_uint32_init (uint32_t  value);
+uint32_t rjd_atomic_uint32_get(struct rjd_atomic_uint32* atomic);
+void rjd_atomic_uint32_set(struct rjd_atomic_uint32* atomic, uint32_t value);
+uint32_t rjd_atomic_uint32_add(struct rjd_atomic_uint32* atomic, uint32_t value);
+uint32_t rjd_atomic_uint32_sub(struct rjd_atomic_uint32* atomic, uint32_t value);
+uint32_t rjd_atomic_uint32_inc(struct rjd_atomic_uint32* atomic);
+uint32_t rjd_atomic_uint32_dec(struct rjd_atomic_uint32* atomic);
+bool rjd_atomic_uint32_compare_exchange_weak(struct rjd_atomic_uint32* atomic, uint32_t* expected, uint32_t desired);
+bool rjd_atomic_uint32_compare_exchange_strong(struct rjd_atomic_uint32* atomic, uint32_t* expected, uint32_t desired);
+
+struct rjd_atomic_uint16 rjd_atomic_uint16_init (uint16_t  value);
+uint16_t rjd_atomic_uint16_get(struct rjd_atomic_uint16* atomic);
+void rjd_atomic_uint16_set(struct rjd_atomic_uint16* atomic, uint16_t value);
+uint16_t rjd_atomic_uint16_add(struct rjd_atomic_uint16* atomic, uint16_t value);
+uint16_t rjd_atomic_uint16_sub(struct rjd_atomic_uint16* atomic, uint16_t value);
+uint16_t rjd_atomic_uint16_inc(struct rjd_atomic_uint16* atomic);
+uint16_t rjd_atomic_uint16_dec(struct rjd_atomic_uint16* atomic);
+bool rjd_atomic_uint16_compare_exchange_weak(struct rjd_atomic_uint16* atomic, uint16_t* expected, uint16_t desired);
+bool rjd_atomic_uint16_compare_exchange_strong(struct rjd_atomic_uint16* atomic, uint16_t* expected, uint16_t desired);
+
+struct rjd_atomic_uint8 rjd_atomic_uint8_init (uint8_t  value);
+uint8_t rjd_atomic_uint8_get(struct rjd_atomic_uint8* atomic);
+void rjd_atomic_uint8_set(struct rjd_atomic_uint8* atomic, uint8_t value);
+uint8_t rjd_atomic_uint8_add(struct rjd_atomic_uint8* atomic, uint8_t value);
+uint8_t rjd_atomic_uint8_sub(struct rjd_atomic_uint8* atomic, uint8_t value);
+uint8_t rjd_atomic_uint8_inc(struct rjd_atomic_uint8* atomic);
+uint8_t rjd_atomic_uint8_dec(struct rjd_atomic_uint8* atomic);
+bool rjd_atomic_uint8_compare_exchange_weak(struct rjd_atomic_uint8* atomic, uint8_t* expected, uint8_t desired);
+bool rjd_atomic_uint8_compare_exchange_strong(struct rjd_atomic_uint8* atomic, uint8_t* expected, uint8_t desired);
+
+#if RJD_IMPL
+
+#if RJD_COMPILER_MSVC
+
+// TODO
+
+#elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
+#include <stdatomic.h>
+
+struct rjd_atomic_int64_osx
+{
+	_Atomic int64_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_int64) <= sizeof(struct rjd_atomic_int64));
+
+struct rjd_atomic_int32_osx
+{
+	_Atomic int32_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_int32) <= sizeof(struct rjd_atomic_int32));
+
+struct rjd_atomic_int16_osx
+{
+	_Atomic int16_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_int16) <= sizeof(struct rjd_atomic_int16));
+
+struct rjd_atomic_int8_osx
+{
+	_Atomic int8_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_int8) <= sizeof(struct rjd_atomic_int8));
+
+struct rjd_atomic_uint64_osx
+{
+	_Atomic uint64_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_uint64) <= sizeof(struct rjd_atomic_uint64));
+
+struct rjd_atomic_uint32_osx
+{
+	_Atomic uint32_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_int32) <= sizeof(struct rjd_atomic_int32));
+
+struct rjd_atomic_uint16_osx
+{
+	_Atomic uint16_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_uint16) <= sizeof(struct rjd_atomic_uint16));
+
+struct rjd_atomic_uint8_osx
+{
+	_Atomic uint8_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_uint8) <= sizeof(struct rjd_atomic_uint8));
+
+////////////////////////////////////////////////////////////////////////////////
+// Implementation
+
+struct rjd_atomic_int64 rjd_atomic_int64_init (int64_t value)
+{
+	struct rjd_atomic_int64 atomic;
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+int64_t rjd_atomic_int64_get(struct rjd_atomic_int64* atomic)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_int64_set(struct rjd_atomic_int64* atomic, int64_t value)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+int64_t rjd_atomic_int64_add(struct rjd_atomic_int64* atomic, int64_t value)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+int64_t rjd_atomic_int64_sub(struct rjd_atomic_int64* atomic, int64_t value)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+int64_t rjd_atomic_int64_inc(struct rjd_atomic_int64* atomic)
+{
+	return rjd_atomic_int64_add(atomic, 1);
+}
+
+int64_t rjd_atomic_int64_dec(struct rjd_atomic_int64* atomic)
+{
+	return rjd_atomic_int64_sub(atomic, 1);
+}
+
+bool rjd_atomic_int64_compare_exchange_weak(struct rjd_atomic_int64* atomic, int64_t* expected, int64_t desired)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_int64_compare_exchange_strong(struct rjd_atomic_int64* atomic, int64_t* expected, int64_t desired)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_int32 rjd_atomic_int32_init (int32_t value)
+{
+	struct rjd_atomic_int32 atomic;
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+int32_t rjd_atomic_int32_get(struct rjd_atomic_int32* atomic)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_int32_set(struct rjd_atomic_int32* atomic, int32_t value)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+int32_t rjd_atomic_int32_add(struct rjd_atomic_int32* atomic, int32_t value)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+int32_t rjd_atomic_int32_sub(struct rjd_atomic_int32* atomic, int32_t value)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+int32_t rjd_atomic_int32_inc(struct rjd_atomic_int32* atomic)
+{
+	return rjd_atomic_int32_add(atomic, 1);
+}
+
+int32_t rjd_atomic_int32_dec(struct rjd_atomic_int32* atomic)
+{
+	return rjd_atomic_int32_sub(atomic, 1);
+}
+
+bool rjd_atomic_int32_compare_exchange_weak(struct rjd_atomic_int32* atomic, int32_t* expected, int32_t desired)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_int32_compare_exchange_strong(struct rjd_atomic_int32* atomic, int32_t* expected, int32_t desired)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_int16 rjd_atomic_int16_init (int16_t value)
+{
+	struct rjd_atomic_int16 atomic;
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+int16_t rjd_atomic_int16_get(struct rjd_atomic_int16* atomic)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_int16_set(struct rjd_atomic_int16* atomic, int16_t value)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+int16_t rjd_atomic_int16_add(struct rjd_atomic_int16* atomic, int16_t value)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+int16_t rjd_atomic_int16_sub(struct rjd_atomic_int16* atomic, int16_t value)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+int16_t rjd_atomic_int16_inc(struct rjd_atomic_int16* atomic)
+{
+	return rjd_atomic_int16_add(atomic, 1);
+}
+
+int16_t rjd_atomic_int16_dec(struct rjd_atomic_int16* atomic)
+{
+	return rjd_atomic_int16_sub(atomic, 1);
+}
+
+bool rjd_atomic_int16_compare_exchange_weak(struct rjd_atomic_int16* atomic, int16_t* expected, int16_t desired)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_int16_compare_exchange_strong(struct rjd_atomic_int16* atomic, int16_t* expected, int16_t desired)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_int8 rjd_atomic_int8_init (int8_t value)
+{
+	struct rjd_atomic_int8 atomic;
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+int8_t rjd_atomic_int8_get(struct rjd_atomic_int8* atomic)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_int8_set(struct rjd_atomic_int8* atomic, int8_t value)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+int8_t rjd_atomic_int8_add(struct rjd_atomic_int8* atomic, int8_t value)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+int8_t rjd_atomic_int8_sub(struct rjd_atomic_int8* atomic, int8_t value)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+int8_t rjd_atomic_int8_inc(struct rjd_atomic_int8* atomic)
+{
+	return rjd_atomic_int8_add(atomic, 1);
+}
+
+int8_t rjd_atomic_int8_dec(struct rjd_atomic_int8* atomic)
+{
+	return rjd_atomic_int8_sub(atomic, 1);
+}
+
+bool rjd_atomic_int8_compare_exchange_weak(struct rjd_atomic_int8* atomic, int8_t* expected, int8_t desired)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_int8_compare_exchange_strong(struct rjd_atomic_int8* atomic, int8_t* expected, int8_t desired)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_uint64 rjd_atomic_uint64_init (uint64_t value)
+{
+	struct rjd_atomic_uint64 atomic;
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+uint64_t rjd_atomic_uint64_get(struct rjd_atomic_uint64* atomic)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_uint64_set(struct rjd_atomic_uint64* atomic, uint64_t value)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+uint64_t rjd_atomic_uint64_add(struct rjd_atomic_uint64* atomic, uint64_t value)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+uint64_t rjd_atomic_uint64_sub(struct rjd_atomic_uint64* atomic, uint64_t value)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+uint64_t rjd_atomic_uint64_inc(struct rjd_atomic_uint64* atomic)
+{
+	return rjd_atomic_uint64_add(atomic, 1);
+}
+
+uint64_t rjd_atomic_uint64_dec(struct rjd_atomic_uint64* atomic)
+{
+	return rjd_atomic_uint64_sub(atomic, 1);
+}
+
+bool rjd_atomic_uint64_compare_exchange_weak(struct rjd_atomic_uint64* atomic, uint64_t* expected, uint64_t desired)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_uint64_compare_exchange_strong(struct rjd_atomic_uint64* atomic, uint64_t* expected, uint64_t desired)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_uint32 rjd_atomic_uint32_init (uint32_t value)
+{
+	struct rjd_atomic_uint32 atomic;
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+uint32_t rjd_atomic_uint32_get(struct rjd_atomic_uint32* atomic)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_uint32_set(struct rjd_atomic_uint32* atomic, uint32_t value)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+uint32_t rjd_atomic_uint32_add(struct rjd_atomic_uint32* atomic, uint32_t value)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+uint32_t rjd_atomic_uint32_sub(struct rjd_atomic_uint32* atomic, uint32_t value)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+uint32_t rjd_atomic_uint32_inc(struct rjd_atomic_uint32* atomic)
+{
+	return rjd_atomic_uint32_add(atomic, 1);
+}
+
+uint32_t rjd_atomic_uint32_dec(struct rjd_atomic_uint32* atomic)
+{
+	return rjd_atomic_uint32_sub(atomic, 1);
+}
+
+bool rjd_atomic_uint32_compare_exchange_weak(struct rjd_atomic_uint32* atomic, uint32_t* expected, uint32_t desired)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_uint32_compare_exchange_strong(struct rjd_atomic_uint32* atomic, uint32_t* expected, uint32_t desired)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+struct rjd_atomic_uint16 rjd_atomic_uint16_init (uint16_t value)
+{
+	struct rjd_atomic_uint16 atomic;
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+uint16_t rjd_atomic_uint16_get(struct rjd_atomic_uint16* atomic)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_uint16_set(struct rjd_atomic_uint16* atomic, uint16_t value)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+uint16_t rjd_atomic_uint16_add(struct rjd_atomic_uint16* atomic, uint16_t value)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+uint16_t rjd_atomic_uint16_sub(struct rjd_atomic_uint16* atomic, uint16_t value)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+uint16_t rjd_atomic_uint16_inc(struct rjd_atomic_uint16* atomic)
+{
+	return rjd_atomic_uint16_add(atomic, 1);
+}
+
+uint16_t rjd_atomic_uint16_dec(struct rjd_atomic_uint16* atomic)
+{
+	return rjd_atomic_uint16_sub(atomic, 1);
+}
+
+bool rjd_atomic_uint16_compare_exchange_weak(struct rjd_atomic_uint16* atomic, uint16_t* expected, uint16_t desired)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_uint16_compare_exchange_strong(struct rjd_atomic_uint16* atomic, uint16_t* expected, uint16_t desired)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_uint8 rjd_atomic_uint8_init (uint8_t value)
+{
+	struct rjd_atomic_uint8 atomic;
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+uint8_t rjd_atomic_uint8_get(struct rjd_atomic_uint8* atomic)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_uint8_set(struct rjd_atomic_uint8* atomic, uint8_t value)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+uint8_t rjd_atomic_uint8_add(struct rjd_atomic_uint8* atomic, uint8_t value)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+uint8_t rjd_atomic_uint8_sub(struct rjd_atomic_uint8* atomic, uint8_t value)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+uint8_t rjd_atomic_uint8_inc(struct rjd_atomic_uint8* atomic)
+{
+	return rjd_atomic_uint8_add(atomic, 1);
+}
+
+uint8_t rjd_atomic_uint8_dec(struct rjd_atomic_uint8* atomic)
+{
+	return rjd_atomic_uint8_sub(atomic, 1);
+}
+
+bool rjd_atomic_uint8_compare_exchange_weak(struct rjd_atomic_uint8* atomic, uint8_t* expected, uint8_t desired)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_uint8_compare_exchange_strong(struct rjd_atomic_uint8* atomic, uint8_t* expected, uint8_t desired)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+#endif // RJD_PLATFORM
+#endif // RJD_IMPL
+
+
+////////////////////////////////////////////////////////////////////////////////
 // rjd_strpool.h
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -4695,17 +5309,17 @@ struct rjd_slot
 static inline bool rjd_slot_isvalid(struct rjd_slot slot);
 static inline void rjd_slot_invalidate(struct rjd_slot* slot);
 
-#define rjd_slotmap_alloc(type, count, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), count, allocator))
-#define rjd_slotmap_insert(map, data, out_slot)		(rjd_slotmap_insert_impl((void**)(&map), (out_slot)), \
-													 (map)[(out_slot)->index] = data)
-#define rjd_slotmap_contains(map, slot)				(rjd_slotmap_contains_impl((map), (slot)))
-#define rjd_slotmap_get(map, slot)					((map) + rjd_slotmap_get_impl((map), (slot)))
-#define rjd_slotmap_count(map)						(rjd_slotmap_count_impl(map))
-#define rjd_slotmap_erase(map, slot)				(rjd_slotmap_erase_impl((map), slot))
-#define rjd_slotmap_free(map)						(rjd_slotmap_free_impl(map))
-#define rjd_slotmap_next(map, slot)					(rjd_slotmap_next_impl((map), (slot))) // pass null slot for first
+#define rjd_slotmap_alloc(type, capacity, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), capacity, allocator))
+#define rjd_slotmap_insert(map, data, out_slot)		    (rjd_slotmap_insert_impl((void**)(&map), (out_slot)), \
+													        (map)[(out_slot)->index] = data)
+#define rjd_slotmap_contains(map, slot)				    (rjd_slotmap_contains_impl((map), (slot)))
+#define rjd_slotmap_get(map, slot)				    	((map) + rjd_slotmap_get_impl((map), (slot)))
+#define rjd_slotmap_count(map)					    	(rjd_slotmap_count_impl(map))
+#define rjd_slotmap_erase(map, slot)			    	(rjd_slotmap_erase_impl((map), slot))
+#define rjd_slotmap_free(map)					    	(rjd_slotmap_free_impl(map))
+#define rjd_slotmap_next(map, slot)				    	(rjd_slotmap_next_impl((map), (slot))) // pass null slot for first
 
-void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator);
+void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t capacity, struct rjd_mem_allocator* allocator);
 void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot);
 bool rjd_slotmap_contains_impl(const void* map, struct rjd_slot slot);
 uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot);
@@ -4738,6 +5352,7 @@ struct rjd_slotmap_header
 	bool* used;
 	uint32_t* freelist;
 	uint32_t sizeof_type;
+    uint32_t capacity;
 	uint32_t count;
 	uint32_t debug_sentinel;
 };
@@ -4747,14 +5362,14 @@ enum {
 };
 
 static struct rjd_slotmap_header* rjd_slotmap_getheader(const void* map);
-static void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator);
+static void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t capacity, struct rjd_mem_allocator* allocator);
 
 ////////////////////////////////////////////////////////////////////////////////
 // public implementation
 
-void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator)
+void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t capacity, struct rjd_mem_allocator* allocator)
 {
-	return rjd_slotmap_grow(NULL, sizeof_type, count, allocator);
+	return rjd_slotmap_grow(NULL, sizeof_type, capacity, allocator);
 }
 
 void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot)
@@ -4768,7 +5383,7 @@ void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot)
 	struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
 
 	if (rjd_array_count(header->freelist) == 0) {
-		map = rjd_slotmap_grow(map, header->sizeof_type, header->count * 2, header->allocator);
+		map = rjd_slotmap_grow(map, header->sizeof_type, header->capacity * 2, header->allocator);
 		header = rjd_slotmap_getheader(map);
 		RJD_ASSERT(rjd_array_count(header->freelist) > 0);
 		*map_p = map;
@@ -4780,6 +5395,7 @@ void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot)
 	*salt += 1;
 
 	header->used[index] = true;
+    ++header->count;
 
 	out_slot->index = rjd_math_truncate_u32_to_u16(index);
 	out_slot->salt = *salt;
@@ -4790,7 +5406,7 @@ bool rjd_slotmap_contains_impl(const void* map, struct rjd_slot slot)
 	RJD_ASSERT(map);
 
 	const struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
-	if (slot.index >= header->count) {
+	if (slot.index >= header->capacity) {
 		return false;
 	}
 	uint32_t index = slot.index;
@@ -4802,7 +5418,7 @@ uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot)
 	RJD_ASSERT(map);
 
 	const struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
-	RJD_ASSERT(slot.index < header->count);
+	RJD_ASSERT(slot.index < header->capacity);
 	uint32_t index = slot.index;
 	RJD_ASSERTMSG(!rjd_array_contains(header->freelist, &index), "This slot is unallocated. Use rjd_slotmap_contains to check if the slot is valid first.");
     int16_t salt = header->salts[slot.index];
@@ -4822,10 +5438,11 @@ void rjd_slotmap_erase_impl(void* map, struct rjd_slot slot)
 {
 	RJD_ASSERT(map);
 	struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
-	RJD_ASSERT(slot.index < header->count);
+	RJD_ASSERT(slot.index < header->capacity);
 	
 	rjd_array_push(header->freelist, slot.index);
 	header->used[slot.index] = false;
+    --header->count;
 }
 
 void rjd_slotmap_free_impl(void* map)
@@ -4833,6 +5450,7 @@ void rjd_slotmap_free_impl(void* map)
 	RJD_ASSERT(map);
 	struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
 
+    rjd_array_free(header->used);
 	rjd_array_free(header->freelist);
 	rjd_mem_free(header);
 }
@@ -4847,7 +5465,7 @@ struct rjd_slot rjd_slotmap_next_impl(void* map, const struct rjd_slot* slot)
 		start = slot->index + 1;
 	}
 
-	for (uint32_t i = start; i < header->count; ++i) {
+	for (uint32_t i = start; i < header->capacity; ++i) {
 		if (header->used[i]) {
 			struct rjd_slot next = {
 				.index = rjd_math_truncate_u32_to_u16(i),
@@ -4875,44 +5493,46 @@ struct rjd_slotmap_header* rjd_slotmap_getheader(const void* map)
 	return header;
 }
 
-void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator)
+void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t capacity, struct rjd_mem_allocator* allocator)
 {
 	struct rjd_slotmap_header* oldheader = oldmap ? rjd_slotmap_getheader(oldmap) : NULL;
 
-	uint32_t oldcount = oldheader ? oldheader->count : 0;
-	if (count <= oldcount) {
+	uint32_t oldcapacity = oldheader ? oldheader->capacity : 0;
+	if (capacity <= oldcapacity) {
 		return oldmap;
 	}
 
-	size_t total_mem_size = sizeof(struct rjd_slotmap_header) + sizeof_type * count + sizeof(uint16_t) * count;
+	size_t total_mem_size = sizeof(struct rjd_slotmap_header) + sizeof_type * capacity + sizeof(uint16_t) * capacity;
 	char* mem = rjd_mem_alloc_array(char, total_mem_size, allocator);
 	memset(mem, 0, total_mem_size);
 
 	struct rjd_slotmap_header* header = (struct rjd_slotmap_header*)mem;
 	header->allocator = allocator;
 	header->sizeof_type = (uint32_t)sizeof_type;
-	header->count = count;
+	header->capacity = capacity;
+    header->count = 0;
 	header->data = (void*)(mem + sizeof(struct rjd_slotmap_header));
-	header->salts = (uint16_t*)((char*)header->data + sizeof_type * count);
-	header->used = rjd_array_alloc(bool, count, allocator);
-	header->freelist = rjd_array_alloc(uint32_t, count, allocator);
+	header->salts = (uint16_t*)((char*)header->data + sizeof_type * capacity);
+	header->used = rjd_array_alloc(bool, capacity, allocator);
+	header->freelist = rjd_array_alloc(uint32_t, capacity, allocator);
 	header->debug_sentinel = RJD_SLOTMAP_DEBUG_SENTINEL;
 
-	memset(header->salts + oldcount, 0, (header->count - oldcount) * sizeof(*header->salts));
+	memset(header->salts + oldcapacity, 0, (header->capacity - oldcapacity) * sizeof(*header->salts));
 
-	rjd_array_resize(header->used, count);
+	rjd_array_resize(header->used, capacity);
 	if (oldheader) {
-		memcpy(header->used, oldheader->used, sizeof(*header->used) * oldheader->count);
+		memcpy(header->used, oldheader->used, sizeof(*header->used) * oldheader->capacity);
+        header->count = oldheader->count;
 	}
 
-	for (uint32_t i = oldcount; i < count; ++i) {
+	for (uint32_t i = oldcapacity; i < capacity; ++i) {
 		rjd_array_push(header->freelist, i);
 	}
 
 	// copy existing data
 	if (oldheader) {
-		memcpy(header->data, oldheader->data, sizeof_type * oldheader->count);
-		memcpy(header->salts, oldheader->salts, sizeof(uint16_t) * oldheader->count);
+		memcpy(header->data, oldheader->data, sizeof_type * oldheader->capacity);
+		memcpy(header->salts, oldheader->salts, sizeof(uint16_t) * oldheader->capacity);
 		rjd_slotmap_free(oldmap);
 	}
 
@@ -5896,7 +6516,6 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 static inline void rjd_resource_loader_destroy(struct rjd_resource_loader* loader);
 static inline struct rjd_result rjd_resource_loader_get_type(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
 static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out);
-// TODO update load() to return an rjd_istream instead of loading the entire file at once?
 
 ////////////////////////////////////////////////////////////////////////////////
 // Inline implementation

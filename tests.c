@@ -1772,6 +1772,42 @@ void test_thread()
 	expect_no_leaks(&allocator);
 }
 
+void test_atomic()
+{
+	struct rjd_atomic_int64 atomic_i64 = rjd_atomic_int64_init(INT64_MAX);
+	expect_int64(INT64_MAX, rjd_atomic_int64_get(&atomic_i64));
+	rjd_atomic_int64_set(&atomic_i64, 0);
+	expect_int64(0, rjd_atomic_int64_get(&atomic_i64));
+	expect_int64(0, rjd_atomic_int64_inc(&atomic_i64));
+    expect_int64(1, rjd_atomic_int64_get(&atomic_i64));
+	expect_int64(1, rjd_atomic_int64_add(&atomic_i64, 10));
+    expect_int64(11, rjd_atomic_int64_get(&atomic_i64));
+	expect_int64(11, rjd_atomic_int64_dec(&atomic_i64));
+    expect_int64(10, rjd_atomic_int64_get(&atomic_i64));
+	expect_int64(10, rjd_atomic_int64_sub(&atomic_i64, 5));
+    expect_int64(5, rjd_atomic_int64_get(&atomic_i64));
+
+	const uint32_t max_iterations = 1000;
+	uint32_t iterations = 0;
+	int64_t expected = 0;
+	while (!rjd_atomic_int64_compare_exchange_weak(&atomic_i64, &expected, 0)) {
+		rjd_atomic_int64_dec(&atomic_i64);
+		if (++iterations > max_iterations) {
+			break;
+		}
+	}
+
+	rjd_atomic_int64_set(&atomic_i64, 5);
+
+	iterations = 0;
+	while (!rjd_atomic_int64_compare_exchange_weak(&atomic_i64, &expected, 0)) {
+		rjd_atomic_int64_dec(&atomic_i64);
+		if (++iterations > max_iterations) {
+			break;
+		}
+	}
+}
+
 void test_strpool()
 {
 	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
@@ -2787,6 +2823,7 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_cmd();
 	test_dict();
 	test_thread();
+	test_atomic();
 	test_fio();
 	test_strpool();
 	test_slotmap();
