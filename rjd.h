@@ -1787,9 +1787,12 @@ static inline rjd_math_vec4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v
 static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m);
 static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m);
 static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float top, float bot, float near, float far);
-static inline rjd_math_mat4 rjd_math_mat4_ortho(float left, float right, float top, float bot, float near, float far);
-static inline rjd_math_mat4 rjd_math_mat4_perspective(float y_fov, float aspect, float near, float far);
-static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
+static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far);
+static inline rjd_math_mat4 ijd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_lookat_righthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
+static inline rjd_math_mat4 rjd_math_mat4_lookat_lefthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
 static inline float*		rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out);
 static inline float*		rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
 
@@ -2335,10 +2338,11 @@ static inline rjd_math_vec3 rjd_math_mat4_mulv3(rjd_math_mat4 m, rjd_math_vec3 v
 }
 static inline rjd_math_vec4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v) {
 	// TODO optimize
-	float x = rjd_math_vec4_dot(m.m[0], v);
-	float y = rjd_math_vec4_dot(m.m[1], v);
-	float z = rjd_math_vec4_dot(m.m[2], v);
-	float w = rjd_math_vec4_dot(m.m[3], v);
+	rjd_math_mat4 trans = rjd_math_mat4_transpose(m);
+	float x = rjd_math_vec4_dot(trans.m[0], v);
+	float y = rjd_math_vec4_dot(trans.m[1], v);
+	float z = rjd_math_vec4_dot(trans.m[2], v);
+	float w = rjd_math_vec4_dot(trans.m[3], v);
 	return rjd_math_vec4_xyzw(x, y, z, w);
 }
 static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
@@ -2526,22 +2530,41 @@ static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float
 	RJD_UNUSED_PARAM(far);
 	return rjd_math_mat4_identity();
 }
-static inline rjd_math_mat4 rjd_math_mat4_ortho(float left, float right, float top, float bot, float near, float far) {
+static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far) {
 	rjd_math_mat4 m;
-	m.m[0] = rjd_math_vec4_xyzw(2 / (right - left), 0, 0, 0);
-	m.m[1] = rjd_math_vec4_xyzw(0, 2 / (top - bot), 0, 0);
-	m.m[2] = rjd_math_vec4_xyzw(0, 0, -2 / (far - near), 0);
-	m.m[3] = rjd_math_vec4_xyzw(-(right+left)/(right-left), -(top+bot)/(top-bot), -(far+near)/(far-near), 1);
+	m.m[0] = rjd_math_vec4_xyzw(           2/(right-left),                   0,               0, 0);
+	m.m[1] = rjd_math_vec4_xyzw(                        0,         2/(top-bot),               0, 0);
+	m.m[2] = rjd_math_vec4_xyzw(                        0,                   0,    1/(near-far), 0);
+	m.m[3] = rjd_math_vec4_xyzw((left+right)/(left-right), (top+bot)/(bot-top), near/(near-far), 1);
 	return m;
 }
-static inline rjd_math_mat4 rjd_math_mat4_perspective(float y_fov, float aspect, float near, float far) {
+static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near, float far) {
+	RJD_ASSERTFAIL("not implemented");
+	RJD_UNUSED_PARAM(left);
+	RJD_UNUSED_PARAM(right);
+	RJD_UNUSED_PARAM(top);
+	RJD_UNUSED_PARAM(bot);
+	RJD_UNUSED_PARAM(near);
+	RJD_UNUSED_PARAM(far);
+	return rjd_math_mat4_identity();
+}
+static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far) {
+	RJD_ASSERTFAIL("not implemented");
 	RJD_UNUSED_PARAM(y_fov);
 	RJD_UNUSED_PARAM(aspect);
 	RJD_UNUSED_PARAM(near);
 	RJD_UNUSED_PARAM(far);
 	return rjd_math_mat4_identity();
 }
-static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up) {
+static inline rjd_math_mat4 rjd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near, float far) {
+	RJD_ASSERTFAIL("not implemented");
+	RJD_UNUSED_PARAM(y_fov);
+	RJD_UNUSED_PARAM(aspect);
+	RJD_UNUSED_PARAM(near);
+	RJD_UNUSED_PARAM(far);
+	return rjd_math_mat4_identity();
+}
+static inline rjd_math_mat4 rjd_math_mat4_lookat_righthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up) {
 	rjd_math_vec3 forward = rjd_math_vec3_normalize(rjd_math_vec3_sub(target, eye));
 	rjd_math_vec3 left = rjd_math_vec3_normalize(rjd_math_vec3_cross(forward, up));
 	up = rjd_math_vec3_normalize(rjd_math_vec3_cross(left, forward));
@@ -2549,6 +2572,13 @@ static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec
 	rjd_math_mat4 rot = rjd_math_mat4_rotationbasis(left, up, rjd_math_vec3_neg(forward));
 	rjd_math_mat4 trans = rjd_math_mat4_translation(rjd_math_vec3_neg(eye));
 	return rjd_math_mat4_mul(trans, rjd_math_mat4_transpose(rot));
+}
+static inline rjd_math_mat4 rjd_math_mat4_lookat_lefthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up) {
+	RJD_ASSERTFAIL("not implemented");
+	RJD_UNUSED_PARAM(eye);
+	RJD_UNUSED_PARAM(target);
+	RJD_UNUSED_PARAM(up);
+	return rjd_math_mat4_identity();
 }
 static inline float* rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out) {
 	RJD_ASSERT(RJD_MEM_ISALIGNED(out, 16));
