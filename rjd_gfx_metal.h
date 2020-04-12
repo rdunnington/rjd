@@ -177,17 +177,16 @@ struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context)
 
 struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context)
 {
-    RJD_UNUSED_PARAM(context);
-	// TODO figure out if this is a noop for metal
+	// NOTE: this is a no-op for metal since presenting is handled via presentDrawable()
+	// which is invoked after the command buffer has finished executing all commands
 
+    RJD_UNUSED_PARAM(context);
 	return RJD_RESULT_OK();
 }
 
 void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 {
 	RJD_ASSERT(context);
-
-	rjd_gfx_present(context); // wait for all pending command buffers to finish
 
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
 	
