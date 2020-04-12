@@ -40,4 +40,5 @@
 #include "rjd_resource_types.h"
 #include "rjd_resource_loader.h"
 #include "rjd_resource.h"
+#include "rjd_window.h"
 #include "rjd_gfx.h"

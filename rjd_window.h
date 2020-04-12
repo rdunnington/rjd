@@ -327,6 +327,7 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 void rjd_window_runloop(struct rjd_window* window)
 {
 	// no-op since OSX is event driven
+	RJD_UNUSED_PARAM(window);
 }
 
 struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
@@ -355,17 +356,19 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 	struct rjd_window_environment env;
 }
 
--(instancetype)initWithEnvFunc:(rjd_window_environment_init_func)func env:(struct rjd_window_environment)env;
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func)func env:(struct rjd_window_environment)_env
 {
     if (self = [super init]) {
         self->init_func = func;
-		self->env = env;
+		self->env = _env;
     }
     return self;
 }
 
--(void)applicationDidFinishLaunching:(NSNotification*)aNotification
+-(void)applicationDidFinishLaunching:(NSNotification*)notification
 {
+	RJD_UNUSED_PARAM(notification);
+
 	if (self->init_func) {
 		self->init_func(&self->env);
 	}
@@ -373,6 +376,8 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 
 -(BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender
 {
+	RJD_UNUSED_PARAM(sender);
+
     return YES;
 }
 
@@ -387,13 +392,13 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
     struct rjd_window_environment env;
 }
 
--(instancetype)initWithWidth:(uint16_t)width height:(uint16_t)height window:(struct rjd_window*)window env:(struct rjd_window_environment)env
+-(instancetype)initWithWidth:(uint16_t)_width height:(uint16_t)_height window:(struct rjd_window*)_window env:(struct rjd_window_environment)_env
 {
     if (self = [super init]) {
-        self->width = width;
-        self->height = height;
-        self->window = window;
-        self->env = env;
+        self->width = _width;
+        self->height = _height;
+        self->window = _window;
+        self->env = _env;
     }
     return self;
 }
@@ -429,11 +434,11 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 	struct rjd_window_environment env;
 }
 
--(instancetype)initWithWindow:(struct rjd_window*)window env:(struct rjd_window_environment)env
+-(instancetype)initWithWindow:(struct rjd_window*)_window env:(struct rjd_window_environment)_env
 {
 	if (self = [super init]) {
-		self->window = window;
-		self->env = env;
+		self->window = _window;
+		self->env = _env;
         
         struct rjd_window_osx* window_osx = (struct rjd_window_osx*)window;
 
@@ -448,6 +453,8 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 
 -(void)drawInMTKView:(MTKView*)view
 {
+	RJD_UNUSED_PARAM(view);
+
     struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
 	if (window_osx->update_func) {
 		window_osx->update_func(self->window, &self->env);
@@ -456,6 +463,8 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 
 -(void)windowWillClose:(NSNotification*)notification
 {
+	RJD_UNUSED_PARAM(notification);
+
     struct rjd_window_osx* window_osx = (struct rjd_window_osx*)window;
 
     [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowWillCloseNotification object:window_osx->window];
@@ -467,6 +476,8 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 
 -(void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size
 {
+	RJD_UNUSED_PARAM(view);
+	RJD_UNUSED_PARAM(size);
 }
 @end
 

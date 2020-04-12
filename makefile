@@ -9,7 +9,7 @@ else
 	#endif
 
 	PLATFORM_FLAGS := -fsanitize=undefined -fsanitize=address  
-	PLATFORM_FILES := tests_rjd.m -framework Foundation -framework Metal -framework MetalKit
+	PLATFORM_FILES := tests_rjd.m -framework Foundation -framework AppKit -framework Metal -framework MetalKit
 endif
 
 all:
