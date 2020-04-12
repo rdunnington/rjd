@@ -43,7 +43,8 @@ files = [
     "rjd_strhash.h",
     "rjd_resource_types.h",
     "rjd_resource_loader.h",
-    "rjd_resource.h"
+    "rjd_resource.h",
+    "rjd_gfx.h",
 ]
 
 concat = "#pragma once\n\n"
