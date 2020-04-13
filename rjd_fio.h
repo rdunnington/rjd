@@ -23,6 +23,8 @@ bool rjd_fio_exists(const char* path);
 #include <ftw.h>
 #endif
 
+static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername);
+
 struct rjd_result rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* allocator)
 {
 	FILE* file = fopen(path, "rb");
@@ -100,20 +102,88 @@ struct rjd_result rjd_fio_size(const char* path, size_t* out_size)
 	return RJD_RESULT_OK();
 }
 
-#if RJD_COMPILER_MSVC
-struct rjd_result rjd_fio_delete(const char* path)
-{
-	return RJD_RESULT("not implmented");
-}
-
 struct rjd_result rjd_fio_mkdir(const char* path)
 {
-	return RJD_RESULT("not implmented");
+    RJD_ASSERT(path);
+    RJD_ASSERT(*path);
+    
+    struct rjd_result result = RJD_RESULT_OK();
+    
+    const char* next = path;
+    const char* end = next;
+	do
+    {
+		end = strstr(end, "/");
+        // skip directory separator
+        if (end) {
+            ++end;
+        }
+        
+        char stackbuffer[256];
+        const char* subpath = NULL;
+
+		if (end) {
+            RJD_ASSERT(end - next < (ptrdiff_t)sizeof(stackbuffer));
+			memcpy(stackbuffer, next, end - next);
+			stackbuffer[end - next] = '\0';
+            subpath = stackbuffer;
+		} else {
+			subpath = next;
+		}
+
+		result = rjd_fio_mkdir_platform(subpath);
+		if (!rjd_result_isok(result)) {
+			break;
+		}
+    } while (end != NULL);
+    
+    return result;
 }
+
+#if RJD_COMPILER_MSVC
+
+//struct rjd_result rjd_fio_delete_recursive(const char* path)
+//{
+//}
+//
+//struct rjd_result rjd_fio_delete(const char* path)
+//{
+//	return RJD_RESULT("not implmented");
+//}
+
+static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
+{
+	struct rjd_result result = RJD_RESULT_OK();
+	if (CreateDirectoryA(foldername)) {
+		const int error = GetLastError();
+		RJD_ASSERTMSG(error != ERROR_PATH_NOT_FOUND, "The rjd_fio_mkdir() code should handle this case."); break;
+		switch (GetLastError())
+		{
+			case ERROR_ALREADY_EXISTS: result = RJD_RESULT("Folder already exists"); break;
+			default: result = RJD_RESULT("Unknown error creating subfolder"); break;
+		}
+	}
+
+	return result;
+}
+
 
 bool rjd_fio_exists(const char* path)
 {
-	return false;
+	SECURITY_ATTRIBUTES security = { .nlength = sizeof(SECURITY_ATTRIBUTES) };
+	HANDLE file = CreateFileA(path,
+							GENERIC_READ,
+							FILE_SHARE_READ,
+							&security,
+							OPEN_EXISTING,
+							FILE_ATTRIBUTE_NORMAL,
+							NULL);
+
+	const bool exists = file != INVALID_HANDLE_VALUE;
+
+	CloseHandle(file);
+
+	return exists;
 }
 
 #else
@@ -143,47 +213,33 @@ bool rjd_fio_exists(const char* path)
     return !stat(path, &unused);
 }
 
-struct rjd_result rjd_fio_mkdir(const char* path)
+static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
 {
-    RJD_ASSERT(path);
-    RJD_ASSERT(*path);
-    
-    bool created_directory = false;
-    
-    const char* next = path;
-    const char* end = next;
-	do
-    {
-		end = strstr(end, "/");
-        // skip directory separator
-        if (end) {
-            ++end;
-        }
-        
-        char stackbuffer[256];
-        const char* subpath = NULL;
+	const mode_t mode = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
+	const int error = mkdir(foldername, mode);
 
-		if (end) {
-            RJD_ASSERT(end - next < (ptrdiff_t)sizeof(stackbuffer));
-			memcpy(stackbuffer, next, end - next);
-			stackbuffer[end - next] = '\0';
-            subpath = stackbuffer;
-		} else {
-			subpath = next;
-		}
+	struct rjd_result result = RJD_RESULT_OK();
+	switch (error)
+	{
+		case EACCES: result = RJD_RESULT("The parent directory does not allow write permission to the process, or one of the directories in pathname did not allow search permission."); break;
+		case EDQUOT: result = RJD_RESULT("The user's quota of disk blocks or inodes on the file system has been exhausted."); break;
+		case EEXIST: result = RJD_RESULT("pathname already exists (not necessarily as a directory). This includes the case where pathname is a symbolic link, dangling or not."); break;
+		case EFAULT: result = RJD_RESULT("pathname points outside your accessible address space."); break;
+		case ELOOP: result = RJD_RESULT("Too many symbolic links were encountered in resolving pathname."); break;
+		case EMLINK: result = RJD_RESULT("The number of links to the parent directory would exceed LINK_MAX."); break;
+		case ENAMETOOLONG: result = RJD_RESULT("pathname was too long."); break;
+		case ENOENT: result = RJD_RESULT("A directory component in pathname does not exist or is a dangling symbolic link."); break;
+		case ENOMEM: result = RJD_RESULT("Insufficient kernel memory was available."); break;
+		case ENOSPC: result = RJD_RESULT("The device has no room for the new directory (user's disk quota may be exhausted)."); break;
+		case ENOTDIR: result = RJD_RESULT("A component used as a directory in pathname is not, in fact, a directory."); break;
+		case EPERM: result = RJD_RESULT("The file system containing pathname does not support the creation of directories."); break;
+		case EROFS: result = RJD_RESULT("pathname refers to a file on a read-only file system."); break; 
+		default: result = RJD_RESULT("Unknown error creating subpath"); break;
+	}
 
-		const mode_t mode = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
-		if (mkdir(subpath, mode) == 0) {
-            created_directory = true;
-        } else if (created_directory == true) {
-            // there was an error creating a nested folder
-            created_directory = false;
-            break;
-        }
-    } while (end != NULL);
-    
-    return created_directory ? RJD_RESULT_OK() : RJD_RESULT("error creating directory");
+	return result;
 }
+
 #endif
 
 #endif // RJD_IMPL

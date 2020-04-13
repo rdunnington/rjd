@@ -14,7 +14,7 @@ struct rjd_path
 
 struct rjd_path_enumerator_state
 {
-	char impl[16];
+	char impl[32];
 };
 
 struct rjd_path rjd_path_create(void);
@@ -26,7 +26,7 @@ void rjd_path_clear(struct rjd_path* path);
 const char* rjd_path_extension(const struct rjd_path* path);
 const char* rjd_path_extension_str(const char* path);
 
-struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path);
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* string_allocator);
 const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state);
 void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state);
 
@@ -163,6 +163,85 @@ static uint32_t rjd_path_normalize_slashes(char* path, uint32_t length)
 }
 
 #if RJD_PLATFORM_WINDOWS
+
+struct rjd_path_enumerator_state_win32
+{
+	struct rjd_mem_allocator* allocator;
+	const char* nextpath;
+	const char* root;
+	HANDLE handle;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_win32) <= sizeof(struct rjd_path_enumerator_state));
+
+static const char* rjd_path_enumerate_copystring(const char* path, struct rjd_mem_allocator* allocator);
+
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* string_allocator)
+{
+	RJD_ASSERT(path);
+	RJD_ASSERT(string_allocator);
+
+	struct rjd_path_enumerator_state state = {0};
+	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)&state;
+	state_win32->allocator = string_allocator;
+	state_win32->nextpath = NULL;
+	state_win32->root = rjd_path_enumerate_copystring(path, string_allocator);
+	state_win32->handle = INVALID_HANDLE_VALUE;
+
+	return state;
+}
+
+const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
+{
+	RJD_ASSERT(state);
+
+	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)&state;
+
+	if (state_win32->nextpath) {
+		rjd_mem_free(state_win32->nextpath);
+		state_win32->nextpath = NULL;
+	}
+
+	WIN32_FIND_DATAA find_data = {0};
+
+	bool success = true;
+	if (state_win32->handle == INVALID_HANDLE_VALUE) {
+		state_win32->handle = FindFirstFileA(state_win32->root, &find_data);
+		success = state_win32->handle != INVALID_HANDLE_VALUE;
+		state_win32->root = NULL;
+	} else {
+		success = FindNextFileA(state_win32->handle, &find_data);
+	}
+
+	if (success)
+	{
+		state_win32->nextpath = rjd_path_enumerate_copystring(find_data.cFileName, state_win32->allocator);
+	}
+
+	return state_win32->nextpath;
+}
+
+void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
+{
+	RJD_ASSERT(state);
+
+	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)&state;
+
+	rjd_mem_free(state_win32->root);
+	if (state_win32->nextpath) {
+		rjd_mem_free(state_win32->nextpath);
+	}
+
+	FindClose(state_win32->handle);
+}
+
+static const char* rjd_path_enumerate_copystring(const char* path, struct rjd_mem_allocator* allocator)
+{
+	uint32_t length = (uint32_t)strlen(path) + 1;
+	char* copy = rjd_mem_alloc_array_noclear(char, length, allocator);
+	memcpy(copy, path, length);
+	return copy;
+}
+
 #elif RJD_PLATFORM_OSX
 
 #if !RJD_LANG_OBJC
@@ -176,6 +255,7 @@ struct rjd_path_enumerator_state_osx
 	NSDirectoryEnumerator<NSString*>* enumerator;
 	NSString* next;
 };
+RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_osx) <= sizeof(rjd_path_enumerator_state));
 
 struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path)
 {

@@ -117,6 +117,13 @@ void rjd_array_reverse_impl(void* array, size_t sizeof_type);
 
 #if RJD_IMPL
 
+// Copied from stdlib.h. We want this extra platform functionality but don't want to turn on all the defines
+// to get us there.
+#if RJD_COMPILER_GCC
+void __bsd_qsort_r (void *__base, size_t __nmemb, size_t __size, void *__thunk, int (*_compar)(void *, const void *, const void *));
+#  define qsort_r __bsd_qsort_r
+#endif
+
 struct rjd_array_header
 {
 	struct rjd_mem_allocator* allocator;
