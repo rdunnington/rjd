@@ -13,6 +13,7 @@
 #include <stdarg.h>
 #include <xmmintrin.h> // SSE2
 #include <pmmintrin.h> // SSE3
+#include <smmintrin.h> // SSE4
 
 #if RJD_IMPL
 	#include <stdlib.h>
@@ -51,11 +52,11 @@
 
 #if RJD_COMPILER_MSVC
 	#define RJD_FORCE_INLINE __forceinline
-	#define RJD_FORCE_ALIGN(type, alignment) __declspec(align(alignment)) type
+	#define RJD_FORCE_ALIGN(alignment, type) __declspec(align(alignment)) type
 	#define restrict __restrict
 #elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
 	#define RJD_FORCE_INLINE static inline __attribute__((always_inline))
-	#define RJD_FORCE_ALIGN(type, alignment) type __attribute__((aligned(alignment)))
+	#define RJD_FORCE_ALIGN(alignment, type) type __attribute__((aligned(alignment)))
 #else
 	#error Unhandled compiler
 #endif
@@ -1540,6 +1541,8 @@ static void* rjd_array_grow(void* array, size_t sizeof_type)
 
 #pragma once
 
+// SSE3 math library with some functions for normal floats
+
 #define RJD_MATH_H 1
 
 #define RJD_MATH_PI (3.141592653589793238462643f)
@@ -1615,73 +1618,19 @@ RJD_MATH_REMAP_FUNCS(RJD_MATH_DECLARE_REMAP_FUNC)
 
 // vector structs
 
-typedef union rjd_math_float2 {
-	struct {
-		float x;
-		float y;
-	};
-	float v[2];
-} rjd_math_float2;
-
-typedef union rjd_math_float3 {
-	struct {
-		float x;
-		float y;
-		float z;
-	};
-	float v[3];
-} rjd_math_float3;
-
-typedef union rjd_math_float4 {
-	struct {
-		float x;
-		float y;
-		float z;
-		float w;
-	};
-	float v[4];
-} rjd_math_float4;
-
-typedef struct rjd_math_float16 {
-	float v[16];
-} rjd_math_float16;
-
-typedef struct rjd_math_vec3 {
+// NOTE: this is the one place we break the "no typedef" rule for convenience
+RJD_FORCE_ALIGN(16, typedef struct rjd_math_vec3 {
 	__m128 v;
-} rjd_math_vec3;
+} rjd_math_vec3);
 
-typedef struct rjd_math_vec4 {
+RJD_FORCE_ALIGN(16, typedef struct rjd_math_vec4 {
 	__m128 v;
-} rjd_math_vec4;
+} rjd_math_vec4);
 
 // column-major 4x4 matrix
-typedef struct {
+RJD_FORCE_ALIGN(16, typedef struct rjd_math_mat4 {
 	rjd_math_vec4 m[4];
-} rjd_math_mat4;
-
-// float structs are mainly intended for convenience tranlations out of __m128 registers
-
-static inline rjd_math_float2 rjd_math_float2_xy(float x, float y);
-static inline rjd_math_float3 rjd_math_float3_xyz(float x, float y, float z);
-static inline rjd_math_float4 rjd_math_float4_xyzw(float x, float y, float z, float w);
-
-static inline rjd_math_vec3 rjd_math_float2_to_vec3(rjd_math_float2 f, float z);
-static inline rjd_math_vec3 rjd_math_float3_to_vec3(rjd_math_float3 f);
-static inline rjd_math_vec3 rjd_math_float4_to_vec3(rjd_math_float4 f);
-
-static inline rjd_math_vec4 rjd_math_float2_to_vec4(rjd_math_float2 f, float z, float w);
-static inline rjd_math_vec4 rjd_math_float3_to_vec4(rjd_math_float3 f, float w);
-static inline rjd_math_vec4 rjd_math_float4_to_vec4(rjd_math_float4 f);
-
-static inline rjd_math_float2 rjd_math_vec3_to_float2(rjd_math_vec3 v);
-static inline rjd_math_float3 rjd_math_vec3_to_float3(rjd_math_vec3 v);
-static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v, float w);
-
-static inline rjd_math_float2 rjd_math_vec4_to_float2(rjd_math_vec4 v);
-static inline rjd_math_float3 rjd_math_vec4_to_float3(rjd_math_vec4 v);
-static inline rjd_math_float4 rjd_math_vec4_to_float4(rjd_math_vec4 v);
-
-static inline rjd_math_float16 rjd_math_mat4_to_float16(rjd_math_mat4 m);
+} rjd_math_mat4);
 
 // vec4
 
@@ -1707,8 +1656,12 @@ static inline float 		rjd_math_vec4_i(rjd_math_vec4 v, size_t index);
 static inline float			rjd_math_vec4_hmin(rjd_math_vec4 v);
 static inline float			rjd_math_vec4_hmax(rjd_math_vec4 v);
 static inline rjd_math_vec4 rjd_math_vec4_normalize(rjd_math_vec4 v);
-static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s);
+static inline rjd_math_vec4 rjd_math_vec4_abs(rjd_math_vec4 v);
 static inline rjd_math_vec4 rjd_math_vec4_neg(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_floor(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_ceil(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_round(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s);
 static inline rjd_math_vec4 rjd_math_vec4_add(rjd_math_vec4 a, rjd_math_vec4 b);
 static inline rjd_math_vec4 rjd_math_vec4_sub(rjd_math_vec4 a, rjd_math_vec4 b);
 static inline rjd_math_vec4 rjd_math_vec4_mul(rjd_math_vec4 a, rjd_math_vec4 b);
@@ -1751,8 +1704,12 @@ static inline float 		rjd_math_vec3_length(rjd_math_vec3 v);
 static inline float			rjd_math_vec3_hmin(rjd_math_vec3 v);
 static inline float			rjd_math_vec3_hmax(rjd_math_vec3 v);
 static inline rjd_math_vec3 rjd_math_vec3_normalize(rjd_math_vec3 v);
-static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s);
+static inline rjd_math_vec3 rjd_math_vec3_abs(rjd_math_vec3 v);
 static inline rjd_math_vec3 rjd_math_vec3_neg(rjd_math_vec3 v);
+static inline rjd_math_vec4 rjd_math_vec4_floor(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_ceil(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_round(rjd_math_vec4 v);
+static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s);
 static inline rjd_math_vec3 rjd_math_vec3_add(rjd_math_vec3 a, rjd_math_vec3 b);
 static inline rjd_math_vec3 rjd_math_vec3_sub(rjd_math_vec3 a, rjd_math_vec3 b);
 static inline rjd_math_vec3 rjd_math_vec3_mul(rjd_math_vec3 a, rjd_math_vec3 b);
@@ -1827,93 +1784,6 @@ static inline int32_t rjd_math_pow32(int32_t v, uint32_t power)
 		--power;
 	}
 	return r;
-}
-
-// vec <-> float tranlations
-
-static inline rjd_math_float2 rjd_math_float2_xy(float x, float y)
-{
-	return (rjd_math_float2){{ x, y }};
-}
-static inline rjd_math_float3 rjd_math_float3_xyz(float x, float y, float z)
-{
-	return (rjd_math_float3){{ x, y, z }};
-}
-static inline rjd_math_float4 rjd_math_float4_xyzw(float x, float y, float z, float w)
-{
-	return (rjd_math_float4){{ x, y, z, w }};
-}
-
-static inline rjd_math_vec3 rjd_math_float2_to_vec3(rjd_math_float2 f, float z)
-{
-	return rjd_math_vec3_xyz(f.x, f.y, z);
-}
-static inline rjd_math_vec3 rjd_math_float3_to_vec3(rjd_math_float3 f)
-{
-	return rjd_math_vec3_xyz(f.x, f.y, f.z);
-}
-static inline rjd_math_vec3 rjd_math_float4_to_vec3(rjd_math_float4 f)
-{
-	return rjd_math_vec3_xyz(f.x, f.y, f.z);
-}
-
-static inline rjd_math_vec4 rjd_math_float2_to_vec4(rjd_math_float2 f, float z, float w)
-{
-	return rjd_math_vec4_xyzw(f.x, f.y, z, w);
-}
-static inline rjd_math_vec4 rjd_math_float3_to_vec4(rjd_math_float3 f, float w)
-{
-	return rjd_math_vec4_xyzw(f.x, f.y, f.z, w);
-}
-static inline rjd_math_vec4 rjd_math_float4_to_vec4(rjd_math_float4 f)
-{
-	return rjd_math_vec4_xyzw(f.x, f.y, f.z, f.w);
-}
-
-static inline rjd_math_float2 rjd_math_vec3_to_float2(rjd_math_vec3 v)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec3_writefast(v, f.v);
-	return (rjd_math_float2){ .x = f.x, .y = f.y };
-}
-static inline rjd_math_float3 rjd_math_vec3_to_float3(rjd_math_vec3 v)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec3_writefast(v, f.v);
-	return (rjd_math_float3){ .x = f.x, .y = f.y, .z = f.z };
-}
-static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v, float w)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec3_writefast(v, f.v);
-	f.w = w;
-	return f;
-}
-
-static inline rjd_math_float2 rjd_math_vec4_to_float2(rjd_math_vec4 v)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec4_write(v, f.v);
-	return (rjd_math_float2){ .x = f.x, .y = f.y };
-}
-static inline rjd_math_float3 rjd_math_vec4_to_float3(rjd_math_vec4 v)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec4_write(v, f.v);
-	return (rjd_math_float3){ .x = f.x, .y = f.y, .z = f.z };
-}
-static inline rjd_math_float4 rjd_math_vec4_to_float4(rjd_math_vec4 v)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec4_write(v, f.v);
-	return f;
-}
-
-static inline rjd_math_float16 rjd_math_mat4_to_float16(rjd_math_mat4 m)
-{
-	RJD_FORCE_ALIGN(rjd_math_float16, 16) f;
-	rjd_math_mat4_write_colmajor(m, f.v);
-	return f;
 }
 
 // vec3 <-> vec4 conversion helpers
@@ -2034,12 +1904,29 @@ static inline rjd_math_vec4 rjd_math_vec4_normalize(rjd_math_vec4 v) {
 	rjd_math_vec4 l = rjd_math_vec4_splat(length);
 	return rjd_math_vec4_div(v, l);
 }
-static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s) {
-	rjd_math_vec4 scales = rjd_math_vec4_splat(s);
-	return rjd_math_vec4_mul(v, scales);
+static inline rjd_math_vec4 rjd_math_vec4_abs(rjd_math_vec4 v) {
+	__m128 signbits = _mm_set1_ps(-0.0f);
+	v.v = _mm_andnot_ps(signbits, v.v); // Remove the sign bit
+	return v;
 }
 static inline rjd_math_vec4 rjd_math_vec4_neg(rjd_math_vec4 v) {
 	return rjd_math_vec4_scale(v, -1);
+}
+static inline rjd_math_vec4 rjd_math_vec4_floor(rjd_math_vec4 v) {
+	v.v = _mm_floor_ps(v.v);
+	return v;
+}
+static inline rjd_math_vec4 rjd_math_vec4_ceil(rjd_math_vec4 v) {
+	v.v = _mm_ceil_ps(v.v);
+	return v;
+}
+static inline rjd_math_vec4 rjd_math_vec4_round(rjd_math_vec4 v) {
+	v.v = _mm_round_ps(v.v, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+	return v;
+}
+static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s) {
+	rjd_math_vec4 scales = rjd_math_vec4_splat(s);
+	return rjd_math_vec4_mul(v, scales);
 }
 static inline rjd_math_vec4 rjd_math_vec4_add(rjd_math_vec4 a, rjd_math_vec4 b) {
 	a.v = _mm_add_ps(a.v, b.v);
@@ -2160,11 +2047,23 @@ static inline float rjd_math_vec3_hmax(rjd_math_vec3 v) {
 static inline rjd_math_vec3 rjd_math_vec3_normalize(rjd_math_vec3 v) {
 	return rjd_math_vec4to3(rjd_math_vec4_normalize(rjd_math_vec3to4(v)));
 }
-static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s) {
-	return rjd_math_vec4to3(rjd_math_vec4_scale(rjd_math_vec3to4(v), s));
+static inline rjd_math_vec3 rjd_math_vec3_abs(rjd_math_vec3 v) {
+	return rjd_math_vec4to3(rjd_math_vec4_abs(rjd_math_vec3to4(v)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_neg(rjd_math_vec3 v) {
 	return rjd_math_vec4to3(rjd_math_vec4_neg(rjd_math_vec3to4(v)));
+}
+static inline rjd_math_vec3 rjd_math_vec3_floor(rjd_math_vec3 v) {
+	return rjd_math_vec4to3(rjd_math_vec4_floor(rjd_math_vec3to4(v)));
+}
+static inline rjd_math_vec3 rjd_math_vec3_ceil(rjd_math_vec3 v) {
+	return rjd_math_vec4to3(rjd_math_vec4_ceil(rjd_math_vec3to4(v)));
+}
+static inline rjd_math_vec3 rjd_math_vec3_round(rjd_math_vec3 v) {
+	return rjd_math_vec4to3(rjd_math_vec4_abs(rjd_math_vec3to4(v)));
+}
+static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s) {
+	return rjd_math_vec4to3(rjd_math_vec4_scale(rjd_math_vec3to4(v), s));
 }
 static inline rjd_math_vec3 rjd_math_vec3_add(rjd_math_vec3 a, rjd_math_vec3 b) {
 	return rjd_math_vec4to3(rjd_math_vec4_add(rjd_math_vec3to4(a), rjd_math_vec3to4(b)));
@@ -2207,7 +2106,7 @@ static inline bool rjd_math_vec3_ge(rjd_math_vec3 a, rjd_math_vec3 b) {
 	return (_mm_movemask_ps(_mm_cmpge_ps(a.v, b.v)) & 7) == 7;
 }
 static inline float* rjd_math_vec3_write(rjd_math_vec3 v, float* out) {
-	RJD_FORCE_ALIGN(float, 16) tmp[4];
+	RJD_FORCE_ALIGN(16, float) tmp[4];
 	_mm_stream_ps(tmp, v.v);
 	memcpy(out, tmp, sizeof(float) * 3);
 	return out + 3;
@@ -7835,29 +7734,7 @@ enum rjd_gfx_camera_mode
 struct rjd_gfx_camera
 {
 	enum rjd_gfx_camera_mode mode;
-	rjd_math_float3 pos;
-};
-
-struct rjd_gfx_quad_uv
-{
-	union
-	{
-		struct
-		{
-			struct {
-				rjd_math_float2 righttop;
-				rjd_math_float2 lefttop;
-				rjd_math_float2 leftbot;
-			} tri1;
-
-			struct {
-				rjd_math_float2 leftbot;
-				rjd_math_float2 rightbot;
-				rjd_math_float2 righttop;
-			} tri2;
-		};
-		rjd_math_float2 v[6];
-	};
+	rjd_math_vec3 pos;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -8295,7 +8172,7 @@ const static struct rjd_logchannel logchannel_error = {
 
 struct rjd_gfx_camera rjd_gfx_camera_init(enum rjd_gfx_camera_mode mode)
 {
-	struct rjd_gfx_camera cam = { .pos = rjd_math_float3_xyz(0,0,0), .mode = mode };
+	struct rjd_gfx_camera cam = { .pos = rjd_math_vec3_xyz(0,0,0), .mode = mode };
 	return cam;
 }
 
@@ -8303,9 +8180,9 @@ rjd_math_mat4 rjd_gfx_camera_lookat_ortho_righthanded(const struct rjd_gfx_camer
 {
 	RJD_ASSERT(camera);
 
-	float x = floorf(camera->pos.x);
-	float y = floorf(camera->pos.y);
-	float z = floorf(camera->pos.z);
+	float x = floorf(rjd_math_vec3_x(camera->pos));
+	float y = floorf(rjd_math_vec3_y(camera->pos));
+	float z = floorf(rjd_math_vec3_z(camera->pos));
 
 	rjd_math_vec3 pos = rjd_math_vec3_xyz(x,y,z);
 

@@ -7,7 +7,8 @@ includes = [
     "<string.h>",
     "<stdarg.h>",
     "<xmmintrin.h> // SSE2",
-    "<pmmintrin.h> // SSE3"
+    "<pmmintrin.h> // SSE3",
+    "<smmintrin.h> // SSE4",
 ]
 
 includes_impl = [

@@ -9,6 +9,7 @@
 #include <stdarg.h>
 #include <xmmintrin.h> // SSE2
 #include <pmmintrin.h> // SSE3
+#include <smmintrin.h> // SSE4
 #include <stdlib.h>
 #include <stdio.h>
 

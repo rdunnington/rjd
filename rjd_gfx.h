@@ -58,29 +58,7 @@ enum rjd_gfx_camera_mode
 struct rjd_gfx_camera
 {
 	enum rjd_gfx_camera_mode mode;
-	rjd_math_float3 pos;
-};
-
-struct rjd_gfx_quad_uv
-{
-	union
-	{
-		struct
-		{
-			struct {
-				rjd_math_float2 righttop;
-				rjd_math_float2 lefttop;
-				rjd_math_float2 leftbot;
-			} tri1;
-
-			struct {
-				rjd_math_float2 leftbot;
-				rjd_math_float2 rightbot;
-				rjd_math_float2 righttop;
-			} tri2;
-		};
-		rjd_math_float2 v[6];
-	};
+	rjd_math_vec3 pos;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -518,7 +496,7 @@ const static struct rjd_logchannel logchannel_error = {
 
 struct rjd_gfx_camera rjd_gfx_camera_init(enum rjd_gfx_camera_mode mode)
 {
-	struct rjd_gfx_camera cam = { .pos = rjd_math_float3_xyz(0,0,0), .mode = mode };
+	struct rjd_gfx_camera cam = { .pos = rjd_math_vec3_xyz(0,0,0), .mode = mode };
 	return cam;
 }
 
@@ -526,9 +504,9 @@ rjd_math_mat4 rjd_gfx_camera_lookat_ortho_righthanded(const struct rjd_gfx_camer
 {
 	RJD_ASSERT(camera);
 
-	float x = floorf(camera->pos.x);
-	float y = floorf(camera->pos.y);
-	float z = floorf(camera->pos.z);
+	float x = floorf(rjd_math_vec3_x(camera->pos));
+	float y = floorf(rjd_math_vec3_y(camera->pos));
+	float z = floorf(rjd_math_vec3_z(camera->pos));
 
 	rjd_math_vec3 pos = rjd_math_vec3_xyz(x,y,z);
 

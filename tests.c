@@ -887,39 +887,6 @@ void expect_vec3(rjd_math_vec3 expected, rjd_math_vec3 actual)
 	}
 }
 
-void expect_float2(rjd_math_float2 expected, rjd_math_float2 actual)
-{
-	if (!rjd_math_isequalf(expected.x, actual.x) ||
-		!rjd_math_isequalf(expected.y, actual.y))
-	{
-		RJD_ASSERTFAIL("Expected (%.2f, %.2f), but got: (%.2f, %.2f)", 
-			expected.x, expected.y, actual.x, actual.y);
-	}
-}
-
-void expect_float3(rjd_math_float3 expected, rjd_math_float3 actual)
-{
-	if (!rjd_math_isequalf(expected.x, actual.x) ||
-		!rjd_math_isequalf(expected.y, actual.y) ||
-		!rjd_math_isequalf(expected.z, actual.z))
-	{
-		RJD_ASSERTFAIL("Expected (%.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f)", 
-			expected.x, expected.y, expected.z, actual.x, actual.y, actual.z);
-	}
-}
-
-void expect_float4(rjd_math_float4 expected, rjd_math_float4 actual)
-{
-	if (!rjd_math_isequalf(expected.x, actual.x) ||
-		!rjd_math_isequalf(expected.y, actual.y) ||
-		!rjd_math_isequalf(expected.z, actual.z) ||
-		!rjd_math_isequalf(expected.w, actual.w))
-	{
-		RJD_ASSERTFAIL("Expected (%.2f, %.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f, %.2f)", 
-			expected.x, expected.y, expected.z, expected.w, actual.x, actual.y, actual.z, actual.w);
-	}
-}
-
 void test_math(void)
 {
 	// helper functions
@@ -968,27 +935,47 @@ void test_math(void)
 	expect_int32(2,		rjd_math_max32(2, 1));
 	expect_int32(1100,	rjd_math_maxu32(10, 1100));
 
-	// float <-> vec translations
+	// vec and matrix alignment
 	{
-		rjd_math_float2 f2 = rjd_math_float2_xy(78, 99);
-		rjd_math_float3 f3 = rjd_math_float3_xyz(12, 32, 11);
-		rjd_math_float4 f4 = rjd_math_float4_xyzw(60, 56, 77, 28);
+		char a1;
+		rjd_math_vec3 v1 = rjd_math_vec3_xyz(1,2,3);
+		char a2;
+		rjd_math_vec4 v2 = rjd_math_vec4_xyzw(1,2,3,4);
+		char a3, a4;
+		rjd_math_mat4 m1 = rjd_math_mat4_identity();;
 
-		expect_vec3(rjd_math_vec3_xyz(78, 99, 4), rjd_math_float2_to_vec3(f2, 4));
-		expect_vec3(rjd_math_vec3_xyz(12, 32, 11), rjd_math_float3_to_vec3(f3));
-		expect_vec3(rjd_math_vec3_xyz(60, 56, 77), rjd_math_float4_to_vec3(f4));
-		
-		expect_vec4(rjd_math_vec4_xyzw(78, 99, 55, 44), rjd_math_float2_to_vec4(f2, 55, 44));
-		expect_vec4(rjd_math_vec4_xyzw(12, 32, 11, 55), rjd_math_float3_to_vec4(f3, 55));
-		expect_vec4(rjd_math_vec4_xyzw(60, 56, 77, 28), rjd_math_float4_to_vec4(f4));
-		
-		expect_float2(f2, rjd_math_vec3_to_float2(rjd_math_vec3_xyz(78, 99, 23)));
-		expect_float3(f3, rjd_math_vec3_to_float3(rjd_math_vec3_xyz(12, 32, 11)));
-		expect_float4(f4, rjd_math_vec3_to_float4(rjd_math_vec3_xyz(60, 56, 77), 28));
-		
-		expect_float2(f2, rjd_math_vec4_to_float2(rjd_math_vec4_xyzw(78, 99, 23, 87)));
-		expect_float3(f3, rjd_math_vec4_to_float3(rjd_math_vec4_xyzw(12, 32, 11, 87)));
-		expect_float4(f4, rjd_math_vec4_to_float4(rjd_math_vec4_xyzw(60, 56, 77, 28)));
+		expect_uint32(0, (uint32_t)(&v1) & 0xF);
+		expect_uint32(0, (uint32_t)(&v2) & 0xF);
+		expect_uint32(0, (uint32_t)(&m1) & 0xF);
+
+		RJD_UNUSED_PARAM(a1);
+		RJD_UNUSED_PARAM(a2);
+		RJD_UNUSED_PARAM(a3);
+		RJD_UNUSED_PARAM(a4);
+
+		float* f1 = (float*)&v1;
+		expect_float(1, f1[0]);
+		expect_float(2, f1[1]);
+		expect_float(3, f1[2]);
+
+		f1[0] = 10;
+		f1[1] = 20;
+		f1[2] = 30;
+		expect_float(10, f1[0]);
+		expect_float(20, f1[1]);
+		expect_float(30, f1[2]);
+
+		const float* f2 = (float*)&v2;
+		expect_float(1, f2[0]);
+		expect_float(2, f2[1]);
+		expect_float(3, f2[2]);
+		expect_float(4, f2[3]);
+
+		const float* f3 = (float*)&m1;
+		expect_float(1, f3[0]); expect_float(0, f3[1]); expect_float(0, f3[2]); expect_float(0, f3[3]);
+		expect_float(0, f3[4]); expect_float(1, f3[5]); expect_float(0, f3[6]); expect_float(0, f3[7]);
+		expect_float(0, f3[8]); expect_float(0, f3[9]); expect_float(1, f3[10]); expect_float(0, f3[11]);
+		expect_float(0, f3[12]); expect_float(0, f3[13]); expect_float(0, f3[14]); expect_float(1, f3[15]);
 	}
 
 	// vec4
@@ -1012,6 +999,13 @@ void test_math(void)
 	expect_float(4, rjd_math_vec4_length(rjd_math_vec4_xyzw(4,0,0,0)));
 	expect_float(5, rjd_math_vec4_length(rjd_math_vec4_xyzw(3,0,0,4)));
 	expect_vec4(rjd_math_vec4_xyzw(1,0,0,0), rjd_math_vec4_normalize(rjd_math_vec4_xyzw(7368,0,0,0)));
+	expect_vec4(rjd_math_vec4_xyzw(1,1,0,FLT_MAX), rjd_math_vec4_abs(rjd_math_vec4_xyzw(1, -1, -0, -FLT_MAX)));
+	expect_vec4(rjd_math_vec4_xyzw(-1,1,-0,FLT_MAX), rjd_math_vec4_neg(rjd_math_vec4_xyzw(1, -1, 0, -FLT_MAX)));
+	expect_vec4(rjd_math_vec4_xyzw(0,0,0,-1), rjd_math_vec4_floor(rjd_math_vec4_xyzw(0, .5, .99, -0.1)));
+	expect_vec4(rjd_math_vec4_xyzw(0,1,1,-.0), rjd_math_vec4_ceil(rjd_math_vec4_xyzw(0, .5, .01, -0.9)));
+	expect_vec4(rjd_math_vec4_xyzw(0,0,0,1), rjd_math_vec4_round(rjd_math_vec4_xyzw(0, .1, .5, .9)));
+	expect_vec4(rjd_math_vec4_xyzw(1,0,0,-1), rjd_math_vec4_round(rjd_math_vec4_xyzw(1, -.1, -.5, -.9)));
+	expect_vec4(rjd_math_vec4_xyzw(-1,-2,2,0), rjd_math_vec4_round(rjd_math_vec4_xyzw(-1, -1.5, 1.5, 0)));
 	expect_vec4(rjd_math_vec4_xyzw(26, 60, 44, 6), rjd_math_vec4_scale(rjd_math_vec4_xyzw(13, 30, 22, 3), 2));
 	expect_vec4(rjd_math_vec4_xyzw(3,3,3,3), rjd_math_vec4_add(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(2,2,2,2)));
 	expect_vec4(rjd_math_vec4_xyzw(-1,-1,-1,-1), rjd_math_vec4_sub(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(2,2,2,2)));
@@ -1020,6 +1014,7 @@ void test_math(void)
 	expect_vec4(rjd_math_vec4_xyzw(23,45,21,5), rjd_math_vec4_min(rjd_math_vec4_xyzw(23,45,72,5), rjd_math_vec4_xyzw(43,75,21,6)));
 	expect_vec4(rjd_math_vec4_xyzw(43,75,72,6), rjd_math_vec4_max(rjd_math_vec4_xyzw(23,45,72,5), rjd_math_vec4_xyzw(43,75,21,6)));
 	expect_vec4(rjd_math_vec4_xyzw(1,0,0,0), rjd_math_vec4_project(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(1,0,0,0)));
+	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5));
 	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5));
 
 	// vec3
@@ -1118,7 +1113,7 @@ void test_geo()
 		expect_false(rjd_geo_point_box(p4, b4));
 	}
 
-	// point-rjd_geo_point_rect
+	// point-circle
 	{
 		rjd_math_vec3 p1 = rjd_math_vec3_xyz(0,0,0);
 		rjd_math_vec3 p2 = rjd_math_vec3_xyz(5,1,0);
@@ -1174,7 +1169,7 @@ void test_geo()
 		expect_false(rjd_geo_point_sphere(p4, s3));
 	}
 
-	// rjd_geo_point_rect-rjd_geo_point_rect
+	// circle-circle
 	{
 		rjd_geo_circle c1 = rjd_geo_circle_xyr(0,0,1);
 		rjd_geo_circle c2 = rjd_geo_circle_xyr(-2,-1,2);
@@ -1202,7 +1197,7 @@ void test_geo()
 		expect_true(rjd_geo_circle_circle(c4, c4));
 	}
 
-	// rjd_geo_point_rect-rect
+	// circle-rect
 	{
 		rjd_geo_circle c1 = rjd_geo_circle_xyr(0,0,1);
 		rjd_geo_circle c2 = rjd_geo_circle_xyr(2,1,.5);
