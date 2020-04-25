@@ -46,22 +46,6 @@ struct rjd_gfx_viewport // TODO figure out if this should have a start x,y pair
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// render data
-
-enum rjd_gfx_camera_mode
-{
-	RJD_GFX_CAMERA_MODE_ORTHOGRAPHIC,
-	//RJD_GFX_CAMERA_MODE_PERSPECTIVE, // TODO
-	RJD_GFX_CAMERA_MODE_COUNT,
-};
-
-struct rjd_gfx_camera
-{
-	enum rjd_gfx_camera_mode mode;
-	rjd_math_vec3 pos;
-};
-
-////////////////////////////////////////////////////////////////////////////////
 // render configuration
 
 enum rjd_gfx_stencilmode
@@ -121,8 +105,8 @@ struct rjd_gfx_format_value
 
 enum rjd_gfx_texture_access
 {
-	RJD_GFX_TEXTURE_ACCESS_CPU_NONE_GPU_READWRITE,
 	RJD_GFX_TEXTURE_ACCESS_CPU_WRITE_GPU_READWRITE,
+	RJD_GFX_TEXTURE_ACCESS_CPU_NONE_GPU_READWRITE,
 	RJD_GFX_TEXTURE_ACCESS_COUNT,
 };
 
@@ -395,11 +379,6 @@ struct rjd_gfx_context
 // backend
 static inline int32_t rjd_gfx_backend_ismetal(void);
 
-// camera
-struct rjd_gfx_camera rjd_gfx_camera_init(enum rjd_gfx_camera_mode mode);
-rjd_math_mat4 rjd_gfx_camera_lookat_ortho_righthanded(const struct rjd_gfx_camera* camera);
-//rjd_math_mat4 rjd_gfx_camera_lookat_ortho_lefthanded(const struct rjd_gfx_camera* camera); // TODO
-
 // context
 // NOTE: all functions that deal with a context are not threadsafe for simplicity. If you are making a multithreaded
 // renderer, you must have a strategy for synchronizing resource creation and drawing with the context.
@@ -490,30 +469,6 @@ const static struct rjd_logchannel logchannel_error = {
 
 #define RJD_GFX_LOG(...) RJD_LOG_CHANNEL(&logchannel_default, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
 #define RJD_GFX_LOG_ERROR(...) RJD_LOG_CHANNEL(&logchannel_error, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
-
-////////////////////////////////////////////////////////////////////////////////
-// platform-independent camera
-
-struct rjd_gfx_camera rjd_gfx_camera_init(enum rjd_gfx_camera_mode mode)
-{
-	struct rjd_gfx_camera cam = { .pos = rjd_math_vec3_xyz(0,0,0), .mode = mode };
-	return cam;
-}
-
-rjd_math_mat4 rjd_gfx_camera_lookat_ortho_righthanded(const struct rjd_gfx_camera* camera)
-{
-	RJD_ASSERT(camera);
-
-	float x = floorf(rjd_math_vec3_x(camera->pos));
-	float y = floorf(rjd_math_vec3_y(camera->pos));
-	float z = floorf(rjd_math_vec3_z(camera->pos));
-
-	rjd_math_vec3 pos = rjd_math_vec3_xyz(x,y,z);
-
-	const rjd_math_vec3 look = rjd_math_vec3_xyz(x,y,z - 1.0f);
-	const rjd_math_vec3 up = rjd_math_vec3_xyz(0.0f, 1.0f, 0.0f);
-	return rjd_math_mat4_lookat_righthanded(pos, look, up);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // platform-independent format
