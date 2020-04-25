@@ -202,7 +202,7 @@ static inline rjd_math_vec3 rjd_math_mat4_mulv3(rjd_math_mat4 m, rjd_math_vec3 v
 static inline rjd_math_vec4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v);
 static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m);
 static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m);
-static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float top, float bot, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float right, float top, float bot, float near, float far);
 static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far);
 static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near, float far);
 static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far);
@@ -684,10 +684,9 @@ static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) 
 	return m;
 }
 static inline rjd_math_mat4 rjd_math_mat4_mul(rjd_math_mat4 a, rjd_math_mat4 b) {
-	rjd_math_mat4 t = rjd_math_mat4_transpose(a);
     rjd_math_mat4 m = {0};
 	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
-		m.m[i] = rjd_math_mat4_mulv4(t, b.m[i]);
+		m.m[i] = rjd_math_mat4_mulv4(a, b.m[i]);
 	}
 	return m;
 }
@@ -879,14 +878,13 @@ static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m) {
 	_MM_TRANSPOSE4_PS(m.m[0].v, m.m[1].v, m.m[2].v, m.m[3].v);
 	return m;
 }
-static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float top, float bot, float near, float far) {
-	RJD_UNUSED_PARAM(left);
-	RJD_UNUSED_PARAM(right);
-	RJD_UNUSED_PARAM(top);
-	RJD_UNUSED_PARAM(bot);
-	RJD_UNUSED_PARAM(near);
-	RJD_UNUSED_PARAM(far);
-	return rjd_math_mat4_identity();
+static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float right, float top, float bot, float near, float far) {
+	rjd_math_mat4 m = {0};
+	m.m[0] = rjd_math_vec4_xyzw(2*near/(right-left),		0,						0,						0);
+	m.m[1] = rjd_math_vec4_xyzw(0,							2*near/(top-bot),		0,						0);
+	m.m[2] = rjd_math_vec4_xyzw((right+left)/(right-left),	(top+bot)/(top-bot),	-(far+near)/(far-near), -1);
+	m.m[3] = rjd_math_vec4_xyzw(0,							0,						-2*far*near/(far-near),	0);
+	return m;;
 }
 static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far) {
 	rjd_math_mat4 m;
@@ -907,12 +905,12 @@ static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float rig
 	return rjd_math_mat4_identity();
 }
 static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far) {
-	RJD_ASSERTFAIL("not implemented");
-	RJD_UNUSED_PARAM(y_fov);
-	RJD_UNUSED_PARAM(aspect);
-	RJD_UNUSED_PARAM(near);
-	RJD_UNUSED_PARAM(far);
-	return rjd_math_mat4_identity();
+    float scale = tanf(y_fov * 0.5 * RJD_MATH_PI / 180.0f) * near; 
+    float right = aspect * scale;
+	float left = -right; 
+	float top = scale;
+	float bot = -top;
+	return rjd_math_mat4_frustum_righthanded(left, right, top, bot, near, far);
 }
 static inline rjd_math_mat4 rjd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near, float far) {
 	RJD_ASSERTFAIL("not implemented");
