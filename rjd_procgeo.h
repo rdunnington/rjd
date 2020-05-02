@@ -32,7 +32,7 @@ float* rjd_procgeo_sphere(float radius, uint32_t tesselation, float* out, size_t
 
 const float RJD_PROCGEO_PI = 3.141592653589793238462643f;
 const uint32_t RJD_PROCGEO_MIN_TESSELATION_CIRCLE = 3;
-const uint32_t RJD_PROCGEO_MIN_TESSELATION_SPHERE = 4;
+const uint32_t RJD_PROCGEO_MIN_TESSELATION_SPHERE = 3;
 
 uint32_t rjd_procgeo_rect_calc_num_verts() {
 	// 3 verts per triangle, 2 triangles
@@ -62,11 +62,10 @@ uint32_t rjd_procgeo_cylinder_calc_num_verts(uint32_t tesselation)
 
 uint32_t rjd_procgeo_sphere_calc_num_verts(uint32_t tesselation) {
 	uint32_t final_tesselation = RJD_PROCGEO_MIN_TESSELATION_SPHERE + tesselation;
+	uint32_t tri_verts = 3;
+	uint32_t quad_verts = tri_verts * 2;
 
-	uint32_t cone = 3 * final_tesselation;
-	uint32_t middle = 3 * 2 * final_tesselation * (final_tesselation - 4);
-
-	return cone + middle + cone;
+	return quad_verts * final_tesselation * final_tesselation - tri_verts * final_tesselation * 2;
 }
 
 float* rjd_procgeo_rect(float width, float height, float* out, size_t length)
@@ -89,7 +88,7 @@ float* rjd_procgeo_rect(float width, float height, float* out, size_t length)
 	out[i++] =  x; out[i++] = -y; out[i++] = 0.0f;
 	out[i++] =  x; out[i++] =  y; out[i++] = 0.0f;
 
-	return out + num_verts;
+	return out + num_verts * 3;
 }
 
 float* rjd_procgeo_circle(float radius, uint32_t tesselation, float* out, size_t length)
@@ -116,7 +115,7 @@ float* rjd_procgeo_circle(float radius, uint32_t tesselation, float* out, size_t
 		out[i + 8] = 0;
 	}
 
-	return out + num_verts;
+	return out + num_verts * 3;
 }
 
 float* rjd_procgeo_box(float width, float height, float depth, float* out, size_t length)
@@ -180,7 +179,7 @@ float* rjd_procgeo_box(float width, float height, float depth, float* out, size_
 	out[i++] =  x; out[i++] = -y; out[i++] = -z; 
 	out[i++] =  x; out[i++] = -y; out[i++] =  z; 
 
-	return out;
+	return out + num_verts * 3;
 }
 
 float* rjd_procgeo_cone(float height, float radius, uint32_t tesselation, float* out, size_t length)
@@ -228,7 +227,7 @@ float* rjd_procgeo_cone(float height, float radius, uint32_t tesselation, float*
 		out[top_index++] = sin_1;
 	}
 
-	return out + num_verts;
+	return out + num_verts * 3;
 }
 
 float* rjd_procgeo_cylinder(float height, float radius, uint32_t tesselation, float* out, size_t length)
@@ -278,8 +277,6 @@ float* rjd_procgeo_cylinder(float height, float radius, uint32_t tesselation, fl
 		out[top_index++] = y;
 		out[top_index++] = sin_1;
 
-		RJD_ASSERT(top_index <= length);
-
 		uint32_t side_index = (v + v + side_begin_offset) * 3;
 		out[side_index++] = cos_1; out[side_index++] = -y; out[side_index++] = sin_1;
 		out[side_index++] = cos_1; out[side_index++] =  y; out[side_index++] = sin_1;
@@ -288,54 +285,79 @@ float* rjd_procgeo_cylinder(float height, float radius, uint32_t tesselation, fl
 		out[side_index++] = cos_2; out[side_index++] =  y; out[side_index++] = sin_2;
 		out[side_index++] = cos_2; out[side_index++] = -y; out[side_index++] = sin_2;
 		out[side_index++] = cos_1; out[side_index++] = -y; out[side_index++] = sin_1;
-
-		RJD_ASSERT(side_index <= length);
 	}
 
-	return out + num_verts;
-
+	return out + num_verts * 3;
 }
-
 
 float* rjd_procgeo_sphere(float radius, uint32_t tesselation, float* out, size_t length)
 {
-	RJD_UNUSED_PARAM(radius);
-	RJD_UNUSED_PARAM(tesselation);
-	RJD_UNUSED_PARAM(length);
-
 	const uint32_t num_verts = rjd_procgeo_sphere_calc_num_verts(tesselation);
 	if (length < num_verts * 3) {
 		return NULL;
 	}
+	
+	const float pi = RJD_PROCGEO_PI;
 
+	const uint32_t final_tesselation = tesselation + RJD_PROCGEO_MIN_TESSELATION_SPHERE;
 
+	uint32_t i = 0;
 
+	for (uint32_t y_arc = 0; y_arc < final_tesselation; ++y_arc) {
 
+		float y_arc1 = (float)y_arc / final_tesselation;
+		float y_arc2 = (float)(y_arc + 1) / final_tesselation;
 
-	return out;
-//	const uint32_t num_floats = rjd_procgeo_sphere_calc_num_floats();
-//	if (length < ) {
-//		return NULL;
-//	}
-//
-//	uint32_t final_tesselation = (tesselation < 4) ? 4 : tesselation;
-//	
-//	const float r = radius;
-//	const float arc_radians = RJD_PROCGEO_PI * 2 / tesselation;
-//
-//	// top cone
-//	
-//	
-//	// middle
-//	
-//	// bot cone
-//
-//	for (uint32_t y_band = 0; y_band < final_tesselation; ++y_band) {
-//		for (uint32_t x_band = 0; x_band < final_tesselation; ++y_band) {
-//		}
-//	}
-//	
-//	return out;
+		float cos_2pi_y_arc1 = cos(2 * pi * y_arc1);
+		float cos_2pi_y_arc2 = cos(2 * pi * y_arc2);
+
+		float sin_2pi_y_arc1 = sin(2 * pi * y_arc1);
+		float sin_2pi_y_arc2 = sin(2 * pi * y_arc2);
+
+		for (uint32_t xz_arc = 0; xz_arc < final_tesselation; ++xz_arc) {
+
+			float xz_arc1 = (float)xz_arc / final_tesselation;
+			float xz_arc2 = (float)(xz_arc + 1) / final_tesselation;
+
+			float sin_pi_xz_arc1 = sin(pi * xz_arc1);
+			float cos_pi_xz_arc1 = cos(pi * xz_arc1);
+
+			float sin_pi_xz_arc2 = sin(pi * xz_arc2);
+			float cos_pi_xz_arc2 = cos(pi * xz_arc2);
+
+			float x1 = sin_pi_xz_arc1 * cos_2pi_y_arc1 * radius;
+			float y1 = cos_pi_xz_arc1 * radius;
+			float z1 = sin_pi_xz_arc1 * sin_2pi_y_arc1 * radius;
+
+			float x2 = sin_pi_xz_arc2 * cos_2pi_y_arc1 * radius;
+			float y2 = cos_pi_xz_arc2 * radius;
+			float z2 = sin_pi_xz_arc2 * sin_2pi_y_arc1 * radius;
+
+			float x3 = sin_pi_xz_arc1 * cos_2pi_y_arc2 * radius;
+			float y3 = cos_pi_xz_arc1 * radius;
+			float z3 = sin_pi_xz_arc1 * sin_2pi_y_arc2 * radius;
+
+			float x4 = sin_pi_xz_arc2 * cos_2pi_y_arc2 * radius;
+			float y4 = cos_pi_xz_arc2 * radius;
+			float z4 = sin_pi_xz_arc2 * sin_2pi_y_arc2 * radius;
+
+			if (xz_arc > 0)
+			{
+				out[i++] = x1; out[i++] = y1; out[i++] = z1;
+				out[i++] = x3; out[i++] = y3; out[i++] = z3;
+				out[i++] = x2; out[i++] = y2; out[i++] = z2;
+			}
+
+			if (xz_arc < final_tesselation - 1)
+			{
+				out[i++] = x2; out[i++] = y2; out[i++] = z2;
+				out[i++] = x3; out[i++] = y3; out[i++] = z3;
+				out[i++] = x4; out[i++] = y4; out[i++] = z4;
+			}
+		}
+	}
+
+	return out + num_verts * 3;
 }
 
 #endif
