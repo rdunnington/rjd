@@ -27,6 +27,7 @@ files = [
     "rjd_array.h",
     "rjd_math.h",
     "rjd_geo.h",
+    "rjd_procgeo.h",
     "rjd_easing.h",
     "rjd_strbuf.h",
     "rjd_profiler.h",

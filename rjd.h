@@ -1743,7 +1743,7 @@ static inline rjd_math_vec3 rjd_math_mat4_mulv3(rjd_math_mat4 m, rjd_math_vec3 v
 static inline rjd_math_vec4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v);
 static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m);
 static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m);
-static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float top, float bot, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float right, float top, float bot, float near, float far);
 static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far);
 static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near, float far);
 static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far);
@@ -2225,10 +2225,9 @@ static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) 
 	return m;
 }
 static inline rjd_math_mat4 rjd_math_mat4_mul(rjd_math_mat4 a, rjd_math_mat4 b) {
-	rjd_math_mat4 t = rjd_math_mat4_transpose(a);
     rjd_math_mat4 m = {0};
 	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
-		m.m[i] = rjd_math_mat4_mulv4(t, b.m[i]);
+		m.m[i] = rjd_math_mat4_mulv4(a, b.m[i]);
 	}
 	return m;
 }
@@ -2420,14 +2419,13 @@ static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m) {
 	_MM_TRANSPOSE4_PS(m.m[0].v, m.m[1].v, m.m[2].v, m.m[3].v);
 	return m;
 }
-static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float top, float bot, float near, float far) {
-	RJD_UNUSED_PARAM(left);
-	RJD_UNUSED_PARAM(right);
-	RJD_UNUSED_PARAM(top);
-	RJD_UNUSED_PARAM(bot);
-	RJD_UNUSED_PARAM(near);
-	RJD_UNUSED_PARAM(far);
-	return rjd_math_mat4_identity();
+static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float right, float top, float bot, float near, float far) {
+	rjd_math_mat4 m = {0};
+	m.m[0] = rjd_math_vec4_xyzw(2*near/(right-left),		0,						0,						0);
+	m.m[1] = rjd_math_vec4_xyzw(0,							2*near/(top-bot),		0,						0);
+	m.m[2] = rjd_math_vec4_xyzw((right+left)/(right-left),	(top+bot)/(top-bot),	-(far+near)/(far-near), -1);
+	m.m[3] = rjd_math_vec4_xyzw(0,							0,						-2*far*near/(far-near),	0);
+	return m;;
 }
 static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far) {
 	rjd_math_mat4 m;
@@ -2448,12 +2446,12 @@ static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float rig
 	return rjd_math_mat4_identity();
 }
 static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far) {
-	RJD_ASSERTFAIL("not implemented");
-	RJD_UNUSED_PARAM(y_fov);
-	RJD_UNUSED_PARAM(aspect);
-	RJD_UNUSED_PARAM(near);
-	RJD_UNUSED_PARAM(far);
-	return rjd_math_mat4_identity();
+    float scale = tanf(y_fov * 0.5 * RJD_MATH_PI / 180.0f) * near; 
+    float right = aspect * scale;
+	float left = -right; 
+	float top = scale;
+	float bot = -top;
+	return rjd_math_mat4_frustum_righthanded(left, right, top, bot, near, far);
 }
 static inline rjd_math_mat4 rjd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near, float far) {
 	RJD_ASSERTFAIL("not implemented");
@@ -2701,6 +2699,375 @@ bool rjd_geo_ray_boxfast(rjd_math_vec3 ray_pos, rjd_math_vec3 ray_inv_dir, rjd_g
 }
 
 #endif // RJD_IMPL
+
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_procgeo.h
+////////////////////////////////////////////////////////////////////////////////
+
+#define RJD_PROCGEO_H 1
+
+// dependencies:
+// * math.h
+
+// Functions for generating procedural geometry:
+// * Generates triangles in normalized [0,1] space centered at 0,0. 
+// * All functions write 3 floats per vertex.
+// * Returns NULL if there isn't enough space in the float array to generate the geometry
+// * Returns the pointer to one-past the last element written
+// * Use *_calc_num_verts() functions to find how many floats you need
+// * Vertices are generated in clockwise winding order, assuming view is looking -Z
+
+uint32_t rjd_procgeo_rect_calc_num_verts();
+uint32_t rjd_procgeo_circle_calc_num_verts(uint32_t tesselation);
+uint32_t rjd_procgeo_box_calc_num_verts();
+uint32_t rjd_procgeo_cone_calc_num_verts(uint32_t tesselation);
+uint32_t rjd_procgeo_cylinder_calc_num_verts(uint32_t tesselation);
+uint32_t rjd_procgeo_sphere_calc_num_verts(uint32_t tesselation);
+
+float* rjd_procgeo_rect(float width, float height, float* out, size_t length);
+float* rjd_procgeo_circle(float radius, uint32_t tesselation, float* out, size_t length);
+float* rjd_procgeo_box(float width, float height, float depth, float* out, size_t length);
+float* rjd_procgeo_cone(float height, float radius, uint32_t tesselation, float* out, size_t length);
+float* rjd_procgeo_cylinder(float height, float radius, uint32_t tesselation, float* out, size_t length);
+float* rjd_procgeo_sphere(float radius, uint32_t tesselation, float* out, size_t length);
+
+////////////////////////////////////////////////////////////////////////////////
+// inline implementation
+
+#if RJD_IMPL
+
+const float RJD_PROCGEO_PI = 3.141592653589793238462643f;
+const uint32_t RJD_PROCGEO_MIN_TESSELATION_CIRCLE = 3;
+const uint32_t RJD_PROCGEO_MIN_TESSELATION_SPHERE = 3;
+
+uint32_t rjd_procgeo_rect_calc_num_verts() {
+	// 3 verts per triangle, 2 triangles
+	return 3 * 2;
+}
+
+uint32_t rjd_procgeo_circle_calc_num_verts(uint32_t tesselation) {
+	uint32_t final_tesselation = RJD_PROCGEO_MIN_TESSELATION_CIRCLE + tesselation;
+	return 3 * final_tesselation;
+}
+
+uint32_t rjd_procgeo_box_calc_num_verts() {
+	return 3 * 2 * 6;
+}
+
+uint32_t rjd_procgeo_cone_calc_num_verts(uint32_t tesselation) {
+	return 2 * rjd_procgeo_circle_calc_num_verts(tesselation);
+}
+
+uint32_t rjd_procgeo_cylinder_calc_num_verts(uint32_t tesselation)
+{
+	uint32_t circle_verts = rjd_procgeo_circle_calc_num_verts(tesselation);
+	uint32_t final_tesselation = RJD_PROCGEO_MIN_TESSELATION_CIRCLE + tesselation;
+	uint32_t quad_verts = 3 * 2 * final_tesselation;
+	return quad_verts + (circle_verts * 2);
+}
+
+uint32_t rjd_procgeo_sphere_calc_num_verts(uint32_t tesselation) {
+	uint32_t final_tesselation = RJD_PROCGEO_MIN_TESSELATION_SPHERE + tesselation;
+	uint32_t tri_verts = 3;
+	uint32_t quad_verts = tri_verts * 2;
+
+	return quad_verts * final_tesselation * final_tesselation - tri_verts * final_tesselation * 2;
+}
+
+float* rjd_procgeo_rect(float width, float height, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_rect_calc_num_verts();
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+
+	const float x = width / 2.0f;
+	const float y = height / 2.0f;
+
+	int32_t i = 0;
+
+	out[i++] = -x; out[i++] = -y; out[i++] = 0.0f;
+	out[i++] =  x; out[i++] =  y; out[i++] = 0.0f;
+	out[i++] = -x; out[i++] =  y; out[i++] = 0.0f;
+
+	out[i++] = -x; out[i++] = -y; out[i++] = 0.0f;
+	out[i++] =  x; out[i++] = -y; out[i++] = 0.0f;
+	out[i++] =  x; out[i++] =  y; out[i++] = 0.0f;
+
+	return out + num_verts * 3;
+}
+
+float* rjd_procgeo_circle(float radius, uint32_t tesselation, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_circle_calc_num_verts(tesselation);
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+
+	const uint32_t final_tesselation = tesselation + RJD_PROCGEO_MIN_TESSELATION_CIRCLE;
+	const float arc_radians = RJD_PROCGEO_PI * 2 / final_tesselation;
+
+	for (uint32_t i = 0, arc_segment = 0; i < num_verts * 3; i += 3 * 3, ++arc_segment) {
+		out[i + 0] = 0;
+		out[i + 1] = 0;
+		out[i + 2] = 0;
+		float p1_radians = arc_radians * arc_segment;
+		out[i + 3] = cos(p1_radians) * radius;
+		out[i + 4] = sin(p1_radians) * radius;
+		out[i + 5] = 0;
+		float p2_radians = arc_radians * (arc_segment + 1);
+		out[i + 6] = cos(p2_radians) * radius;
+		out[i + 7] = sin(p2_radians) * radius;
+		out[i + 8] = 0;
+	}
+
+	return out + num_verts * 3;
+}
+
+float* rjd_procgeo_box(float width, float height, float depth, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_box_calc_num_verts();
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+
+	const float x = width / 2;
+	const float y = height / 2;
+	const float z = depth / 2;
+
+	int i = 0;
+
+	// front
+	out[i++] = -x; out[i++] =  y; out[i++] =  z;
+	out[i++] = -x; out[i++] = -y; out[i++] =  z;
+	out[i++] =  x; out[i++] = -y; out[i++] =  z;
+	out[i++] = -x; out[i++] =  y; out[i++] =  z;
+	out[i++] =  x; out[i++] = -y; out[i++] =  z;
+	out[i++] =  x; out[i++] =  y; out[i++] =  z;
+
+	// back
+	out[i++] = -x; out[i++] =  y; out[i++] = -z;
+	out[i++] =  x; out[i++] = -y; out[i++] = -z;
+	out[i++] = -x; out[i++] = -y; out[i++] = -z;
+	out[i++] = -x; out[i++] =  y; out[i++] = -z;
+	out[i++] =  x; out[i++] =  y; out[i++] = -z;
+	out[i++] =  x; out[i++] = -y; out[i++] = -z;
+
+	// left
+	out[i++] = -x; out[i++] = -y; out[i++] = -z;
+	out[i++] = -x; out[i++] = -y; out[i++] =  z;
+	out[i++] = -x; out[i++] =  y; out[i++] =  z;
+	out[i++] = -x; out[i++] = -y; out[i++] = -z;
+	out[i++] = -x; out[i++] =  y; out[i++] =  z;
+	out[i++] = -x; out[i++] =  y; out[i++] = -z;
+
+	// right
+	out[i++] =  x; out[i++] = -y; out[i++] = -z; 
+	out[i++] =  x; out[i++] =  y; out[i++] = -z; 
+	out[i++] =  x; out[i++] =  y; out[i++] =  z; 
+	out[i++] =  x; out[i++] = -y; out[i++] = -z; 
+	out[i++] =  x; out[i++] =  y; out[i++] =  z; 
+	out[i++] =  x; out[i++] = -y; out[i++] =  z; 
+
+	// top
+	out[i++] =  x; out[i++] =  y; out[i++] = -z; 
+	out[i++] = -x; out[i++] =  y; out[i++] = -z; 
+	out[i++] = -x; out[i++] =  y; out[i++] =  z; 
+	out[i++] =  x; out[i++] =  y; out[i++] = -z; 
+	out[i++] = -x; out[i++] =  y; out[i++] =  z; 
+	out[i++] =  x; out[i++] =  y; out[i++] =  z; 
+
+	// bottom
+	out[i++] = -x; out[i++] = -y; out[i++] =  z; 
+	out[i++] = -x; out[i++] = -y; out[i++] = -z; 
+	out[i++] =  x; out[i++] = -y; out[i++] = -z; 
+	out[i++] = -x; out[i++] = -y; out[i++] =  z; 
+	out[i++] =  x; out[i++] = -y; out[i++] = -z; 
+	out[i++] =  x; out[i++] = -y; out[i++] =  z; 
+
+	return out + num_verts * 3;
+}
+
+float* rjd_procgeo_cone(float height, float radius, uint32_t tesselation, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_cone_calc_num_verts(tesselation);
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+
+	const uint32_t final_tesselation = tesselation + RJD_PROCGEO_MIN_TESSELATION_CIRCLE;
+	const float arc_radians = RJD_PROCGEO_PI * 2 / final_tesselation;
+
+	const uint32_t top_begin_offset = (num_verts / 2) * 3;
+	const float cone_y = height / 2;
+
+	for (uint32_t i = 0, arc_segment = 0; i < top_begin_offset; i += 3 * 3, ++arc_segment) {
+		float p1_radians = arc_radians * arc_segment;
+		float p2_radians = arc_radians * (arc_segment + 1);
+
+		float cos_1 = cos(p1_radians) * radius; 
+		float sin_1 = sin(p1_radians) * radius;
+		float cos_2 = cos(p2_radians) * radius; 
+		float sin_2 = sin(p2_radians) * radius;
+
+		uint32_t bot_index = i;
+		out[bot_index++] = 0;
+		out[bot_index++] = -cone_y;
+		out[bot_index++] = 0;
+		out[bot_index++] = cos_1;
+		out[bot_index++] = -cone_y;
+		out[bot_index++] = sin_1;
+		out[bot_index++] = cos_2;
+		out[bot_index++] = -cone_y;
+		out[bot_index++] = sin_2;
+
+		uint32_t top_index = i + top_begin_offset;
+		out[top_index++] = 0;
+		out[top_index++] = cone_y;
+		out[top_index++] = 0;
+		out[top_index++] = cos_2;
+		out[top_index++] = -cone_y;
+		out[top_index++] = sin_2;
+		out[top_index++] = cos_1;
+		out[top_index++] = -cone_y;
+		out[top_index++] = sin_1;
+	}
+
+	return out + num_verts * 3;
+}
+
+float* rjd_procgeo_cylinder(float height, float radius, uint32_t tesselation, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_cylinder_calc_num_verts(tesselation);
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+
+	const uint32_t final_tesselation = tesselation + RJD_PROCGEO_MIN_TESSELATION_CIRCLE;
+	const float arc_radians = RJD_PROCGEO_PI * 2 / final_tesselation;
+
+	const uint32_t top_begin_offset = rjd_procgeo_circle_calc_num_verts(tesselation);
+	const uint32_t side_begin_offset = top_begin_offset * 2;
+	const float y = height / 2;
+
+	for (uint32_t v = 0, arc_segment = 0; v < top_begin_offset; v += 3, ++arc_segment) {
+		float p1_radians = arc_radians * arc_segment;
+		float p2_radians = arc_radians * (arc_segment + 1);
+
+		float cos_1 = cos(p1_radians) * radius; 
+		float sin_1 = sin(p1_radians) * radius;
+		float cos_2 = cos(p2_radians) * radius; 
+		float sin_2 = sin(p2_radians) * radius;
+
+		uint32_t i = v * 3;
+
+		uint32_t bot_index = i;
+		out[bot_index++] = 0;
+		out[bot_index++] = -y;
+		out[bot_index++] = 0;
+		out[bot_index++] = cos_1;
+		out[bot_index++] = -y;
+		out[bot_index++] = sin_1;
+		out[bot_index++] = cos_2;
+		out[bot_index++] = -y;
+		out[bot_index++] = sin_2;
+
+		uint32_t top_index = (v + top_begin_offset) * 3;
+		out[top_index++] = 0;
+		out[top_index++] = y;
+		out[top_index++] = 0;
+		out[top_index++] = cos_2;
+		out[top_index++] = y;
+		out[top_index++] = sin_2;
+		out[top_index++] = cos_1;
+		out[top_index++] = y;
+		out[top_index++] = sin_1;
+
+		uint32_t side_index = (v + v + side_begin_offset) * 3;
+		out[side_index++] = cos_1; out[side_index++] = -y; out[side_index++] = sin_1;
+		out[side_index++] = cos_1; out[side_index++] =  y; out[side_index++] = sin_1;
+		out[side_index++] = cos_2; out[side_index++] =  y; out[side_index++] = sin_2;
+
+		out[side_index++] = cos_2; out[side_index++] =  y; out[side_index++] = sin_2;
+		out[side_index++] = cos_2; out[side_index++] = -y; out[side_index++] = sin_2;
+		out[side_index++] = cos_1; out[side_index++] = -y; out[side_index++] = sin_1;
+	}
+
+	return out + num_verts * 3;
+}
+
+float* rjd_procgeo_sphere(float radius, uint32_t tesselation, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_sphere_calc_num_verts(tesselation);
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+	
+	const float pi = RJD_PROCGEO_PI;
+
+	const uint32_t final_tesselation = tesselation + RJD_PROCGEO_MIN_TESSELATION_SPHERE;
+
+	uint32_t i = 0;
+
+	for (uint32_t y_arc = 0; y_arc < final_tesselation; ++y_arc) {
+
+		float y_arc1 = (float)y_arc / final_tesselation;
+		float y_arc2 = (float)(y_arc + 1) / final_tesselation;
+
+		float cos_2pi_y_arc1 = cos(2 * pi * y_arc1);
+		float cos_2pi_y_arc2 = cos(2 * pi * y_arc2);
+
+		float sin_2pi_y_arc1 = sin(2 * pi * y_arc1);
+		float sin_2pi_y_arc2 = sin(2 * pi * y_arc2);
+
+		for (uint32_t xz_arc = 0; xz_arc < final_tesselation; ++xz_arc) {
+
+			float xz_arc1 = (float)xz_arc / final_tesselation;
+			float xz_arc2 = (float)(xz_arc + 1) / final_tesselation;
+
+			float sin_pi_xz_arc1 = sin(pi * xz_arc1);
+			float cos_pi_xz_arc1 = cos(pi * xz_arc1);
+
+			float sin_pi_xz_arc2 = sin(pi * xz_arc2);
+			float cos_pi_xz_arc2 = cos(pi * xz_arc2);
+
+			float x1 = sin_pi_xz_arc1 * cos_2pi_y_arc1 * radius;
+			float y1 = cos_pi_xz_arc1 * radius;
+			float z1 = sin_pi_xz_arc1 * sin_2pi_y_arc1 * radius;
+
+			float x2 = sin_pi_xz_arc2 * cos_2pi_y_arc1 * radius;
+			float y2 = cos_pi_xz_arc2 * radius;
+			float z2 = sin_pi_xz_arc2 * sin_2pi_y_arc1 * radius;
+
+			float x3 = sin_pi_xz_arc1 * cos_2pi_y_arc2 * radius;
+			float y3 = cos_pi_xz_arc1 * radius;
+			float z3 = sin_pi_xz_arc1 * sin_2pi_y_arc2 * radius;
+
+			float x4 = sin_pi_xz_arc2 * cos_2pi_y_arc2 * radius;
+			float y4 = cos_pi_xz_arc2 * radius;
+			float z4 = sin_pi_xz_arc2 * sin_2pi_y_arc2 * radius;
+
+			if (xz_arc > 0)
+			{
+				out[i++] = x1; out[i++] = y1; out[i++] = z1;
+				out[i++] = x3; out[i++] = y3; out[i++] = z3;
+				out[i++] = x2; out[i++] = y2; out[i++] = z2;
+			}
+
+			if (xz_arc < final_tesselation - 1)
+			{
+				out[i++] = x2; out[i++] = y2; out[i++] = z2;
+				out[i++] = x3; out[i++] = y3; out[i++] = z3;
+				out[i++] = x4; out[i++] = y4; out[i++] = z4;
+			}
+		}
+	}
+
+	return out + num_verts * 3;
+}
+
+#endif
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -7722,22 +8089,6 @@ struct rjd_gfx_viewport // TODO figure out if this should have a start x,y pair
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// render data
-
-enum rjd_gfx_camera_mode
-{
-	RJD_GFX_CAMERA_MODE_ORTHOGRAPHIC,
-	//RJD_GFX_CAMERA_MODE_PERSPECTIVE, // TODO
-	RJD_GFX_CAMERA_MODE_COUNT,
-};
-
-struct rjd_gfx_camera
-{
-	enum rjd_gfx_camera_mode mode;
-	rjd_math_vec3 pos;
-};
-
-////////////////////////////////////////////////////////////////////////////////
 // render configuration
 
 enum rjd_gfx_stencilmode
@@ -7797,8 +8148,8 @@ struct rjd_gfx_format_value
 
 enum rjd_gfx_texture_access
 {
-	RJD_GFX_TEXTURE_ACCESS_CPU_NONE_GPU_READWRITE,
 	RJD_GFX_TEXTURE_ACCESS_CPU_WRITE_GPU_READWRITE,
+	RJD_GFX_TEXTURE_ACCESS_CPU_NONE_GPU_READWRITE,
 	RJD_GFX_TEXTURE_ACCESS_COUNT,
 };
 
@@ -8071,11 +8422,6 @@ struct rjd_gfx_context
 // backend
 static inline int32_t rjd_gfx_backend_ismetal(void);
 
-// camera
-struct rjd_gfx_camera rjd_gfx_camera_init(enum rjd_gfx_camera_mode mode);
-rjd_math_mat4 rjd_gfx_camera_lookat_ortho_righthanded(const struct rjd_gfx_camera* camera);
-//rjd_math_mat4 rjd_gfx_camera_lookat_ortho_lefthanded(const struct rjd_gfx_camera* camera); // TODO
-
 // context
 // NOTE: all functions that deal with a context are not threadsafe for simplicity. If you are making a multithreaded
 // renderer, you must have a strategy for synchronizing resource creation and drawing with the context.
@@ -8166,30 +8512,6 @@ const static struct rjd_logchannel logchannel_error = {
 
 #define RJD_GFX_LOG(...) RJD_LOG_CHANNEL(&logchannel_default, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
 #define RJD_GFX_LOG_ERROR(...) RJD_LOG_CHANNEL(&logchannel_error, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
-
-////////////////////////////////////////////////////////////////////////////////
-// platform-independent camera
-
-struct rjd_gfx_camera rjd_gfx_camera_init(enum rjd_gfx_camera_mode mode)
-{
-	struct rjd_gfx_camera cam = { .pos = rjd_math_vec3_xyz(0,0,0), .mode = mode };
-	return cam;
-}
-
-rjd_math_mat4 rjd_gfx_camera_lookat_ortho_righthanded(const struct rjd_gfx_camera* camera)
-{
-	RJD_ASSERT(camera);
-
-	float x = floorf(rjd_math_vec3_x(camera->pos));
-	float y = floorf(rjd_math_vec3_y(camera->pos));
-	float z = floorf(rjd_math_vec3_z(camera->pos));
-
-	rjd_math_vec3 pos = rjd_math_vec3_xyz(x,y,z);
-
-	const rjd_math_vec3 look = rjd_math_vec3_xyz(x,y,z - 1.0f);
-	const rjd_math_vec3 up = rjd_math_vec3_xyz(0.0f, 1.0f, 0.0f);
-	return rjd_math_mat4_lookat_righthanded(pos, look, up);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // platform-independent format

@@ -23,6 +23,7 @@
 #include "rjd_array.h"
 #include "rjd_math.h"
 #include "rjd_geo.h"
+#include "rjd_procgeo.h"
 #include "rjd_easing.h"
 #include "rjd_strbuf.h"
 #include "rjd_profiler.h"
