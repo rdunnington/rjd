@@ -64,10 +64,14 @@ void rjd_window_close(struct rjd_window* window);
 	#if RJD_LANG_OBJC
 		@class MTKView;
 		RJD_STATIC_ASSERT(sizeof(MTKView*) == sizeof(void*));
+		@class NSWindow;
+		RJD_STATIC_ASSERT(sizeof(NSWindow*) == sizeof(void*));
 	#else
 		typedef void MTKView;
+		typedef void NSWindow;
 	#endif
 	MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window);
+	NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window);
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -251,7 +255,7 @@ LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM 
 
 struct rjd_window_osx
 {
-    NSWindow* window;
+    NSWindow* nswindow;
     MTKView* view;
     
     rjd_window_on_init_func init_func;
@@ -276,8 +280,28 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_osx));
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
 
+@interface CustomNSWindow : NSWindow
+@end
+
+@implementation CustomNSWindow
+{
+}
+
+-(BOOL)canBecomeMainWindow
+{
+	return YES;
+}
+
+-(BOOL)canBecomeKeyWindow
+{
+	return YES;
+}
+
+@end
+
 void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func init_func)
 {
+	NSApplicationLoad();
     AppDelegate* delegate = [[AppDelegate alloc] initWithEnvFunc:init_func env:env];
     NSApplication* app = [NSApplication sharedApplication];
     [app setDelegate:delegate];
@@ -299,27 +323,36 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
                                 NSWindowStyleMaskClosable  |
                                 NSWindowStyleMaskMiniaturizable;
 
-    NSWindow* window = [[NSWindow alloc] initWithContentRect:rect styleMask:style backing:NSBackingStoreBuffered defer:false];
-    window.title = [NSString stringWithUTF8String:desc.title];
+    NSWindow* nswindow = [[CustomNSWindow alloc] initWithContentRect:rect styleMask:style backing:NSBackingStoreBuffered defer:false];
+    //NSWindow* nswindow = [[NSWindow alloc] initWithContentRect:rect styleMask:style backing:NSBackingStoreBuffered defer:false];
+    nswindow.title = [NSString stringWithUTF8String:desc.title];
     
     struct rjd_window_size size = desc.requested_size;
 
     GameViewController* viewController = [[GameViewController alloc]
                                           initWithWidth:size.width height:size.height window:out env:desc.env];
     MTKView* view = [[MTKView alloc] initWithFrame:rect device:MTLCreateSystemDefaultDevice()];
-    
+
+    viewController.view = view;
+    [viewController loadView];
+    nswindow.contentViewController = viewController;
+
+	RJD_ASSERT(nswindow.canBecomeKeyWindow == YES);
+	RJD_ASSERT(nswindow.canBecomeMainWindow == YES);
+    [nswindow makeKeyAndOrderFront:nil];
+	RJD_LOG("main nswindow: %d", nswindow.mainWindow);
+	RJD_LOG("key nswindow: %d", nswindow.keyWindow);
+
     struct rjd_window_osx* window_osx = (struct rjd_window_osx*)out;
-    window_osx->window = window;
+    window_osx->nswindow = nswindow;
     window_osx->init_func = desc.init_func;
     window_osx->update_func = desc.update_func;
     window_osx->close_func = desc.close_func;
     window_osx->view = view;
 
-    viewController.view = view;
-    [viewController loadView];
-    window.contentViewController = viewController;
-
-    [window makeKeyAndOrderFront:nil];
+    if (window_osx->init_func) {
+        window_osx->init_func((struct rjd_window*)window_osx, &desc.env);
+    }
 
     return RJD_RESULT_OK();
 }
@@ -345,6 +378,12 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 {
     const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
 	return window_osx->view;
+}
+
+NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
+{
+    const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
+	return window_osx->nswindow;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -413,10 +452,10 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
         return;
     }
     
-    struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
-    if (window_osx->init_func) {
-        window_osx->init_func(self->window, &self->env);
-    }
+    //struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
+    //if (window_osx->init_func) {
+    //    window_osx->init_func(self->window, &self->env);
+    //}
 
     // We need to hold a strong reference to the Renderer or it will go out of scope
     // after this function and be destroyed. MTKView.delegate is a weak reference.
@@ -445,7 +484,7 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
         [[NSNotificationCenter defaultCenter]    addObserver:self
                                                 selector:@selector(windowWillClose:)
                                                 name:NSWindowWillCloseNotification
-                                                object:window_osx->window];
+                                                object:window_osx->nswindow];
 	}
     
     return self;
@@ -467,7 +506,7 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 
     struct rjd_window_osx* window_osx = (struct rjd_window_osx*)window;
 
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowWillCloseNotification object:window_osx->window];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowWillCloseNotification object:window_osx->nswindow];
 
     if (window_osx->close_func) {
         window_osx->close_func(self->window, &self->env);

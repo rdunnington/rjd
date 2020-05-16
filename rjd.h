@@ -8038,6 +8038,202 @@ MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 #endif // RJD_IMPL
 
 ////////////////////////////////////////////////////////////////////////////////
+// rjd_input.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#define RJD_INPUT_H 1
+
+struct rjd_input
+{
+	char impl[32];
+};
+
+enum rjd_input_keyboard
+{
+	RJD_INPUT_KEYBOARD_LEFTCONTROL,
+	RJD_INPUT_KEYBOARD_RIGHTCONTROL,
+	RJD_INPUT_KEYBOARD_LEFTSHIFT,
+	RJD_INPUT_KEYBOARD_RIGHTSHIFT,
+	RJD_INPUT_KEYBOARD_LEFTALT,
+	RJD_INPUT_KEYBOARD_RIGHTALT,
+	RJD_INPUT_KEYBOARD_ESCAPE,
+	RJD_INPUT_KEYBOARD_UTF8_BEGIN, // Add the utf8 codepoint to this value to check if the corresponding key is down
+};
+
+enum rjd_input_mouse
+{
+	RJD_INPUT_MOUSE_XMOVEDELTA,
+	RJD_INPUT_MOUSE_YMOVEDELTA,
+	RJD_INPUT_MOUSE_SCROLLWHEEL,
+	RJD_INPUT_MOUSE_BUTTON_BEGIN, // Add the index of the desired button to this value
+};
+
+const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_LEFT = RJD_INPUT_MOUSE_BUTTON_BEGIN + 0;
+const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_RIGHT = RJD_INPUT_MOUSE_BUTTON_BEGIN + 1;
+const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_MIDDLE = RJD_INPUT_MOUSE_BUTTON_BEGIN + 2;
+
+void rjd_input_create(struct rjd_input* out, struct rjd_mem_allocator* allocator);
+void rjd_input_destroy(struct rjd_input* input);
+struct rjd_result rjd_input_hook(struct rjd_input* input, struct rjd_window* window, struct rjd_window_environment* env);
+void rjd_input_unhook(struct rjd_input* input);
+
+float rjd_input_keyboard_getvalue(enum rjd_input_keyboard code);
+float rjd_input_mouse_getvalue(enum rjd_input_mouse code);
+
+// TODO could add support for controllers, joysticks, driving wheels, etc
+
+#if RJD_IMPL && RJD_PLATFORM_WINDOWS
+
+void rjd_input_create(struct rjd_input* out, struct rjd_mem_allocator* allocator)
+{
+}
+
+void rjd_input_destroy(struct rjd_input* input)
+{
+}
+
+struct rjd_result rjd_input_hook(struct rjd_input* input, struct rjd_window* window, struct rjd_window_environment* env)
+{
+	return RJD_RESULT("Not implemented");
+}
+
+void rjd_input_unhook(struct rjd_input* input)
+{
+}
+
+float rjd_input_keyboard_getvalue(enum rjd_input_keyboard code)
+{
+	return 0;
+}
+
+float rjd_input_mouse_getvalue(enum rjd_input_mouse code)
+{
+	return 0;
+}
+
+#elif RJD_IMPL && RJD_PLATFORM_OSX
+
+struct rjd_input_osx;
+
+@interface InputResponder : NSObject <NSResponder>
+	-(instancetype)initWithInput:(struct rjd_input_osx*)_input;
+@end
+
+struct rjd_input_osx
+{
+	InputResponder* responder;
+	struct rjd_window* window;
+	//struct rjd_mem_allocator* allocator;
+};
+
+RJD_STATIC_ASSERT(sizeof(struct rjd_input_osx) <= sizeof(struct rjd_input));
+
+////////////////////////////////////////////////////////////////////////////////
+// Interface implementation
+
+void rjd_input_create(struct rjd_input* out, struct rjd_mem_allocator* allocator)
+{
+	RJD_ASSERT(input);
+	RJD_ASSERT(allocator);
+
+	memset(out, 0, sizeof(*out));
+
+	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)out;
+	input_osx->responder = nil;
+	//input_osx->allocator = allocator;
+}
+
+void rjd_input_destroy(struct rjd_input* input)
+{
+	RJD_ASSERT(input);
+
+	rjd_input_unhook(input);
+	memset(input, 0, sizeof(*input));
+}
+
+struct rjd_result rjd_input_hook(struct rjd_input* input, struct rjd_window* window, struct rjd_window_environment* env)
+{
+	RJD_ASSERT(input);
+	RJD_ASSERT(env);
+	RJD_ASSERT(window);
+	RJD_UNUSED_PARAM(env); // used in win32
+
+	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)out;
+
+	MTKView* view = rjd_window_osx_get_mtkview(window);
+	if (view == nil) {
+		return RJD_RESULT("No view available in the window to hook. Did the window initialize correctly?");
+	}
+
+	input_osx->responder = [[alloc InputResponder] initWithInput:input_osx];
+	if (input_osx->responder == nil) {
+		return RJD_RESULT("Failed to allocate NSResponder listener. Are you out of memory?");
+	}
+
+	view.nextResponder = input_osx->responder;
+
+	return RJD_RESULT_OK();
+}
+
+void rjd_input_unhook(struct rjd_input* input)
+{
+	if (input)
+	{
+		struct rjd_input_osx* input_osx = (struct rjd_input_osx*)out;
+		if (input_osx->window) {
+			MTKView* view = rjd_window_osx_get_mtkview(input_osx->window);
+			if (view && view.nextResponder == input_osx->responder) {
+				view.nextResponder = nil;
+			}
+			input_osx->responder = nil;
+		}
+	}
+}
+
+float rjd_input_keyboard_getvalue(enum rjd_input_keyboard code)
+{
+	return 0;
+}
+
+float rjd_input_mouse_getvalue(enum rjd_input_mouse code)
+{
+	return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Local helpers
+
+@implementation InputResponder
+{
+	struct rjd_input_osx* input;
+}
+
+-initWithInput:(struct rjd_input_osx*)_input
+{
+    if (self = [super init]) {
+		self->input = _input;
+    }
+    return self;
+}
+
+-(void)keyDown:(NSEvent*)event
+{
+	printf("keyDown: %h\n", event.keyCode);
+}
+
+-(void)keyUp:(NSEvent*)event
+{
+	printf("keyUp: %h\n", event.keyCode);
+}
+
+@end
+
+#endif // RJD_IMPL
+
+
+////////////////////////////////////////////////////////////////////////////////
 // rjd_gfx.h
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -47,6 +47,7 @@ files = [
     "rjd_resource_loader.h",
     "rjd_resource.h",
     "rjd_window.h",
+    "rjd_input.h",
     "rjd_gfx.h",
 ]
 
