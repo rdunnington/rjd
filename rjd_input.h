@@ -74,12 +74,9 @@ bool rjd_input_mouse_now(const struct rjd_input* input, enum rjd_input_mouse cod
 bool rjd_input_mouse_prev(const struct rjd_input* input, enum rjd_input_mouse code);
 
 static inline bool rjd_input_keyboard_triggered(const struct rjd_input* input, enum rjd_input_keyboard code); // key was pressed starting this frame
-
-//float rjd_input_mouse_now(const struct rjd_input* input, enum rjd_input_mouse code);
-//float rjd_input_mouse_prev(const struct rjd_input* input, enum rjd_input_mouse code);
+static inline bool rjd_input_mouse_triggered(const struct rjd_input* input, enum rjd_input_mouse code); // key was pressed starting this frame
 
 const char* rjd_input_keyboard_tostring(enum rjd_input_keyboard code);
-//const char* rjd_input_mouse_string(enum rjd_input_mouse code);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Inline implementation
@@ -87,6 +84,11 @@ const char* rjd_input_keyboard_tostring(enum rjd_input_keyboard code);
 static inline bool rjd_input_keyboard_triggered(const struct rjd_input* input, enum rjd_input_keyboard code)
 {
 	return rjd_input_keyboard_now(input, code) && !rjd_input_keyboard_prev(input, code);
+}
+
+static inline bool rjd_input_mouse_triggered(const struct rjd_input* input, enum rjd_input_mouse code)
+{
+	return rjd_input_mouse_now(input, code) && !rjd_input_mouse_prev(input, code);
 }
 
 #if RJD_IMPL
