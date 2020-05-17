@@ -11,9 +11,23 @@
 // * Use *_calc_num_verts() functions to find how many floats you need
 // * Vertices are generated in clockwise winding order, assuming view is looking -Z
 
-uint32_t rjd_procgeo_rect_calc_num_verts();
+enum rjd_procgeo_type
+{
+	RJD_PROCGEO_TYPE_RECT,
+	RJD_PROCGEO_TYPE_CIRCLE,
+	RJD_PROCGEO_TYPE_BOX,
+	RJD_PROCGEO_TYPE_CONE,
+	RJD_PROCGEO_TYPE_CYLINDER,
+	RJD_PROCGEO_TYPE_SPHERE,
+	RJD_PROCGEO_TYPE_COUNT,
+};
+
+uint32_t rjd_procgeo_calc_num_verts(enum rjd_procgeo_type type, uint32_t tesselation);
+float* rjd_procgeo(enum rjd_procgeo_type type, uint32_t tesselation, float size_x, float size_y, float size_z, float* out, size_t length);
+
+uint32_t rjd_procgeo_rect_calc_num_verts(void);
 uint32_t rjd_procgeo_circle_calc_num_verts(uint32_t tesselation);
-uint32_t rjd_procgeo_box_calc_num_verts();
+uint32_t rjd_procgeo_box_calc_num_verts(void);
 uint32_t rjd_procgeo_cone_calc_num_verts(uint32_t tesselation);
 uint32_t rjd_procgeo_cylinder_calc_num_verts(uint32_t tesselation);
 uint32_t rjd_procgeo_sphere_calc_num_verts(uint32_t tesselation);
@@ -21,8 +35,8 @@ uint32_t rjd_procgeo_sphere_calc_num_verts(uint32_t tesselation);
 float* rjd_procgeo_rect(float width, float height, float* out, size_t length);
 float* rjd_procgeo_circle(float radius, uint32_t tesselation, float* out, size_t length);
 float* rjd_procgeo_box(float width, float height, float depth, float* out, size_t length);
-float* rjd_procgeo_cone(float height, float radius, uint32_t tesselation, float* out, size_t length);
-float* rjd_procgeo_cylinder(float height, float radius, uint32_t tesselation, float* out, size_t length);
+float* rjd_procgeo_cone(float radius, float height, uint32_t tesselation, float* out, size_t length);
+float* rjd_procgeo_cylinder(float radius, float height, uint32_t tesselation, float* out, size_t length);
 float* rjd_procgeo_sphere(float radius, uint32_t tesselation, float* out, size_t length);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -33,6 +47,39 @@ float* rjd_procgeo_sphere(float radius, uint32_t tesselation, float* out, size_t
 const float RJD_PROCGEO_PI = 3.141592653589793238462643f;
 const uint32_t RJD_PROCGEO_MIN_TESSELATION_CIRCLE = 3;
 const uint32_t RJD_PROCGEO_MIN_TESSELATION_SPHERE = 3;
+
+uint32_t rjd_procgeo_calc_num_verts(enum rjd_procgeo_type type, uint32_t tesselation)
+{
+	switch (type)
+	{
+	 	case RJD_PROCGEO_TYPE_RECT: return rjd_procgeo_rect_calc_num_verts();
+	 	case RJD_PROCGEO_TYPE_CIRCLE: return rjd_procgeo_circle_calc_num_verts(tesselation);
+	 	case RJD_PROCGEO_TYPE_BOX: return rjd_procgeo_box_calc_num_verts();
+	 	case RJD_PROCGEO_TYPE_CONE: return rjd_procgeo_cone_calc_num_verts(tesselation);
+	 	case RJD_PROCGEO_TYPE_CYLINDER: return rjd_procgeo_cylinder_calc_num_verts(tesselation);
+	 	case RJD_PROCGEO_TYPE_SPHERE: return rjd_procgeo_sphere_calc_num_verts(tesselation);
+		default: break;
+	}
+	RJD_ASSERTFAIL("Unknown type: %d", type);
+	return 0;
+}
+
+float* rjd_procgeo(enum rjd_procgeo_type type, uint32_t tesselation, float size_x, float size_y, float size_z, float* out, size_t length)
+{
+	switch (type)
+	{
+	 	case RJD_PROCGEO_TYPE_RECT: return rjd_procgeo_rect(size_x, size_y, out, length);
+	 	case RJD_PROCGEO_TYPE_CIRCLE: return rjd_procgeo_circle(size_x, tesselation, out, length);
+	 	case RJD_PROCGEO_TYPE_BOX: return rjd_procgeo_box(size_x, size_y, size_z, out, length);
+	 	case RJD_PROCGEO_TYPE_CONE: return rjd_procgeo_cone(size_x, size_y, tesselation, out, length);
+	 	case RJD_PROCGEO_TYPE_CYLINDER: return rjd_procgeo_cylinder(size_x, size_y, tesselation, out, length);
+	 	case RJD_PROCGEO_TYPE_SPHERE: return rjd_procgeo_sphere(size_x, tesselation, out, length);
+		default: break;
+	}
+
+	RJD_ASSERTFAIL("Unknown type: %d", type);
+	return out;
+}
 
 uint32_t rjd_procgeo_rect_calc_num_verts() {
 	// 3 verts per triangle, 2 triangles
@@ -230,7 +277,7 @@ float* rjd_procgeo_cone(float height, float radius, uint32_t tesselation, float*
 	return out + num_verts * 3;
 }
 
-float* rjd_procgeo_cylinder(float height, float radius, uint32_t tesselation, float* out, size_t length)
+float* rjd_procgeo_cylinder(float radius, float height, uint32_t tesselation, float* out, size_t length)
 {
 	const uint32_t num_verts = rjd_procgeo_cylinder_calc_num_verts(tesselation);
 	if (length < num_verts * 3) {
