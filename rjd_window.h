@@ -269,8 +269,11 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_osx));
 -(instancetype)initWithEnvFunc:(rjd_window_environment_init_func)func env:(struct rjd_window_environment)env;
 @end
 
-@interface GameViewController : NSViewController
+@interface CustomViewController : NSViewController
 -(instancetype)initWithWidth:(uint16_t)width height:(uint16_t)height window:(struct rjd_window*)window env:(struct rjd_window_environment)env;
+@end
+
+@interface CustomWindow : NSWindow
 @end
 
 @interface Renderer : NSObject <MTKViewDelegate>
@@ -280,31 +283,13 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_osx));
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
 
-@interface CustomNSWindow : NSWindow
-@end
-
-@implementation CustomNSWindow
-{
-}
-
--(BOOL)canBecomeMainWindow
-{
-	return YES;
-}
-
--(BOOL)canBecomeKeyWindow
-{
-	return YES;
-}
-
-@end
-
 void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func init_func)
 {
 	NSApplicationLoad();
     AppDelegate* delegate = [[AppDelegate alloc] initWithEnvFunc:init_func env:env];
     NSApplication* app = [NSApplication sharedApplication];
     [app setDelegate:delegate];
+	[app activateIgnoringOtherApps:YES];
     [app run];
 }
 
@@ -323,13 +308,12 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
                                 NSWindowStyleMaskClosable  |
                                 NSWindowStyleMaskMiniaturizable;
 
-    NSWindow* nswindow = [[CustomNSWindow alloc] initWithContentRect:rect styleMask:style backing:NSBackingStoreBuffered defer:false];
-    //NSWindow* nswindow = [[NSWindow alloc] initWithContentRect:rect styleMask:style backing:NSBackingStoreBuffered defer:false];
+    NSWindow* nswindow = [[CustomWindow alloc] initWithContentRect:rect styleMask:style backing:NSBackingStoreBuffered defer:false];
     nswindow.title = [NSString stringWithUTF8String:desc.title];
     
     struct rjd_window_size size = desc.requested_size;
 
-    GameViewController* viewController = [[GameViewController alloc]
+    CustomViewController* viewController = [[CustomViewController alloc]
                                           initWithWidth:size.width height:size.height window:out env:desc.env];
     MTKView* view = [[MTKView alloc] initWithFrame:rect device:MTLCreateSystemDefaultDevice()];
 
@@ -340,8 +324,6 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 	RJD_ASSERT(nswindow.canBecomeKeyWindow == YES);
 	RJD_ASSERT(nswindow.canBecomeMainWindow == YES);
     [nswindow makeKeyAndOrderFront:nil];
-	RJD_LOG("main nswindow: %d", nswindow.mainWindow);
-	RJD_LOG("key nswindow: %d", nswindow.keyWindow);
 
     struct rjd_window_osx* window_osx = (struct rjd_window_osx*)out;
     window_osx->nswindow = nswindow;
@@ -407,6 +389,12 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 -(void)applicationDidFinishLaunching:(NSNotification*)notification
 {
 	RJD_UNUSED_PARAM(notification);
+    
+    NSMenuItem* testItem = [[NSMenuItem alloc] initWithTitle:@"TestItem" action:nil keyEquivalent:@""];
+
+    NSMenu* menu = [[NSMenu alloc] initWithTitle:@"TestMenu"];
+    [menu addItem:testItem];
+    NSApplication.sharedApplication.mainMenu = menu;
 
 	if (self->init_func) {
 		self->init_func(&self->env);
@@ -422,7 +410,7 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 
 @end
 
-@implementation GameViewController
+@implementation CustomViewController
 {
     Renderer* renderer;
     uint16_t width;
@@ -451,11 +439,6 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
         self.view = [[NSView alloc] initWithFrame:self.view.frame];
         return;
     }
-    
-    //struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
-    //if (window_osx->init_func) {
-    //    window_osx->init_func(self->window, &self->env);
-    //}
 
     // We need to hold a strong reference to the Renderer or it will go out of scope
     // after this function and be destroyed. MTKView.delegate is a weak reference.
@@ -463,6 +446,21 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
     [self->renderer mtkView:view drawableSizeWillChange:view.bounds.size];
     view.delegate = renderer;
     self.view = view;
+}
+@end
+
+@implementation CustomWindow
+{
+}
+
+-(BOOL)canBecomeMainWindow
+{
+	return YES;
+}
+
+-(BOOL)canBecomeKeyWindow
+{
+	return YES;
 }
 @end
 
