@@ -22,6 +22,13 @@ void expect_float(double expected, double actual)
 	}
 }
 
+void expect_bool(bool expected, bool actual)
+{
+	if (expected != actual) {
+		RJD_ASSERTFAIL("Expected: %d, but got: %d", expected, actual);
+	}
+}
+
 void expect_int32(int32_t expected, int32_t actual) {
 	if (expected != actual) {
 		RJD_ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
@@ -1053,6 +1060,39 @@ void test_math(void)
 
 	// matrix
 	// TODO
+}
+
+void test_procgeo()
+{
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+
+	for (enum rjd_procgeo_type type = 0; type < RJD_PROCGEO_TYPE_COUNT; ++type)
+	{
+		for (uint32_t tesselation = 0; tesselation < 32; ++tesselation)
+		{
+			uint32_t verts = rjd_procgeo_calc_num_verts(type, tesselation);
+			float* data = rjd_mem_alloc_array(float, verts * 3, &allocator);
+			float* data_strided = rjd_mem_alloc_array(float, verts * 5, &allocator);
+			
+			float* data_end = rjd_procgeo(type, tesselation, 1.0f, 1.0f, 1.0f, data, verts * 3, 0);
+			float* data_strided_end = rjd_procgeo(type, tesselation, 1.0f, 1.0f, 1.0f, data_strided, verts * 5, 2);
+
+			RJD_ASSERT(data_end != NULL);
+			RJD_ASSERT(data_strided_end != NULL);
+
+			for (uint32_t vert = 0; vert < verts; ++vert)
+			{
+				expect_float(data[vert * 3 + 0], data_strided[vert * 5 + 0]);
+                expect_float(data[vert * 3 + 1], data_strided[vert * 5 + 1]);
+                expect_float(data[vert * 3 + 2], data_strided[vert * 5 + 2]);
+			}
+
+			rjd_mem_free(data);
+			rjd_mem_free(data_strided);
+		}
+
+		expect_no_leaks(&allocator);
+	}
 }
 
 void test_geo()
@@ -2812,6 +2852,7 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_rng();
 	test_array();
 	test_math();
+	test_procgeo();
 	test_easing();
 	test_strbuf();
 	test_profiler();
