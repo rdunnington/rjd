@@ -63,6 +63,7 @@ void rjd_mem_swap(void* restrict mem1, void* restrict mem2, size_t size);
 #define rjd_mem_alloc_array(type, count, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, 8, true))
 #define rjd_mem_alloc_array_noclear(type, count, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, 8, false))
 #define rjd_mem_alloc_array_aligned(type, count, allocator, alignment) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, alignment, true))
+#define rjd_mem_alloc_array_aligned_noclear(type, count, allocator, alignment) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, alignment, false))
 
 #define RJD_MEM_ISALIGNED(p, align) (((uintptr_t)(p) & ((align)-1)) == 0)
 #define RJD_MEM_ALIGN(size, align) ((size) + (RJD_MEM_ISALIGNED(size, align) ? 0 : ((align) - ((size) & ((align)-1)))))
@@ -84,7 +85,7 @@ struct rjd_mem_heap_linear
 struct rjd_mem_allocation_header
 {
 	struct rjd_mem_allocator* allocator;
-	uint8_t offset_to_block_begin_from_user;
+	uint16_t offset_to_block_begin_from_user;
 	uint32_t total_blocksize;
 	uint32_t debug_sentinel;
 };
@@ -223,10 +224,13 @@ void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint3
 
 	uintptr_t aligned_user = RJD_MEM_ALIGN((uintptr_t)raw + alignment + header_size, alignment);
 
+    const ptrdiff_t offset_to_block_begin_from_user = aligned_user - (uintptr_t)raw;
+    RJD_ASSERT(offset_to_block_begin_from_user < UINT16_MAX);
+    
 	struct rjd_mem_allocation_header* header = (void*)(aligned_user - header_size);
 	header->allocator = allocator;
 	header->total_blocksize = (uint32_t)total_size;
-	header->offset_to_block_begin_from_user = aligned_user - (uintptr_t)raw;
+    header->offset_to_block_begin_from_user = offset_to_block_begin_from_user;
 	header->debug_sentinel = allocator->debug_sentinel;
 
 	{

@@ -1,0 +1,29 @@
+This doc is to help you remember the conventions of this codebase and to establish consistent naming across interfaces.
+
+struct / enum keywords
+* Avoid typedefing structs and enums. Just prefix the "tags" with the struct or enum keywords.
+
+rjd_result
+* The uniform interface for returning errors. Only static strings are allowed to be passed into RJD_RESULT()
+
+zero-initialization
+* Library code should always at least zero-initialize returned data unless explicitly requested not to
+
+create / destroy
+* Prefer using functions with these names to initialize struct pointers along with desc structs. For example:
+	* rjd_foo_create(struct foo* foo, struct foo_desc desc)
+	* rjd_foo_destroy(struct foo* foo)
+* Note that you don't have to specify a desc struct if no other parameters are needed.
+
+init / cleanup
+* Prefer using functions with these names to return fully-initialized structs by value and to clean them up.
+* Prefer to use the create/destroy naming convention unless the struct in question is trivial and doesn't use any external resources.
+
+Bad data should never crash these functions. Data is defined as "anything loaded from desk or another IO source outside the program, or defined in compile-time tables".
+
+Use asserts to check for programmer errors:
+* Incorrect API usage (e.g. call order, invalid struct inputs)
+* NULL pointers
+
+inlines are always declared static inline.
+static helpers are declared in the impl section, and implemented after the public interface implementation.

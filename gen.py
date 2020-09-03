@@ -7,7 +7,8 @@ includes = [
     "<string.h>",
     "<stdarg.h>",
     "<xmmintrin.h> // SSE2",
-    "<pmmintrin.h> // SSE3"
+    "<pmmintrin.h> // SSE3",
+    "<smmintrin.h> // SSE4",
 ]
 
 includes_impl = [
@@ -26,12 +27,15 @@ files = [
     "rjd_array.h",
     "rjd_math.h",
     "rjd_geo.h",
+    "rjd_procgeo.h",
     "rjd_easing.h",
     "rjd_strbuf.h",
     "rjd_profiler.h",
     "rjd_cmd.h",
     "rjd_dict.h",
     "rjd_fio.h",
+    "rjd_thread.h",
+    "rjd_atomic.h",
     "rjd_strpool.h",
     "rjd_slotmap.h",
     "rjd_utf8.h",
@@ -41,7 +45,10 @@ files = [
     "rjd_strhash.h",
     "rjd_resource_types.h",
     "rjd_resource_loader.h",
-    "rjd_resource.h"
+    "rjd_resource.h",
+    "rjd_window.h",
+    "rjd_input.h",
+    "rjd_gfx.h",
 ]
 
 concat = "#pragma once\n\n"

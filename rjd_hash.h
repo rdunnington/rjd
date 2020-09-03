@@ -17,6 +17,9 @@ enum
 	RJD_HASH_NULLTERMINATED_BUFFER = -1,
 };
 
+const extern struct rjd_hash32 RJD_HASH32_INVALID;
+const extern struct rjd_hash64 RJD_HASH64_INVALID;
+
 // You can pass -1 as the length to indicate a NULL-terminated buffer (e.g. c-style string)
 struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length);
 struct rjd_hash64 rjd_hash64_data(const uint8_t* key, int length);
@@ -42,6 +45,9 @@ static inline struct rjd_hash64 rjd_hash64_str(const char* key)
 
 #if RJD_IMPL
 
+const struct rjd_hash32 RJD_HASH32_INVALID = {0};
+const struct rjd_hash64 RJD_HASH64_INVALID = {0};
+
 // Code derived from:
 // Copyright (c) 2011 Stephan Brumme. All rights reserved.
 // see http://create.stephan-brumme.com/disclaimer.html
@@ -60,8 +66,8 @@ struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 		return hash;
 	}
 
-	const uint32_t PRIME = 16777619;
-	const uint32_t SEED  = 2166136261;
+	const uint64_t PRIME = 16777619;
+	const uint64_t SEED  = 2166136261;
 
 	struct rjd_hash32 hash = { SEED };
 	if (length == -1) {
@@ -72,7 +78,7 @@ struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 		while (length > 0)
 		{
 			--length;
-			hash.value = (*key++ ^ hash.value) * PRIME;
+			hash.value = (uint32_t)((*key++ ^ hash.value) * PRIME);
 		}
 	}
 	return hash;

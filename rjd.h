@@ -13,6 +13,7 @@
 #include <stdarg.h>
 #include <xmmintrin.h> // SSE2
 #include <pmmintrin.h> // SSE3
+#include <smmintrin.h> // SSE4
 
 #if RJD_IMPL
 	#include <stdlib.h>
@@ -51,11 +52,11 @@
 
 #if RJD_COMPILER_MSVC
 	#define RJD_FORCE_INLINE __forceinline
-	#define RJD_FORCE_ALIGN(type, alignment) __declspec(align(alignment)) type
+	#define RJD_FORCE_ALIGN(alignment, type) __declspec(align(alignment)) type
 	#define restrict __restrict
 #elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
 	#define RJD_FORCE_INLINE static inline __attribute__((always_inline))
-	#define RJD_FORCE_ALIGN(type, alignment) type __attribute__((aligned(alignment)))
+	#define RJD_FORCE_ALIGN(alignment, type) type __attribute__((aligned(alignment)))
 #else
 	#error Unhandled compiler
 #endif
@@ -486,8 +487,8 @@ struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 		return hash;
 	}
 
-	const uint32_t PRIME = 16777619;
-	const uint32_t SEED  = 2166136261;
+	const uint64_t PRIME = 16777619;
+	const uint64_t SEED  = 2166136261;
 
 	struct rjd_hash32 hash = { SEED };
 	if (length == -1) {
@@ -498,7 +499,7 @@ struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 		while (length > 0)
 		{
 			--length;
-			hash.value = (*key++ ^ hash.value) * PRIME;
+			hash.value = (uint32_t)((*key++ ^ hash.value) * PRIME);
 		}
 	}
 	return hash;
@@ -613,6 +614,7 @@ void rjd_mem_swap(void* restrict mem1, void* restrict mem2, size_t size);
 #define rjd_mem_alloc_array(type, count, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, 8, true))
 #define rjd_mem_alloc_array_noclear(type, count, allocator) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, 8, false))
 #define rjd_mem_alloc_array_aligned(type, count, allocator, alignment) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, alignment, true))
+#define rjd_mem_alloc_array_aligned_noclear(type, count, allocator, alignment) ((type*)rjd_mem_alloc_impl(sizeof(type) * count, allocator, alignment, false))
 
 #define RJD_MEM_ISALIGNED(p, align) (((uintptr_t)(p) & ((align)-1)) == 0)
 #define RJD_MEM_ALIGN(size, align) ((size) + (RJD_MEM_ISALIGNED(size, align) ? 0 : ((align) - ((size) & ((align)-1)))))
@@ -634,7 +636,7 @@ struct rjd_mem_heap_linear
 struct rjd_mem_allocation_header
 {
 	struct rjd_mem_allocator* allocator;
-	uint8_t offset_to_block_begin_from_user;
+	uint16_t offset_to_block_begin_from_user;
 	uint32_t total_blocksize;
 	uint32_t debug_sentinel;
 };
@@ -770,10 +772,13 @@ void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint3
 
 	uintptr_t aligned_user = RJD_MEM_ALIGN((uintptr_t)raw + alignment + header_size, alignment);
 
+    const ptrdiff_t offset_to_block_begin_from_user = aligned_user - (uintptr_t)raw;
+    RJD_ASSERT(offset_to_block_begin_from_user < UINT16_MAX);
+    
 	struct rjd_mem_allocation_header* header = (void*)(aligned_user - header_size);
 	header->allocator = allocator;
 	header->total_blocksize = (uint32_t)total_size;
-	header->offset_to_block_begin_from_user = aligned_user - (uintptr_t)raw;
+    header->offset_to_block_begin_from_user = offset_to_block_begin_from_user;
 	header->debug_sentinel = allocator->debug_sentinel;
 
 	{
@@ -1536,6 +1541,8 @@ static void* rjd_array_grow(void* array, size_t sizeof_type)
 
 #pragma once
 
+// SSE3 math library with some functions for normal floats
+
 #define RJD_MATH_H 1
 
 #define RJD_MATH_PI (3.141592653589793238462643f)
@@ -1611,73 +1618,19 @@ RJD_MATH_REMAP_FUNCS(RJD_MATH_DECLARE_REMAP_FUNC)
 
 // vector structs
 
-typedef union rjd_math_float2 {
-	struct {
-		float x;
-		float y;
-	};
-	float v[2];
-} rjd_math_float2;
-
-typedef union rjd_math_float3 {
-	struct {
-		float x;
-		float y;
-		float z;
-	};
-	float v[3];
-} rjd_math_float3;
-
-typedef union rjd_math_float4 {
-	struct {
-		float x;
-		float y;
-		float z;
-		float w;
-	};
-	float v[4];
-} rjd_math_float4;
-
-typedef struct rjd_math_float16 {
-	float v[16];
-} rjd_math_float16;
-
-typedef struct rjd_math_vec3 {
+// NOTE: this is the one place we break the "no typedef" rule for convenience
+RJD_FORCE_ALIGN(16, typedef struct rjd_math_vec3 {
 	__m128 v;
-} rjd_math_vec3;
+} rjd_math_vec3);
 
-typedef struct rjd_math_vec4 {
+RJD_FORCE_ALIGN(16, typedef struct rjd_math_vec4 {
 	__m128 v;
-} rjd_math_vec4;
+} rjd_math_vec4);
 
 // column-major 4x4 matrix
-typedef struct {
+RJD_FORCE_ALIGN(16, typedef struct rjd_math_mat4 {
 	rjd_math_vec4 m[4];
-} rjd_math_mat4;
-
-// float structs are mainly intended for convenience tranlations out of __m128 registers
-
-static inline rjd_math_float2 rjd_math_float2_xy(float x, float y);
-static inline rjd_math_float3 rjd_math_float3_xyz(float x, float y, float z);
-static inline rjd_math_float4 rjd_math_float4_xyzw(float x, float y, float z, float w);
-
-static inline rjd_math_vec3 rjd_math_float2_to_vec3(rjd_math_float2 f, float z);
-static inline rjd_math_vec3 rjd_math_float3_to_vec3(rjd_math_float3 f);
-static inline rjd_math_vec3 rjd_math_float4_to_vec3(rjd_math_float4 f);
-
-static inline rjd_math_vec4 rjd_math_float2_to_vec4(rjd_math_float2 f, float z, float w);
-static inline rjd_math_vec4 rjd_math_float3_to_vec4(rjd_math_float3 f, float w);
-static inline rjd_math_vec4 rjd_math_float4_to_vec4(rjd_math_float4 f);
-
-static inline rjd_math_float2 rjd_math_vec3_to_float2(rjd_math_vec3 v);
-static inline rjd_math_float3 rjd_math_vec3_to_float3(rjd_math_vec3 v);
-static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v, float w);
-
-static inline rjd_math_float2 rjd_math_vec4_to_float2(rjd_math_vec4 v);
-static inline rjd_math_float3 rjd_math_vec4_to_float3(rjd_math_vec4 v);
-static inline rjd_math_float4 rjd_math_vec4_to_float4(rjd_math_vec4 v);
-
-static inline rjd_math_float16 rjd_math_mat4_to_float16(rjd_math_mat4 m);
+} rjd_math_mat4);
 
 // vec4
 
@@ -1703,8 +1656,12 @@ static inline float 		rjd_math_vec4_i(rjd_math_vec4 v, size_t index);
 static inline float			rjd_math_vec4_hmin(rjd_math_vec4 v);
 static inline float			rjd_math_vec4_hmax(rjd_math_vec4 v);
 static inline rjd_math_vec4 rjd_math_vec4_normalize(rjd_math_vec4 v);
-static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s);
+static inline rjd_math_vec4 rjd_math_vec4_abs(rjd_math_vec4 v);
 static inline rjd_math_vec4 rjd_math_vec4_neg(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_floor(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_ceil(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_round(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s);
 static inline rjd_math_vec4 rjd_math_vec4_add(rjd_math_vec4 a, rjd_math_vec4 b);
 static inline rjd_math_vec4 rjd_math_vec4_sub(rjd_math_vec4 a, rjd_math_vec4 b);
 static inline rjd_math_vec4 rjd_math_vec4_mul(rjd_math_vec4 a, rjd_math_vec4 b);
@@ -1747,8 +1704,12 @@ static inline float 		rjd_math_vec3_length(rjd_math_vec3 v);
 static inline float			rjd_math_vec3_hmin(rjd_math_vec3 v);
 static inline float			rjd_math_vec3_hmax(rjd_math_vec3 v);
 static inline rjd_math_vec3 rjd_math_vec3_normalize(rjd_math_vec3 v);
-static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s);
+static inline rjd_math_vec3 rjd_math_vec3_abs(rjd_math_vec3 v);
 static inline rjd_math_vec3 rjd_math_vec3_neg(rjd_math_vec3 v);
+static inline rjd_math_vec4 rjd_math_vec4_floor(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_ceil(rjd_math_vec4 v);
+static inline rjd_math_vec4 rjd_math_vec4_round(rjd_math_vec4 v);
+static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s);
 static inline rjd_math_vec3 rjd_math_vec3_add(rjd_math_vec3 a, rjd_math_vec3 b);
 static inline rjd_math_vec3 rjd_math_vec3_sub(rjd_math_vec3 a, rjd_math_vec3 b);
 static inline rjd_math_vec3 rjd_math_vec3_mul(rjd_math_vec3 a, rjd_math_vec3 b);
@@ -1782,10 +1743,13 @@ static inline rjd_math_vec3 rjd_math_mat4_mulv3(rjd_math_mat4 m, rjd_math_vec3 v
 static inline rjd_math_vec4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v);
 static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m);
 static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m);
-static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float top, float bot, float near, float far);
-static inline rjd_math_mat4 rjd_math_mat4_ortho(float left, float right, float top, float bot, float near, float far);
-static inline rjd_math_mat4 rjd_math_mat4_perspective(float y_fov, float aspect, float near, float far);
-static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
+static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float right, float top, float bot, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far);
+static inline rjd_math_mat4 ijd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_lookat_righthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
+static inline rjd_math_mat4 rjd_math_mat4_lookat_lefthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
 static inline float*		rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out);
 static inline float*		rjd_math_mat4_write_rowmajor(rjd_math_mat4 m, float* out);
 
@@ -1820,93 +1784,6 @@ static inline int32_t rjd_math_pow32(int32_t v, uint32_t power)
 		--power;
 	}
 	return r;
-}
-
-// vec <-> float tranlations
-
-static inline rjd_math_float2 rjd_math_float2_xy(float x, float y)
-{
-	return (rjd_math_float2){{ x, y }};
-}
-static inline rjd_math_float3 rjd_math_float3_xyz(float x, float y, float z)
-{
-	return (rjd_math_float3){{ x, y, z }};
-}
-static inline rjd_math_float4 rjd_math_float4_xyzw(float x, float y, float z, float w)
-{
-	return (rjd_math_float4){{ x, y, z, w }};
-}
-
-static inline rjd_math_vec3 rjd_math_float2_to_vec3(rjd_math_float2 f, float z)
-{
-	return rjd_math_vec3_xyz(f.x, f.y, z);
-}
-static inline rjd_math_vec3 rjd_math_float3_to_vec3(rjd_math_float3 f)
-{
-	return rjd_math_vec3_xyz(f.x, f.y, f.z);
-}
-static inline rjd_math_vec3 rjd_math_float4_to_vec3(rjd_math_float4 f)
-{
-	return rjd_math_vec3_xyz(f.x, f.y, f.z);
-}
-
-static inline rjd_math_vec4 rjd_math_float2_to_vec4(rjd_math_float2 f, float z, float w)
-{
-	return rjd_math_vec4_xyzw(f.x, f.y, z, w);
-}
-static inline rjd_math_vec4 rjd_math_float3_to_vec4(rjd_math_float3 f, float w)
-{
-	return rjd_math_vec4_xyzw(f.x, f.y, f.z, w);
-}
-static inline rjd_math_vec4 rjd_math_float4_to_vec4(rjd_math_float4 f)
-{
-	return rjd_math_vec4_xyzw(f.x, f.y, f.z, f.w);
-}
-
-static inline rjd_math_float2 rjd_math_vec3_to_float2(rjd_math_vec3 v)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec3_writefast(v, f.v);
-	return (rjd_math_float2){ .x = f.x, .y = f.y };
-}
-static inline rjd_math_float3 rjd_math_vec3_to_float3(rjd_math_vec3 v)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec3_writefast(v, f.v);
-	return (rjd_math_float3){ .x = f.x, .y = f.y, .z = f.z };
-}
-static inline rjd_math_float4 rjd_math_vec3_to_float4(rjd_math_vec3 v, float w)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec3_writefast(v, f.v);
-	f.w = w;
-	return f;
-}
-
-static inline rjd_math_float2 rjd_math_vec4_to_float2(rjd_math_vec4 v)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec4_write(v, f.v);
-	return (rjd_math_float2){ .x = f.x, .y = f.y };
-}
-static inline rjd_math_float3 rjd_math_vec4_to_float3(rjd_math_vec4 v)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec4_write(v, f.v);
-	return (rjd_math_float3){ .x = f.x, .y = f.y, .z = f.z };
-}
-static inline rjd_math_float4 rjd_math_vec4_to_float4(rjd_math_vec4 v)
-{
-	RJD_FORCE_ALIGN(rjd_math_float4, 16) f;
-	rjd_math_vec4_write(v, f.v);
-	return f;
-}
-
-static inline rjd_math_float16 rjd_math_mat4_to_float16(rjd_math_mat4 m)
-{
-	RJD_FORCE_ALIGN(rjd_math_float16, 16) f;
-	rjd_math_mat4_write_colmajor(m, f.v);
-	return f;
 }
 
 // vec3 <-> vec4 conversion helpers
@@ -2027,12 +1904,29 @@ static inline rjd_math_vec4 rjd_math_vec4_normalize(rjd_math_vec4 v) {
 	rjd_math_vec4 l = rjd_math_vec4_splat(length);
 	return rjd_math_vec4_div(v, l);
 }
-static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s) {
-	rjd_math_vec4 scales = rjd_math_vec4_splat(s);
-	return rjd_math_vec4_mul(v, scales);
+static inline rjd_math_vec4 rjd_math_vec4_abs(rjd_math_vec4 v) {
+	__m128 signbits = _mm_set1_ps(-0.0f);
+	v.v = _mm_andnot_ps(signbits, v.v); // Remove the sign bit
+	return v;
 }
 static inline rjd_math_vec4 rjd_math_vec4_neg(rjd_math_vec4 v) {
 	return rjd_math_vec4_scale(v, -1);
+}
+static inline rjd_math_vec4 rjd_math_vec4_floor(rjd_math_vec4 v) {
+	v.v = _mm_floor_ps(v.v);
+	return v;
+}
+static inline rjd_math_vec4 rjd_math_vec4_ceil(rjd_math_vec4 v) {
+	v.v = _mm_ceil_ps(v.v);
+	return v;
+}
+static inline rjd_math_vec4 rjd_math_vec4_round(rjd_math_vec4 v) {
+	v.v = _mm_round_ps(v.v, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC);
+	return v;
+}
+static inline rjd_math_vec4 rjd_math_vec4_scale(rjd_math_vec4 v, float s) {
+	rjd_math_vec4 scales = rjd_math_vec4_splat(s);
+	return rjd_math_vec4_mul(v, scales);
 }
 static inline rjd_math_vec4 rjd_math_vec4_add(rjd_math_vec4 a, rjd_math_vec4 b) {
 	a.v = _mm_add_ps(a.v, b.v);
@@ -2153,11 +2047,23 @@ static inline float rjd_math_vec3_hmax(rjd_math_vec3 v) {
 static inline rjd_math_vec3 rjd_math_vec3_normalize(rjd_math_vec3 v) {
 	return rjd_math_vec4to3(rjd_math_vec4_normalize(rjd_math_vec3to4(v)));
 }
-static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s) {
-	return rjd_math_vec4to3(rjd_math_vec4_scale(rjd_math_vec3to4(v), s));
+static inline rjd_math_vec3 rjd_math_vec3_abs(rjd_math_vec3 v) {
+	return rjd_math_vec4to3(rjd_math_vec4_abs(rjd_math_vec3to4(v)));
 }
 static inline rjd_math_vec3 rjd_math_vec3_neg(rjd_math_vec3 v) {
 	return rjd_math_vec4to3(rjd_math_vec4_neg(rjd_math_vec3to4(v)));
+}
+static inline rjd_math_vec3 rjd_math_vec3_floor(rjd_math_vec3 v) {
+	return rjd_math_vec4to3(rjd_math_vec4_floor(rjd_math_vec3to4(v)));
+}
+static inline rjd_math_vec3 rjd_math_vec3_ceil(rjd_math_vec3 v) {
+	return rjd_math_vec4to3(rjd_math_vec4_ceil(rjd_math_vec3to4(v)));
+}
+static inline rjd_math_vec3 rjd_math_vec3_round(rjd_math_vec3 v) {
+	return rjd_math_vec4to3(rjd_math_vec4_abs(rjd_math_vec3to4(v)));
+}
+static inline rjd_math_vec3 rjd_math_vec3_scale(rjd_math_vec3 v, float s) {
+	return rjd_math_vec4to3(rjd_math_vec4_scale(rjd_math_vec3to4(v), s));
 }
 static inline rjd_math_vec3 rjd_math_vec3_add(rjd_math_vec3 a, rjd_math_vec3 b) {
 	return rjd_math_vec4to3(rjd_math_vec4_add(rjd_math_vec3to4(a), rjd_math_vec3to4(b)));
@@ -2200,7 +2106,7 @@ static inline bool rjd_math_vec3_ge(rjd_math_vec3 a, rjd_math_vec3 b) {
 	return (_mm_movemask_ps(_mm_cmpge_ps(a.v, b.v)) & 7) == 7;
 }
 static inline float* rjd_math_vec3_write(rjd_math_vec3 v, float* out) {
-	RJD_FORCE_ALIGN(float, 16) tmp[4];
+	RJD_FORCE_ALIGN(16, float) tmp[4];
 	_mm_stream_ps(tmp, v.v);
 	memcpy(out, tmp, sizeof(float) * 3);
 	return out + 3;
@@ -2319,10 +2225,9 @@ static inline rjd_math_mat4 rjd_math_mat4_add(rjd_math_mat4 a, rjd_math_mat4 b) 
 	return m;
 }
 static inline rjd_math_mat4 rjd_math_mat4_mul(rjd_math_mat4 a, rjd_math_mat4 b) {
-	rjd_math_mat4 t = rjd_math_mat4_transpose(a);
     rjd_math_mat4 m = {0};
 	for (size_t i = 0; i < rjd_countof(m.m); ++i) {
-		m.m[i] = rjd_math_mat4_mulv4(t, b.m[i]);
+		m.m[i] = rjd_math_mat4_mulv4(a, b.m[i]);
 	}
 	return m;
 }
@@ -2331,10 +2236,11 @@ static inline rjd_math_vec3 rjd_math_mat4_mulv3(rjd_math_mat4 m, rjd_math_vec3 v
 }
 static inline rjd_math_vec4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v) {
 	// TODO optimize
-	float x = rjd_math_vec4_dot(m.m[0], v);
-	float y = rjd_math_vec4_dot(m.m[1], v);
-	float z = rjd_math_vec4_dot(m.m[2], v);
-	float w = rjd_math_vec4_dot(m.m[3], v);
+	rjd_math_mat4 trans = rjd_math_mat4_transpose(m);
+	float x = rjd_math_vec4_dot(trans.m[0], v);
+	float y = rjd_math_vec4_dot(trans.m[1], v);
+	float z = rjd_math_vec4_dot(trans.m[2], v);
+	float w = rjd_math_vec4_dot(trans.m[3], v);
 	return rjd_math_vec4_xyzw(x, y, z, w);
 }
 static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
@@ -2513,7 +2419,24 @@ static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m) {
 	_MM_TRANSPOSE4_PS(m.m[0].v, m.m[1].v, m.m[2].v, m.m[3].v);
 	return m;
 }
-static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float top, float bot, float near, float far) {
+static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float right, float top, float bot, float near, float far) {
+	rjd_math_mat4 m = {0};
+	m.m[0] = rjd_math_vec4_xyzw(2*near/(right-left),		0,						0,						0);
+	m.m[1] = rjd_math_vec4_xyzw(0,							2*near/(top-bot),		0,						0);
+	m.m[2] = rjd_math_vec4_xyzw((right+left)/(right-left),	(top+bot)/(top-bot),	-(far+near)/(far-near), -1);
+	m.m[3] = rjd_math_vec4_xyzw(0,							0,						-2*far*near/(far-near),	0);
+	return m;;
+}
+static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far) {
+	rjd_math_mat4 m;
+	m.m[0] = rjd_math_vec4_xyzw(           2/(right-left),                   0,               0, 0);
+	m.m[1] = rjd_math_vec4_xyzw(                        0,         2/(top-bot),               0, 0);
+	m.m[2] = rjd_math_vec4_xyzw(                        0,                   0,    1/(near-far), 0);
+	m.m[3] = rjd_math_vec4_xyzw((left+right)/(left-right), (top+bot)/(bot-top), near/(near-far), 1);
+	return m;
+}
+static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near, float far) {
+	RJD_ASSERTFAIL("not implemented");
 	RJD_UNUSED_PARAM(left);
 	RJD_UNUSED_PARAM(right);
 	RJD_UNUSED_PARAM(top);
@@ -2522,22 +2445,23 @@ static inline rjd_math_mat4 rjd_math_mat4_frustum(float left, float right, float
 	RJD_UNUSED_PARAM(far);
 	return rjd_math_mat4_identity();
 }
-static inline rjd_math_mat4 rjd_math_mat4_ortho(float left, float right, float top, float bot, float near, float far) {
-	rjd_math_mat4 m;
-	m.m[0] = rjd_math_vec4_xyzw(2 / (right - left), 0, 0, 0);
-	m.m[1] = rjd_math_vec4_xyzw(0, 2 / (top - bot), 0, 0);
-	m.m[2] = rjd_math_vec4_xyzw(0, 0, -2 / (far - near), 0);
-	m.m[3] = rjd_math_vec4_xyzw(-(right+left)/(right-left), -(top+bot)/(top-bot), -(far+near)/(far-near), 1);
-	return m;
+static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far) {
+    float scale = tanf(y_fov * 0.5 * RJD_MATH_PI / 180.0f) * near; 
+    float right = aspect * scale;
+	float left = -right; 
+	float top = scale;
+	float bot = -top;
+	return rjd_math_mat4_frustum_righthanded(left, right, top, bot, near, far);
 }
-static inline rjd_math_mat4 rjd_math_mat4_perspective(float y_fov, float aspect, float near, float far) {
+static inline rjd_math_mat4 rjd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near, float far) {
+	RJD_ASSERTFAIL("not implemented");
 	RJD_UNUSED_PARAM(y_fov);
 	RJD_UNUSED_PARAM(aspect);
 	RJD_UNUSED_PARAM(near);
 	RJD_UNUSED_PARAM(far);
 	return rjd_math_mat4_identity();
 }
-static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up) {
+static inline rjd_math_mat4 rjd_math_mat4_lookat_righthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up) {
 	rjd_math_vec3 forward = rjd_math_vec3_normalize(rjd_math_vec3_sub(target, eye));
 	rjd_math_vec3 left = rjd_math_vec3_normalize(rjd_math_vec3_cross(forward, up));
 	up = rjd_math_vec3_normalize(rjd_math_vec3_cross(left, forward));
@@ -2545,6 +2469,13 @@ static inline rjd_math_mat4 rjd_math_mat4_lookat(rjd_math_vec3 eye, rjd_math_vec
 	rjd_math_mat4 rot = rjd_math_mat4_rotationbasis(left, up, rjd_math_vec3_neg(forward));
 	rjd_math_mat4 trans = rjd_math_mat4_translation(rjd_math_vec3_neg(eye));
 	return rjd_math_mat4_mul(trans, rjd_math_mat4_transpose(rot));
+}
+static inline rjd_math_mat4 rjd_math_mat4_lookat_lefthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up) {
+	RJD_ASSERTFAIL("not implemented");
+	RJD_UNUSED_PARAM(eye);
+	RJD_UNUSED_PARAM(target);
+	RJD_UNUSED_PARAM(up);
+	return rjd_math_mat4_identity();
 }
 static inline float* rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out) {
 	RJD_ASSERT(RJD_MEM_ISALIGNED(out, 16));
@@ -2768,6 +2699,375 @@ bool rjd_geo_ray_boxfast(rjd_math_vec3 ray_pos, rjd_math_vec3 ray_inv_dir, rjd_g
 }
 
 #endif // RJD_IMPL
+
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_procgeo.h
+////////////////////////////////////////////////////////////////////////////////
+
+#define RJD_PROCGEO_H 1
+
+// dependencies:
+// * math.h
+
+// Functions for generating procedural geometry:
+// * Generates triangles in normalized [0,1] space centered at 0,0. 
+// * All functions write 3 floats per vertex.
+// * Returns NULL if there isn't enough space in the float array to generate the geometry
+// * Returns the pointer to one-past the last element written
+// * Use *_calc_num_verts() functions to find how many floats you need
+// * Vertices are generated in clockwise winding order, assuming view is looking -Z
+
+uint32_t rjd_procgeo_rect_calc_num_verts();
+uint32_t rjd_procgeo_circle_calc_num_verts(uint32_t tesselation);
+uint32_t rjd_procgeo_box_calc_num_verts();
+uint32_t rjd_procgeo_cone_calc_num_verts(uint32_t tesselation);
+uint32_t rjd_procgeo_cylinder_calc_num_verts(uint32_t tesselation);
+uint32_t rjd_procgeo_sphere_calc_num_verts(uint32_t tesselation);
+
+float* rjd_procgeo_rect(float width, float height, float* out, size_t length);
+float* rjd_procgeo_circle(float radius, uint32_t tesselation, float* out, size_t length);
+float* rjd_procgeo_box(float width, float height, float depth, float* out, size_t length);
+float* rjd_procgeo_cone(float height, float radius, uint32_t tesselation, float* out, size_t length);
+float* rjd_procgeo_cylinder(float height, float radius, uint32_t tesselation, float* out, size_t length);
+float* rjd_procgeo_sphere(float radius, uint32_t tesselation, float* out, size_t length);
+
+////////////////////////////////////////////////////////////////////////////////
+// inline implementation
+
+#if RJD_IMPL
+
+const float RJD_PROCGEO_PI = 3.141592653589793238462643f;
+const uint32_t RJD_PROCGEO_MIN_TESSELATION_CIRCLE = 3;
+const uint32_t RJD_PROCGEO_MIN_TESSELATION_SPHERE = 3;
+
+uint32_t rjd_procgeo_rect_calc_num_verts() {
+	// 3 verts per triangle, 2 triangles
+	return 3 * 2;
+}
+
+uint32_t rjd_procgeo_circle_calc_num_verts(uint32_t tesselation) {
+	uint32_t final_tesselation = RJD_PROCGEO_MIN_TESSELATION_CIRCLE + tesselation;
+	return 3 * final_tesselation;
+}
+
+uint32_t rjd_procgeo_box_calc_num_verts() {
+	return 3 * 2 * 6;
+}
+
+uint32_t rjd_procgeo_cone_calc_num_verts(uint32_t tesselation) {
+	return 2 * rjd_procgeo_circle_calc_num_verts(tesselation);
+}
+
+uint32_t rjd_procgeo_cylinder_calc_num_verts(uint32_t tesselation)
+{
+	uint32_t circle_verts = rjd_procgeo_circle_calc_num_verts(tesselation);
+	uint32_t final_tesselation = RJD_PROCGEO_MIN_TESSELATION_CIRCLE + tesselation;
+	uint32_t quad_verts = 3 * 2 * final_tesselation;
+	return quad_verts + (circle_verts * 2);
+}
+
+uint32_t rjd_procgeo_sphere_calc_num_verts(uint32_t tesselation) {
+	uint32_t final_tesselation = RJD_PROCGEO_MIN_TESSELATION_SPHERE + tesselation;
+	uint32_t tri_verts = 3;
+	uint32_t quad_verts = tri_verts * 2;
+
+	return quad_verts * final_tesselation * final_tesselation - tri_verts * final_tesselation * 2;
+}
+
+float* rjd_procgeo_rect(float width, float height, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_rect_calc_num_verts();
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+
+	const float x = width / 2.0f;
+	const float y = height / 2.0f;
+
+	int32_t i = 0;
+
+	out[i++] = -x; out[i++] = -y; out[i++] = 0.0f;
+	out[i++] =  x; out[i++] =  y; out[i++] = 0.0f;
+	out[i++] = -x; out[i++] =  y; out[i++] = 0.0f;
+
+	out[i++] = -x; out[i++] = -y; out[i++] = 0.0f;
+	out[i++] =  x; out[i++] = -y; out[i++] = 0.0f;
+	out[i++] =  x; out[i++] =  y; out[i++] = 0.0f;
+
+	return out + num_verts * 3;
+}
+
+float* rjd_procgeo_circle(float radius, uint32_t tesselation, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_circle_calc_num_verts(tesselation);
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+
+	const uint32_t final_tesselation = tesselation + RJD_PROCGEO_MIN_TESSELATION_CIRCLE;
+	const float arc_radians = RJD_PROCGEO_PI * 2 / final_tesselation;
+
+	for (uint32_t i = 0, arc_segment = 0; i < num_verts * 3; i += 3 * 3, ++arc_segment) {
+		out[i + 0] = 0;
+		out[i + 1] = 0;
+		out[i + 2] = 0;
+		float p1_radians = arc_radians * arc_segment;
+		out[i + 3] = cos(p1_radians) * radius;
+		out[i + 4] = sin(p1_radians) * radius;
+		out[i + 5] = 0;
+		float p2_radians = arc_radians * (arc_segment + 1);
+		out[i + 6] = cos(p2_radians) * radius;
+		out[i + 7] = sin(p2_radians) * radius;
+		out[i + 8] = 0;
+	}
+
+	return out + num_verts * 3;
+}
+
+float* rjd_procgeo_box(float width, float height, float depth, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_box_calc_num_verts();
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+
+	const float x = width / 2;
+	const float y = height / 2;
+	const float z = depth / 2;
+
+	int i = 0;
+
+	// front
+	out[i++] = -x; out[i++] =  y; out[i++] =  z;
+	out[i++] = -x; out[i++] = -y; out[i++] =  z;
+	out[i++] =  x; out[i++] = -y; out[i++] =  z;
+	out[i++] = -x; out[i++] =  y; out[i++] =  z;
+	out[i++] =  x; out[i++] = -y; out[i++] =  z;
+	out[i++] =  x; out[i++] =  y; out[i++] =  z;
+
+	// back
+	out[i++] = -x; out[i++] =  y; out[i++] = -z;
+	out[i++] =  x; out[i++] = -y; out[i++] = -z;
+	out[i++] = -x; out[i++] = -y; out[i++] = -z;
+	out[i++] = -x; out[i++] =  y; out[i++] = -z;
+	out[i++] =  x; out[i++] =  y; out[i++] = -z;
+	out[i++] =  x; out[i++] = -y; out[i++] = -z;
+
+	// left
+	out[i++] = -x; out[i++] = -y; out[i++] = -z;
+	out[i++] = -x; out[i++] = -y; out[i++] =  z;
+	out[i++] = -x; out[i++] =  y; out[i++] =  z;
+	out[i++] = -x; out[i++] = -y; out[i++] = -z;
+	out[i++] = -x; out[i++] =  y; out[i++] =  z;
+	out[i++] = -x; out[i++] =  y; out[i++] = -z;
+
+	// right
+	out[i++] =  x; out[i++] = -y; out[i++] = -z; 
+	out[i++] =  x; out[i++] =  y; out[i++] = -z; 
+	out[i++] =  x; out[i++] =  y; out[i++] =  z; 
+	out[i++] =  x; out[i++] = -y; out[i++] = -z; 
+	out[i++] =  x; out[i++] =  y; out[i++] =  z; 
+	out[i++] =  x; out[i++] = -y; out[i++] =  z; 
+
+	// top
+	out[i++] =  x; out[i++] =  y; out[i++] = -z; 
+	out[i++] = -x; out[i++] =  y; out[i++] = -z; 
+	out[i++] = -x; out[i++] =  y; out[i++] =  z; 
+	out[i++] =  x; out[i++] =  y; out[i++] = -z; 
+	out[i++] = -x; out[i++] =  y; out[i++] =  z; 
+	out[i++] =  x; out[i++] =  y; out[i++] =  z; 
+
+	// bottom
+	out[i++] = -x; out[i++] = -y; out[i++] =  z; 
+	out[i++] = -x; out[i++] = -y; out[i++] = -z; 
+	out[i++] =  x; out[i++] = -y; out[i++] = -z; 
+	out[i++] = -x; out[i++] = -y; out[i++] =  z; 
+	out[i++] =  x; out[i++] = -y; out[i++] = -z; 
+	out[i++] =  x; out[i++] = -y; out[i++] =  z; 
+
+	return out + num_verts * 3;
+}
+
+float* rjd_procgeo_cone(float height, float radius, uint32_t tesselation, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_cone_calc_num_verts(tesselation);
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+
+	const uint32_t final_tesselation = tesselation + RJD_PROCGEO_MIN_TESSELATION_CIRCLE;
+	const float arc_radians = RJD_PROCGEO_PI * 2 / final_tesselation;
+
+	const uint32_t top_begin_offset = (num_verts / 2) * 3;
+	const float cone_y = height / 2;
+
+	for (uint32_t i = 0, arc_segment = 0; i < top_begin_offset; i += 3 * 3, ++arc_segment) {
+		float p1_radians = arc_radians * arc_segment;
+		float p2_radians = arc_radians * (arc_segment + 1);
+
+		float cos_1 = cos(p1_radians) * radius; 
+		float sin_1 = sin(p1_radians) * radius;
+		float cos_2 = cos(p2_radians) * radius; 
+		float sin_2 = sin(p2_radians) * radius;
+
+		uint32_t bot_index = i;
+		out[bot_index++] = 0;
+		out[bot_index++] = -cone_y;
+		out[bot_index++] = 0;
+		out[bot_index++] = cos_1;
+		out[bot_index++] = -cone_y;
+		out[bot_index++] = sin_1;
+		out[bot_index++] = cos_2;
+		out[bot_index++] = -cone_y;
+		out[bot_index++] = sin_2;
+
+		uint32_t top_index = i + top_begin_offset;
+		out[top_index++] = 0;
+		out[top_index++] = cone_y;
+		out[top_index++] = 0;
+		out[top_index++] = cos_2;
+		out[top_index++] = -cone_y;
+		out[top_index++] = sin_2;
+		out[top_index++] = cos_1;
+		out[top_index++] = -cone_y;
+		out[top_index++] = sin_1;
+	}
+
+	return out + num_verts * 3;
+}
+
+float* rjd_procgeo_cylinder(float height, float radius, uint32_t tesselation, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_cylinder_calc_num_verts(tesselation);
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+
+	const uint32_t final_tesselation = tesselation + RJD_PROCGEO_MIN_TESSELATION_CIRCLE;
+	const float arc_radians = RJD_PROCGEO_PI * 2 / final_tesselation;
+
+	const uint32_t top_begin_offset = rjd_procgeo_circle_calc_num_verts(tesselation);
+	const uint32_t side_begin_offset = top_begin_offset * 2;
+	const float y = height / 2;
+
+	for (uint32_t v = 0, arc_segment = 0; v < top_begin_offset; v += 3, ++arc_segment) {
+		float p1_radians = arc_radians * arc_segment;
+		float p2_radians = arc_radians * (arc_segment + 1);
+
+		float cos_1 = cos(p1_radians) * radius; 
+		float sin_1 = sin(p1_radians) * radius;
+		float cos_2 = cos(p2_radians) * radius; 
+		float sin_2 = sin(p2_radians) * radius;
+
+		uint32_t i = v * 3;
+
+		uint32_t bot_index = i;
+		out[bot_index++] = 0;
+		out[bot_index++] = -y;
+		out[bot_index++] = 0;
+		out[bot_index++] = cos_1;
+		out[bot_index++] = -y;
+		out[bot_index++] = sin_1;
+		out[bot_index++] = cos_2;
+		out[bot_index++] = -y;
+		out[bot_index++] = sin_2;
+
+		uint32_t top_index = (v + top_begin_offset) * 3;
+		out[top_index++] = 0;
+		out[top_index++] = y;
+		out[top_index++] = 0;
+		out[top_index++] = cos_2;
+		out[top_index++] = y;
+		out[top_index++] = sin_2;
+		out[top_index++] = cos_1;
+		out[top_index++] = y;
+		out[top_index++] = sin_1;
+
+		uint32_t side_index = (v + v + side_begin_offset) * 3;
+		out[side_index++] = cos_1; out[side_index++] = -y; out[side_index++] = sin_1;
+		out[side_index++] = cos_1; out[side_index++] =  y; out[side_index++] = sin_1;
+		out[side_index++] = cos_2; out[side_index++] =  y; out[side_index++] = sin_2;
+
+		out[side_index++] = cos_2; out[side_index++] =  y; out[side_index++] = sin_2;
+		out[side_index++] = cos_2; out[side_index++] = -y; out[side_index++] = sin_2;
+		out[side_index++] = cos_1; out[side_index++] = -y; out[side_index++] = sin_1;
+	}
+
+	return out + num_verts * 3;
+}
+
+float* rjd_procgeo_sphere(float radius, uint32_t tesselation, float* out, size_t length)
+{
+	const uint32_t num_verts = rjd_procgeo_sphere_calc_num_verts(tesselation);
+	if (length < num_verts * 3) {
+		return NULL;
+	}
+	
+	const float pi = RJD_PROCGEO_PI;
+
+	const uint32_t final_tesselation = tesselation + RJD_PROCGEO_MIN_TESSELATION_SPHERE;
+
+	uint32_t i = 0;
+
+	for (uint32_t y_arc = 0; y_arc < final_tesselation; ++y_arc) {
+
+		float y_arc1 = (float)y_arc / final_tesselation;
+		float y_arc2 = (float)(y_arc + 1) / final_tesselation;
+
+		float cos_2pi_y_arc1 = cos(2 * pi * y_arc1);
+		float cos_2pi_y_arc2 = cos(2 * pi * y_arc2);
+
+		float sin_2pi_y_arc1 = sin(2 * pi * y_arc1);
+		float sin_2pi_y_arc2 = sin(2 * pi * y_arc2);
+
+		for (uint32_t xz_arc = 0; xz_arc < final_tesselation; ++xz_arc) {
+
+			float xz_arc1 = (float)xz_arc / final_tesselation;
+			float xz_arc2 = (float)(xz_arc + 1) / final_tesselation;
+
+			float sin_pi_xz_arc1 = sin(pi * xz_arc1);
+			float cos_pi_xz_arc1 = cos(pi * xz_arc1);
+
+			float sin_pi_xz_arc2 = sin(pi * xz_arc2);
+			float cos_pi_xz_arc2 = cos(pi * xz_arc2);
+
+			float x1 = sin_pi_xz_arc1 * cos_2pi_y_arc1 * radius;
+			float y1 = cos_pi_xz_arc1 * radius;
+			float z1 = sin_pi_xz_arc1 * sin_2pi_y_arc1 * radius;
+
+			float x2 = sin_pi_xz_arc2 * cos_2pi_y_arc1 * radius;
+			float y2 = cos_pi_xz_arc2 * radius;
+			float z2 = sin_pi_xz_arc2 * sin_2pi_y_arc1 * radius;
+
+			float x3 = sin_pi_xz_arc1 * cos_2pi_y_arc2 * radius;
+			float y3 = cos_pi_xz_arc1 * radius;
+			float z3 = sin_pi_xz_arc1 * sin_2pi_y_arc2 * radius;
+
+			float x4 = sin_pi_xz_arc2 * cos_2pi_y_arc2 * radius;
+			float y4 = cos_pi_xz_arc2 * radius;
+			float z4 = sin_pi_xz_arc2 * sin_2pi_y_arc2 * radius;
+
+			if (xz_arc > 0)
+			{
+				out[i++] = x1; out[i++] = y1; out[i++] = z1;
+				out[i++] = x3; out[i++] = y3; out[i++] = z3;
+				out[i++] = x2; out[i++] = y2; out[i++] = z2;
+			}
+
+			if (xz_arc < final_tesselation - 1)
+			{
+				out[i++] = x2; out[i++] = y2; out[i++] = z2;
+				out[i++] = x3; out[i++] = y3; out[i++] = z3;
+				out[i++] = x4; out[i++] = y4; out[i++] = z4;
+			}
+		}
+	}
+
+	return out + num_verts * 3;
+}
+
+#endif
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -4025,6 +4325,1110 @@ struct rjd_result rjd_fio_mkdir(const char* path)
 
 
 ////////////////////////////////////////////////////////////////////////////////
+// rjd_thread.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#define RJD_THREAD
+
+#ifndef RJD_THREAD_STACKSIZE_DEFAULT
+	#define RJD_THREAD_STACKSIZE_DEFAULT (4 * RJD_MB)
+#endif
+
+#define RJD_THREAD_NAME_MAX_LENGTH (16u)
+
+typedef void rjd_thread_entrypoint_func(void* userdata);
+
+struct rjd_thread_desc
+{
+	rjd_thread_entrypoint_func* entrypoint_func;
+	struct rjd_mem_allocator* allocator;
+	uint32_t stacksize;
+	void* userdata;
+	const char name[RJD_THREAD_NAME_MAX_LENGTH];
+};
+
+struct rjd_thread_id
+{
+	uint64_t id;
+};
+
+struct rjd_thread_platform
+{
+	char platform_impl[16];
+};
+
+struct rjd_thread
+{
+	struct rjd_thread_id id;
+	struct rjd_thread_platform platform;
+};
+
+struct rjd_condvar
+{
+	char platform_impl[128];
+};
+
+struct rjd_lock
+{
+	char platform_impl[64];
+};
+
+struct rjd_rwlock
+{
+	char platform_impl[256];
+};
+
+struct rjd_thread_id rjd_thread_current(void);
+struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc);
+struct rjd_result rjd_thread_join(struct rjd_thread* thread);
+struct rjd_result rjd_thread_getname(struct rjd_thread* thread, uint32_t destination_max_length, char* out);
+void rjd_thread_sleep(uint32_t seconds);
+
+struct rjd_result rjd_condvar_create(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_destroy(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_lock(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_unlock(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_signal_single(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_signal_all(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_wait(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t seconds);
+
+struct rjd_result rjd_lock_create(struct rjd_lock* lock);
+struct rjd_result rjd_lock_destroy(struct rjd_lock* lock);
+struct rjd_result rjd_lock_acquire(struct rjd_lock* lock);
+struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock);
+struct rjd_result rjd_lock_release(struct rjd_lock* lock);
+
+struct rjd_result rjd_rwlock_create(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_destroy(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_acquire_reader(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_try_acquire_reader(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_release(struct rjd_rwlock* lock);
+
+#if RJD_IMPL
+
+#if RJD_PLATFORM_WINDOWS
+
+#error "Unimplemented"
+
+struct rjd_result rjd_lock_create(struct rjd_lock* lock)
+{
+	// posix mutex is non-rentrant but win32 critical section is. need to assert
+	// that owning thread locking the CS isn't the current thread
+}
+
+#elif RJD_PLATFORM_OSX
+
+#include <pthread.h>
+#include <unistd.h> // sleep
+#include <limits.h> // PTHREAD_STACK_MIN
+#include <sys/errno.h>
+#include <sys/time.h> // gettimeofday
+
+struct rjd_thread_osx
+{
+	pthread_t handle;
+	void* stack;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_thread_osx) <= sizeof(struct rjd_thread_platform));
+RJD_STATIC_ASSERT(sizeof(pthread_t) <= sizeof(uint64_t));
+
+struct rjd_thread_params
+{
+	rjd_thread_entrypoint_func* entrypoint_func;
+	void* userdata;
+	char name[RJD_THREAD_NAME_MAX_LENGTH];
+};
+
+struct rjd_condvar_osx
+{
+	pthread_cond_t condition_variable;
+	struct rjd_lock lock;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_condvar_osx) <= sizeof(struct rjd_condvar));
+
+struct rjd_lock_osx
+{
+	pthread_mutex_t lock;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_lock_osx) <= sizeof(struct rjd_lock));
+
+struct rjd_rwlock_osx
+{
+	pthread_rwlock_t lock;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_rwlock_osx) <= sizeof(struct rjd_rwlock));
+
+RJD_STATIC_ASSERT(RJD_THREAD_STACKSIZE_DEFAULT >= PTHREAD_STACK_MIN);
+
+static inline struct rjd_thread_osx* rjd_thread_get_osx(struct rjd_thread* thread);
+static inline struct rjd_condvar_osx* rjd_condvar_get_osx(struct rjd_condvar* condvar);
+static inline struct rjd_lock_osx* rjd_lock_get_osx(struct rjd_lock* lock);
+static inline struct rjd_rwlock_osx* rjd_rwlock_get_osx(struct rjd_rwlock* rwlock);
+
+struct rjd_result rjd_error_to_result(int error);
+static void* rjd_thread_entrypoint_osx(void* userdata);
+
+////////////////////////////////////////////////////////////////////////////////
+// interface implementation
+
+struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc)
+{
+	struct rjd_thread_osx* thread_osx = rjd_thread_get_osx(thread);
+	thread_osx->stack = NULL;
+
+	if (desc.stacksize == 0) {
+		desc.stacksize = RJD_THREAD_STACKSIZE_DEFAULT;
+	}
+
+	// pthreads require 4K alignment for stacks
+	void* stack = rjd_mem_alloc_array_aligned_noclear(uint8_t, desc.stacksize, desc.allocator, 4 * RJD_KB);
+	struct rjd_thread_params* params = rjd_mem_alloc(struct rjd_thread_params, desc.allocator);
+	params->entrypoint_func = desc.entrypoint_func;
+	params->userdata = desc.userdata;
+	params->name[0] = 0;
+	if (*desc.name) {
+		strncpy(params->name, desc.name, RJD_THREAD_NAME_MAX_LENGTH);
+        params->name[rjd_countof(params->name) - 1] = 0;
+	}
+
+    pthread_attr_t attributes = {0};
+    int error = pthread_attr_init(&attributes);
+	struct rjd_result result = rjd_error_to_result(error);
+
+	if (rjd_result_isok(result)) {
+		error = pthread_attr_setstack(&attributes, stack, desc.stacksize);
+        if (error == EINVAL && desc.stacksize < PTHREAD_STACK_MIN) {
+            result = RJD_RESULT("Failed to set the stack. Ensure it is at least as large as PTHREAD_STACK_MIN");
+        } else {
+            result = rjd_error_to_result(error);
+        }
+        
+		if (rjd_result_isok(result)) {
+			// NOTE params ownership is passed to thread
+			error = pthread_create(&thread_osx->handle, &attributes, rjd_thread_entrypoint_osx, params);
+			result = rjd_error_to_result(error);
+			if (rjd_result_isok(result)) {
+				thread->id.id = (uint64_t)thread_osx->handle;
+				thread_osx->stack = stack;
+			}
+		}
+	}
+
+	if (!rjd_result_isok(result)) {
+		rjd_mem_free(params);
+		rjd_mem_free(stack);
+	}
+
+	return result;
+}
+
+struct rjd_result rjd_thread_join(struct rjd_thread* thread)
+{
+	struct rjd_thread_osx* thread_osx = rjd_thread_get_osx(thread);
+
+	void* unused_return_value = NULL;
+    int error = pthread_join(thread_osx->handle, &unused_return_value);
+
+	rjd_mem_free(thread_osx->stack);
+
+	return rjd_error_to_result(error);
+}
+
+struct rjd_result rjd_thread_getname(struct rjd_thread* thread, uint32_t destination_max_length, char* out)
+{
+	struct rjd_thread_osx* thread_osx = rjd_thread_get_osx(thread);
+
+	struct rjd_result result = RJD_RESULT_OK();
+
+	int error = pthread_getname_np(thread_osx->handle, out, destination_max_length);
+	if (error == ERANGE) {
+		result = RJD_RESULT("Destination buffer too short");
+	}
+
+	return result;
+}
+
+void rjd_thread_sleep(uint32_t seconds)
+{
+	sleep(seconds);
+}
+
+struct rjd_result rjd_condvar_create(struct rjd_condvar* condvar)
+{
+	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
+
+	struct rjd_result result = rjd_lock_create(&condvar_osx->lock);
+	if (rjd_result_isok(result)) {
+		const int error = pthread_cond_init(&condvar_osx->condition_variable, NULL);
+		result = rjd_error_to_result(error);
+	}
+
+	return result;
+}
+
+struct rjd_result rjd_condvar_destroy(struct rjd_condvar* condvar)
+{
+	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
+
+    struct rjd_result result = rjd_lock_release(&condvar_osx->lock);
+    if (rjd_result_isok(result)) {
+        result = rjd_lock_destroy(&condvar_osx->lock);
+        if (rjd_result_isok(result)) {
+            const int error = pthread_cond_destroy(&condvar_osx->condition_variable);
+            result = rjd_error_to_result(error);
+        }
+    }
+
+	return result;
+}
+
+struct rjd_result rjd_condvar_lock(struct rjd_condvar* condvar)
+{
+	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
+	return rjd_lock_acquire(&condvar_osx->lock);
+}
+
+struct rjd_result rjd_condvar_unlock(struct rjd_condvar* condvar)
+{
+	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
+	return rjd_lock_release(&condvar_osx->lock);
+}
+
+
+struct rjd_result rjd_condvar_signal_single(struct rjd_condvar* condvar)
+{
+	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
+
+	struct rjd_result result = rjd_lock_acquire(&condvar_osx->lock);
+	if (rjd_result_isok(result)) {
+		int error = pthread_cond_signal(&condvar_osx->condition_variable);
+		result = rjd_error_to_result(error);
+		rjd_lock_release(&condvar_osx->lock);
+	}
+	return result;
+}
+
+struct rjd_result rjd_condvar_signal_all(struct rjd_condvar* condvar)
+{
+	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
+	
+	struct rjd_result result = rjd_lock_acquire(&condvar_osx->lock);
+	if (rjd_result_isok(result)) {
+		int error = pthread_cond_broadcast(&condvar_osx->condition_variable);
+		result = rjd_error_to_result(error);
+		rjd_lock_release(&condvar_osx->lock);
+	}
+	return result;
+}
+
+struct rjd_result rjd_condvar_wait(struct rjd_condvar* condvar)
+{
+	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
+	struct rjd_lock_osx* lock_osx = rjd_lock_get_osx(&condvar_osx->lock);
+
+	int error = pthread_cond_wait(&condvar_osx->condition_variable, &lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t seconds)
+{
+	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
+	struct rjd_lock_osx* lock_osx = rjd_lock_get_osx(&condvar_osx->lock);
+
+	struct timeval timeval = {0};
+	gettimeofday(&timeval, NULL);
+
+	struct timespec timespec = {
+		.tv_sec = timeval.tv_sec + seconds,
+        .tv_nsec = timeval.tv_usec * 1000,
+	};
+	int error = pthread_cond_timedwait(&condvar_osx->condition_variable, &lock_osx->lock, &timespec);
+	struct rjd_result result = rjd_error_to_result(error);
+   
+	return result;
+}
+
+struct rjd_result rjd_lock_create(struct rjd_lock* lock)
+{
+	struct rjd_lock_osx* lock_osx = rjd_lock_get_osx(lock);
+
+    int error = pthread_mutex_init(&lock_osx->lock, NULL);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_lock_destroy(struct rjd_lock* lock)
+{
+	struct rjd_lock_osx* lock_osx = rjd_lock_get_osx(lock);
+	
+	int error = pthread_mutex_destroy(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
+{
+	struct rjd_lock_osx* lock_osx = rjd_lock_get_osx(lock);
+	
+	int error = pthread_mutex_lock(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
+{
+	struct rjd_lock_osx* lock_osx = rjd_lock_get_osx(lock);
+	
+	int error = pthread_mutex_trylock(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_lock_release(struct rjd_lock* lock)
+{
+	struct rjd_lock_osx* lock_osx = rjd_lock_get_osx(lock);
+	
+	int error = pthread_mutex_unlock(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_rwlock_create(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+	
+	int error = pthread_rwlock_init(&lock_osx->lock, NULL);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_rwlock_destroy(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+	
+	int error = pthread_rwlock_destroy(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_rwlock_acquire_reader(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+	
+	int error = pthread_rwlock_rdlock(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+	
+	int error = pthread_rwlock_wrlock(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_rwlock_try_acquire_reader(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+	
+	int error = pthread_rwlock_tryrdlock(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+	
+	int error = pthread_rwlock_trywrlock(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+struct rjd_result rjd_rwlock_release(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+	
+	int error = pthread_rwlock_unlock(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Local helper implementation
+
+static inline struct rjd_thread_osx* rjd_thread_get_osx(struct rjd_thread* thread)
+{
+	RJD_ASSERT(thread);
+	return (struct rjd_thread_osx*)&thread->platform;
+}
+
+static inline struct rjd_condvar_osx* rjd_condvar_get_osx(struct rjd_condvar* condvar)
+{
+	RJD_ASSERT(condvar);
+	return (struct rjd_condvar_osx*)condvar;
+}
+
+static inline struct rjd_lock_osx* rjd_lock_get_osx(struct rjd_lock* lock)
+{
+	RJD_ASSERT(lock);
+	return (struct rjd_lock_osx*)lock;
+}
+
+static inline struct rjd_rwlock_osx* rjd_rwlock_get_osx(struct rjd_rwlock* rwlock)
+{
+	RJD_ASSERT(rwlock);
+	return (struct rjd_rwlock_osx*)rwlock;
+}
+
+struct rjd_result rjd_error_to_result(int error)
+{
+	switch (error)
+	{
+		case 0:			return RJD_RESULT_OK();
+		case EAGAIN:	return RJD_RESULT("Not enough system resources to create this object or system capacity is already at maximum. Try again later.");
+		case EBUSY:		return RJD_RESULT("Unable to perform operation without blocking. If the object is a lock, the thread may already be holding it.");
+		case EDEADLK:	return RJD_RESULT("Deadlock detected.");
+		case EINVAL:	return RJD_RESULT("Invalid object.");
+		case ENOMEM:	return RJD_RESULT("Not enough system memory available.");
+		case EPERM: 	return RJD_RESULT("This operation requires higher permissions.");
+		case ESRCH:		return RJD_RESULT("Object not found.");
+		case ETIMEDOUT:	return RJD_RESULT("Timed out");
+	}
+	
+	return RJD_RESULT("Unknown error");
+}
+
+static void* rjd_thread_entrypoint_osx(void* params_untyped)
+{
+	struct rjd_thread_params params = *(struct rjd_thread_params*)params_untyped;
+	rjd_mem_free(params_untyped);
+
+	if (*params.name) {
+		pthread_setname_np(params.name);
+	}
+	params.entrypoint_func(params.userdata);
+	return NULL;
+}
+
+#endif
+
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_atomic.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+struct rjd_atomic_int64  { char impl[8]; };
+struct rjd_atomic_int32  { char impl[4]; };
+struct rjd_atomic_int16  { char impl[2]; };
+struct rjd_atomic_int8   { char impl[1]; };
+struct rjd_atomic_uint64 { char impl[8]; };
+struct rjd_atomic_uint32 { char impl[4]; };
+struct rjd_atomic_uint16 { char impl[2]; };
+struct rjd_atomic_uint8  { char impl[1]; };
+
+struct rjd_atomic_int64 rjd_atomic_int64_init (int64_t  value);
+int64_t rjd_atomic_int64_get(struct rjd_atomic_int64* atomic);
+void rjd_atomic_int64_set(struct rjd_atomic_int64* atomic, int64_t value);
+int64_t rjd_atomic_int64_add(struct rjd_atomic_int64* atomic, int64_t value);
+int64_t rjd_atomic_int64_sub(struct rjd_atomic_int64* atomic, int64_t value);
+int64_t rjd_atomic_int64_inc(struct rjd_atomic_int64* atomic);
+int64_t rjd_atomic_int64_dec(struct rjd_atomic_int64* atomic);
+bool rjd_atomic_int64_compare_exchange_weak(struct rjd_atomic_int64* atomic, int64_t* expected, int64_t desired);
+bool rjd_atomic_int64_compare_exchange_strong(struct rjd_atomic_int64* atomic, int64_t* expected, int64_t desired);
+
+struct rjd_atomic_int32 rjd_atomic_int32_init (int32_t  value);
+int32_t rjd_atomic_int32_get(struct rjd_atomic_int32* atomic);
+void rjd_atomic_int32_set(struct rjd_atomic_int32* atomic, int32_t value);
+int32_t rjd_atomic_int32_add(struct rjd_atomic_int32* atomic, int32_t value);
+int32_t rjd_atomic_int32_sub(struct rjd_atomic_int32* atomic, int32_t value);
+int32_t rjd_atomic_int32_inc(struct rjd_atomic_int32* atomic);
+int32_t rjd_atomic_int32_dec(struct rjd_atomic_int32* atomic);
+bool rjd_atomic_int32_compare_exchange_weak(struct rjd_atomic_int32* atomic, int32_t* expected, int32_t desired);
+bool rjd_atomic_int32_compare_exchange_strong(struct rjd_atomic_int32* atomic, int32_t* expected, int32_t desired);
+
+struct rjd_atomic_int16 rjd_atomic_int16_init (int16_t  value);
+int16_t rjd_atomic_int16_get(struct rjd_atomic_int16* atomic);
+void rjd_atomic_int16_set(struct rjd_atomic_int16* atomic, int16_t value);
+int16_t rjd_atomic_int16_add(struct rjd_atomic_int16* atomic, int16_t value);
+int16_t rjd_atomic_int16_sub(struct rjd_atomic_int16* atomic, int16_t value);
+int16_t rjd_atomic_int16_inc(struct rjd_atomic_int16* atomic);
+int16_t rjd_atomic_int16_dec(struct rjd_atomic_int16* atomic);
+bool rjd_atomic_int16_compare_exchange_weak(struct rjd_atomic_int16* atomic, int16_t* expected, int16_t desired);
+bool rjd_atomic_int16_compare_exchange_strong(struct rjd_atomic_int16* atomic, int16_t* expected, int16_t desired);
+
+struct rjd_atomic_int8 rjd_atomic_int8_init (int8_t  value);
+int8_t rjd_atomic_int8_get(struct rjd_atomic_int8* atomic);
+void rjd_atomic_int8_set(struct rjd_atomic_int8* atomic, int8_t value);
+int8_t rjd_atomic_int8_add(struct rjd_atomic_int8* atomic, int8_t value);
+int8_t rjd_atomic_int8_sub(struct rjd_atomic_int8* atomic, int8_t value);
+int8_t rjd_atomic_int8_inc(struct rjd_atomic_int8* atomic);
+int8_t rjd_atomic_int8_dec(struct rjd_atomic_int8* atomic);
+bool rjd_atomic_int8_compare_exchange_weak(struct rjd_atomic_int8* atomic, int8_t* expected, int8_t desired);
+bool rjd_atomic_int8_compare_exchange_strong(struct rjd_atomic_int8* atomic, int8_t* expected, int8_t desired);
+
+struct rjd_atomic_uint64 rjd_atomic_uint64_init (uint64_t  value);
+uint64_t rjd_atomic_uint64_get(struct rjd_atomic_uint64* atomic);
+void rjd_atomic_uint64_set(struct rjd_atomic_uint64* atomic, uint64_t value);
+uint64_t rjd_atomic_uint64_add(struct rjd_atomic_uint64* atomic, uint64_t value);
+uint64_t rjd_atomic_uint64_sub(struct rjd_atomic_uint64* atomic, uint64_t value);
+uint64_t rjd_atomic_uint64_inc(struct rjd_atomic_uint64* atomic);
+uint64_t rjd_atomic_uint64_dec(struct rjd_atomic_uint64* atomic);
+bool rjd_atomic_uint64_compare_exchange_weak(struct rjd_atomic_uint64* atomic, uint64_t* expected, uint64_t desired);
+bool rjd_atomic_uint64_compare_exchange_strong(struct rjd_atomic_uint64* atomic, uint64_t* expected, uint64_t desired);
+
+struct rjd_atomic_uint32 rjd_atomic_uint32_init (uint32_t  value);
+uint32_t rjd_atomic_uint32_get(struct rjd_atomic_uint32* atomic);
+void rjd_atomic_uint32_set(struct rjd_atomic_uint32* atomic, uint32_t value);
+uint32_t rjd_atomic_uint32_add(struct rjd_atomic_uint32* atomic, uint32_t value);
+uint32_t rjd_atomic_uint32_sub(struct rjd_atomic_uint32* atomic, uint32_t value);
+uint32_t rjd_atomic_uint32_inc(struct rjd_atomic_uint32* atomic);
+uint32_t rjd_atomic_uint32_dec(struct rjd_atomic_uint32* atomic);
+bool rjd_atomic_uint32_compare_exchange_weak(struct rjd_atomic_uint32* atomic, uint32_t* expected, uint32_t desired);
+bool rjd_atomic_uint32_compare_exchange_strong(struct rjd_atomic_uint32* atomic, uint32_t* expected, uint32_t desired);
+
+struct rjd_atomic_uint16 rjd_atomic_uint16_init (uint16_t  value);
+uint16_t rjd_atomic_uint16_get(struct rjd_atomic_uint16* atomic);
+void rjd_atomic_uint16_set(struct rjd_atomic_uint16* atomic, uint16_t value);
+uint16_t rjd_atomic_uint16_add(struct rjd_atomic_uint16* atomic, uint16_t value);
+uint16_t rjd_atomic_uint16_sub(struct rjd_atomic_uint16* atomic, uint16_t value);
+uint16_t rjd_atomic_uint16_inc(struct rjd_atomic_uint16* atomic);
+uint16_t rjd_atomic_uint16_dec(struct rjd_atomic_uint16* atomic);
+bool rjd_atomic_uint16_compare_exchange_weak(struct rjd_atomic_uint16* atomic, uint16_t* expected, uint16_t desired);
+bool rjd_atomic_uint16_compare_exchange_strong(struct rjd_atomic_uint16* atomic, uint16_t* expected, uint16_t desired);
+
+struct rjd_atomic_uint8 rjd_atomic_uint8_init (uint8_t  value);
+uint8_t rjd_atomic_uint8_get(struct rjd_atomic_uint8* atomic);
+void rjd_atomic_uint8_set(struct rjd_atomic_uint8* atomic, uint8_t value);
+uint8_t rjd_atomic_uint8_add(struct rjd_atomic_uint8* atomic, uint8_t value);
+uint8_t rjd_atomic_uint8_sub(struct rjd_atomic_uint8* atomic, uint8_t value);
+uint8_t rjd_atomic_uint8_inc(struct rjd_atomic_uint8* atomic);
+uint8_t rjd_atomic_uint8_dec(struct rjd_atomic_uint8* atomic);
+bool rjd_atomic_uint8_compare_exchange_weak(struct rjd_atomic_uint8* atomic, uint8_t* expected, uint8_t desired);
+bool rjd_atomic_uint8_compare_exchange_strong(struct rjd_atomic_uint8* atomic, uint8_t* expected, uint8_t desired);
+
+#if RJD_IMPL
+
+#if RJD_COMPILER_MSVC
+
+// TODO
+
+#elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
+#include <stdatomic.h>
+
+struct rjd_atomic_int64_osx
+{
+	_Atomic int64_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_int64) <= sizeof(struct rjd_atomic_int64));
+
+struct rjd_atomic_int32_osx
+{
+	_Atomic int32_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_int32) <= sizeof(struct rjd_atomic_int32));
+
+struct rjd_atomic_int16_osx
+{
+	_Atomic int16_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_int16) <= sizeof(struct rjd_atomic_int16));
+
+struct rjd_atomic_int8_osx
+{
+	_Atomic int8_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_int8) <= sizeof(struct rjd_atomic_int8));
+
+struct rjd_atomic_uint64_osx
+{
+	_Atomic uint64_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_uint64) <= sizeof(struct rjd_atomic_uint64));
+
+struct rjd_atomic_uint32_osx
+{
+	_Atomic uint32_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_int32) <= sizeof(struct rjd_atomic_int32));
+
+struct rjd_atomic_uint16_osx
+{
+	_Atomic uint16_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_uint16) <= sizeof(struct rjd_atomic_uint16));
+
+struct rjd_atomic_uint8_osx
+{
+	_Atomic uint8_t value;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_atomic_uint8) <= sizeof(struct rjd_atomic_uint8));
+
+////////////////////////////////////////////////////////////////////////////////
+// Implementation
+
+struct rjd_atomic_int64 rjd_atomic_int64_init (int64_t value)
+{
+	struct rjd_atomic_int64 atomic;
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+int64_t rjd_atomic_int64_get(struct rjd_atomic_int64* atomic)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_int64_set(struct rjd_atomic_int64* atomic, int64_t value)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+int64_t rjd_atomic_int64_add(struct rjd_atomic_int64* atomic, int64_t value)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+int64_t rjd_atomic_int64_sub(struct rjd_atomic_int64* atomic, int64_t value)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+int64_t rjd_atomic_int64_inc(struct rjd_atomic_int64* atomic)
+{
+	return rjd_atomic_int64_add(atomic, 1);
+}
+
+int64_t rjd_atomic_int64_dec(struct rjd_atomic_int64* atomic)
+{
+	return rjd_atomic_int64_sub(atomic, 1);
+}
+
+bool rjd_atomic_int64_compare_exchange_weak(struct rjd_atomic_int64* atomic, int64_t* expected, int64_t desired)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_int64_compare_exchange_strong(struct rjd_atomic_int64* atomic, int64_t* expected, int64_t desired)
+{
+	struct rjd_atomic_int64_osx* atomic_osx = (struct rjd_atomic_int64_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_int32 rjd_atomic_int32_init (int32_t value)
+{
+	struct rjd_atomic_int32 atomic;
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+int32_t rjd_atomic_int32_get(struct rjd_atomic_int32* atomic)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_int32_set(struct rjd_atomic_int32* atomic, int32_t value)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+int32_t rjd_atomic_int32_add(struct rjd_atomic_int32* atomic, int32_t value)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+int32_t rjd_atomic_int32_sub(struct rjd_atomic_int32* atomic, int32_t value)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+int32_t rjd_atomic_int32_inc(struct rjd_atomic_int32* atomic)
+{
+	return rjd_atomic_int32_add(atomic, 1);
+}
+
+int32_t rjd_atomic_int32_dec(struct rjd_atomic_int32* atomic)
+{
+	return rjd_atomic_int32_sub(atomic, 1);
+}
+
+bool rjd_atomic_int32_compare_exchange_weak(struct rjd_atomic_int32* atomic, int32_t* expected, int32_t desired)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_int32_compare_exchange_strong(struct rjd_atomic_int32* atomic, int32_t* expected, int32_t desired)
+{
+	struct rjd_atomic_int32_osx* atomic_osx = (struct rjd_atomic_int32_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_int16 rjd_atomic_int16_init (int16_t value)
+{
+	struct rjd_atomic_int16 atomic;
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+int16_t rjd_atomic_int16_get(struct rjd_atomic_int16* atomic)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_int16_set(struct rjd_atomic_int16* atomic, int16_t value)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+int16_t rjd_atomic_int16_add(struct rjd_atomic_int16* atomic, int16_t value)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+int16_t rjd_atomic_int16_sub(struct rjd_atomic_int16* atomic, int16_t value)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+int16_t rjd_atomic_int16_inc(struct rjd_atomic_int16* atomic)
+{
+	return rjd_atomic_int16_add(atomic, 1);
+}
+
+int16_t rjd_atomic_int16_dec(struct rjd_atomic_int16* atomic)
+{
+	return rjd_atomic_int16_sub(atomic, 1);
+}
+
+bool rjd_atomic_int16_compare_exchange_weak(struct rjd_atomic_int16* atomic, int16_t* expected, int16_t desired)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_int16_compare_exchange_strong(struct rjd_atomic_int16* atomic, int16_t* expected, int16_t desired)
+{
+	struct rjd_atomic_int16_osx* atomic_osx = (struct rjd_atomic_int16_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_int8 rjd_atomic_int8_init (int8_t value)
+{
+	struct rjd_atomic_int8 atomic;
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+int8_t rjd_atomic_int8_get(struct rjd_atomic_int8* atomic)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_int8_set(struct rjd_atomic_int8* atomic, int8_t value)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+int8_t rjd_atomic_int8_add(struct rjd_atomic_int8* atomic, int8_t value)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+int8_t rjd_atomic_int8_sub(struct rjd_atomic_int8* atomic, int8_t value)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+int8_t rjd_atomic_int8_inc(struct rjd_atomic_int8* atomic)
+{
+	return rjd_atomic_int8_add(atomic, 1);
+}
+
+int8_t rjd_atomic_int8_dec(struct rjd_atomic_int8* atomic)
+{
+	return rjd_atomic_int8_sub(atomic, 1);
+}
+
+bool rjd_atomic_int8_compare_exchange_weak(struct rjd_atomic_int8* atomic, int8_t* expected, int8_t desired)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_int8_compare_exchange_strong(struct rjd_atomic_int8* atomic, int8_t* expected, int8_t desired)
+{
+	struct rjd_atomic_int8_osx* atomic_osx = (struct rjd_atomic_int8_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_uint64 rjd_atomic_uint64_init (uint64_t value)
+{
+	struct rjd_atomic_uint64 atomic;
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+uint64_t rjd_atomic_uint64_get(struct rjd_atomic_uint64* atomic)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_uint64_set(struct rjd_atomic_uint64* atomic, uint64_t value)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+uint64_t rjd_atomic_uint64_add(struct rjd_atomic_uint64* atomic, uint64_t value)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+uint64_t rjd_atomic_uint64_sub(struct rjd_atomic_uint64* atomic, uint64_t value)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+uint64_t rjd_atomic_uint64_inc(struct rjd_atomic_uint64* atomic)
+{
+	return rjd_atomic_uint64_add(atomic, 1);
+}
+
+uint64_t rjd_atomic_uint64_dec(struct rjd_atomic_uint64* atomic)
+{
+	return rjd_atomic_uint64_sub(atomic, 1);
+}
+
+bool rjd_atomic_uint64_compare_exchange_weak(struct rjd_atomic_uint64* atomic, uint64_t* expected, uint64_t desired)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_uint64_compare_exchange_strong(struct rjd_atomic_uint64* atomic, uint64_t* expected, uint64_t desired)
+{
+	struct rjd_atomic_uint64_osx* atomic_osx = (struct rjd_atomic_uint64_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_uint32 rjd_atomic_uint32_init (uint32_t value)
+{
+	struct rjd_atomic_uint32 atomic;
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+uint32_t rjd_atomic_uint32_get(struct rjd_atomic_uint32* atomic)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_uint32_set(struct rjd_atomic_uint32* atomic, uint32_t value)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+uint32_t rjd_atomic_uint32_add(struct rjd_atomic_uint32* atomic, uint32_t value)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+uint32_t rjd_atomic_uint32_sub(struct rjd_atomic_uint32* atomic, uint32_t value)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+uint32_t rjd_atomic_uint32_inc(struct rjd_atomic_uint32* atomic)
+{
+	return rjd_atomic_uint32_add(atomic, 1);
+}
+
+uint32_t rjd_atomic_uint32_dec(struct rjd_atomic_uint32* atomic)
+{
+	return rjd_atomic_uint32_sub(atomic, 1);
+}
+
+bool rjd_atomic_uint32_compare_exchange_weak(struct rjd_atomic_uint32* atomic, uint32_t* expected, uint32_t desired)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_uint32_compare_exchange_strong(struct rjd_atomic_uint32* atomic, uint32_t* expected, uint32_t desired)
+{
+	struct rjd_atomic_uint32_osx* atomic_osx = (struct rjd_atomic_uint32_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+struct rjd_atomic_uint16 rjd_atomic_uint16_init (uint16_t value)
+{
+	struct rjd_atomic_uint16 atomic;
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+uint16_t rjd_atomic_uint16_get(struct rjd_atomic_uint16* atomic)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_uint16_set(struct rjd_atomic_uint16* atomic, uint16_t value)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+uint16_t rjd_atomic_uint16_add(struct rjd_atomic_uint16* atomic, uint16_t value)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+uint16_t rjd_atomic_uint16_sub(struct rjd_atomic_uint16* atomic, uint16_t value)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+uint16_t rjd_atomic_uint16_inc(struct rjd_atomic_uint16* atomic)
+{
+	return rjd_atomic_uint16_add(atomic, 1);
+}
+
+uint16_t rjd_atomic_uint16_dec(struct rjd_atomic_uint16* atomic)
+{
+	return rjd_atomic_uint16_sub(atomic, 1);
+}
+
+bool rjd_atomic_uint16_compare_exchange_weak(struct rjd_atomic_uint16* atomic, uint16_t* expected, uint16_t desired)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_uint16_compare_exchange_strong(struct rjd_atomic_uint16* atomic, uint16_t* expected, uint16_t desired)
+{
+	struct rjd_atomic_uint16_osx* atomic_osx = (struct rjd_atomic_uint16_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_uint8 rjd_atomic_uint8_init (uint8_t value)
+{
+	struct rjd_atomic_uint8 atomic;
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)&atomic;
+	atomic_store(&atomic_osx->value, value);
+	return atomic;
+}
+
+uint8_t rjd_atomic_uint8_get(struct rjd_atomic_uint8* atomic)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	return atomic_load(&atomic_osx->value);
+}
+
+void rjd_atomic_uint8_set(struct rjd_atomic_uint8* atomic, uint8_t value)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	atomic_store(&atomic_osx->value, value);
+}
+
+uint8_t rjd_atomic_uint8_add(struct rjd_atomic_uint8* atomic, uint8_t value)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	return atomic_fetch_add(&atomic_osx->value, value); // returns original value
+}
+
+uint8_t rjd_atomic_uint8_sub(struct rjd_atomic_uint8* atomic, uint8_t value)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	return atomic_fetch_sub(&atomic_osx->value, value); // returns original value
+}
+
+uint8_t rjd_atomic_uint8_inc(struct rjd_atomic_uint8* atomic)
+{
+	return rjd_atomic_uint8_add(atomic, 1);
+}
+
+uint8_t rjd_atomic_uint8_dec(struct rjd_atomic_uint8* atomic)
+{
+	return rjd_atomic_uint8_sub(atomic, 1);
+}
+
+bool rjd_atomic_uint8_compare_exchange_weak(struct rjd_atomic_uint8* atomic, uint8_t* expected, uint8_t desired)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	return atomic_compare_exchange_weak(&atomic_osx->value, expected, desired);
+}
+
+bool rjd_atomic_uint8_compare_exchange_strong(struct rjd_atomic_uint8* atomic, uint8_t* expected, uint8_t desired)
+{
+	struct rjd_atomic_uint8_osx* atomic_osx = (struct rjd_atomic_uint8_osx*)atomic;
+	return atomic_compare_exchange_strong(&atomic_osx->value, expected, desired);
+}
+
+#endif // RJD_PLATFORM
+#endif // RJD_IMPL
+
+
+////////////////////////////////////////////////////////////////////////////////
 // rjd_strpool.h
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -4201,17 +5605,17 @@ struct rjd_slot
 static inline bool rjd_slot_isvalid(struct rjd_slot slot);
 static inline void rjd_slot_invalidate(struct rjd_slot* slot);
 
-#define rjd_slotmap_alloc(type, count, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), count, allocator))
-#define rjd_slotmap_insert(map, data, out_slot)		(rjd_slotmap_insert_impl((void**)(&map), (out_slot)), \
-													 (map)[(out_slot)->index] = data)
-#define rjd_slotmap_contains(map, slot)				(rjd_slotmap_contains_impl((map), (slot)))
-#define rjd_slotmap_get(map, slot)					((map) + rjd_slotmap_get_impl((map), (slot)))
-#define rjd_slotmap_count(map)						(rjd_slotmap_count_impl(map))
-#define rjd_slotmap_erase(map, slot)				(rjd_slotmap_erase_impl((map), slot))
-#define rjd_slotmap_free(map)						(rjd_slotmap_free_impl(map))
-#define rjd_slotmap_next(map, slot)					(rjd_slotmap_next_impl((map), (slot))) // pass null slot for first
+#define rjd_slotmap_alloc(type, capacity, allocator)	(rjd_slotmap_alloc_impl(sizeof(type), capacity, allocator))
+#define rjd_slotmap_insert(map, data, out_slot)		    (rjd_slotmap_insert_impl((void**)(&map), (out_slot)), \
+													        (map)[(out_slot)->index] = data)
+#define rjd_slotmap_contains(map, slot)				    (rjd_slotmap_contains_impl((map), (slot)))
+#define rjd_slotmap_get(map, slot)				    	((map) + rjd_slotmap_get_impl((map), (slot)))
+#define rjd_slotmap_count(map)					    	(rjd_slotmap_count_impl(map))
+#define rjd_slotmap_erase(map, slot)			    	(rjd_slotmap_erase_impl((map), slot))
+#define rjd_slotmap_free(map)					    	(rjd_slotmap_free_impl(map))
+#define rjd_slotmap_next(map, slot)				    	(rjd_slotmap_next_impl((map), (slot))) // pass null slot for first
 
-void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator);
+void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t capacity, struct rjd_mem_allocator* allocator);
 void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot);
 bool rjd_slotmap_contains_impl(const void* map, struct rjd_slot slot);
 uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot);
@@ -4244,6 +5648,7 @@ struct rjd_slotmap_header
 	bool* used;
 	uint32_t* freelist;
 	uint32_t sizeof_type;
+    uint32_t capacity;
 	uint32_t count;
 	uint32_t debug_sentinel;
 };
@@ -4253,14 +5658,14 @@ enum {
 };
 
 static struct rjd_slotmap_header* rjd_slotmap_getheader(const void* map);
-static void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator);
+static void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t capacity, struct rjd_mem_allocator* allocator);
 
 ////////////////////////////////////////////////////////////////////////////////
 // public implementation
 
-void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator)
+void* rjd_slotmap_alloc_impl(size_t sizeof_type, uint32_t capacity, struct rjd_mem_allocator* allocator)
 {
-	return rjd_slotmap_grow(NULL, sizeof_type, count, allocator);
+	return rjd_slotmap_grow(NULL, sizeof_type, capacity, allocator);
 }
 
 void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot)
@@ -4274,7 +5679,7 @@ void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot)
 	struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
 
 	if (rjd_array_count(header->freelist) == 0) {
-		map = rjd_slotmap_grow(map, header->sizeof_type, header->count * 2, header->allocator);
+		map = rjd_slotmap_grow(map, header->sizeof_type, header->capacity * 2, header->allocator);
 		header = rjd_slotmap_getheader(map);
 		RJD_ASSERT(rjd_array_count(header->freelist) > 0);
 		*map_p = map;
@@ -4286,6 +5691,7 @@ void rjd_slotmap_insert_impl(void** map_p, struct rjd_slot* out_slot)
 	*salt += 1;
 
 	header->used[index] = true;
+    ++header->count;
 
 	out_slot->index = rjd_math_truncate_u32_to_u16(index);
 	out_slot->salt = *salt;
@@ -4296,7 +5702,7 @@ bool rjd_slotmap_contains_impl(const void* map, struct rjd_slot slot)
 	RJD_ASSERT(map);
 
 	const struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
-	if (slot.index >= header->count) {
+	if (slot.index >= header->capacity) {
 		return false;
 	}
 	uint32_t index = slot.index;
@@ -4308,7 +5714,7 @@ uint32_t rjd_slotmap_get_impl(const void* map, struct rjd_slot slot)
 	RJD_ASSERT(map);
 
 	const struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
-	RJD_ASSERT(slot.index < header->count);
+	RJD_ASSERT(slot.index < header->capacity);
 	uint32_t index = slot.index;
 	RJD_ASSERTMSG(!rjd_array_contains(header->freelist, &index), "This slot is unallocated. Use rjd_slotmap_contains to check if the slot is valid first.");
     int16_t salt = header->salts[slot.index];
@@ -4328,10 +5734,11 @@ void rjd_slotmap_erase_impl(void* map, struct rjd_slot slot)
 {
 	RJD_ASSERT(map);
 	struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
-	RJD_ASSERT(slot.index < header->count);
+	RJD_ASSERT(slot.index < header->capacity);
 	
 	rjd_array_push(header->freelist, slot.index);
 	header->used[slot.index] = false;
+    --header->count;
 }
 
 void rjd_slotmap_free_impl(void* map)
@@ -4339,6 +5746,7 @@ void rjd_slotmap_free_impl(void* map)
 	RJD_ASSERT(map);
 	struct rjd_slotmap_header* header = rjd_slotmap_getheader(map);
 
+    rjd_array_free(header->used);
 	rjd_array_free(header->freelist);
 	rjd_mem_free(header);
 }
@@ -4353,7 +5761,7 @@ struct rjd_slot rjd_slotmap_next_impl(void* map, const struct rjd_slot* slot)
 		start = slot->index + 1;
 	}
 
-	for (uint32_t i = start; i < header->count; ++i) {
+	for (uint32_t i = start; i < header->capacity; ++i) {
 		if (header->used[i]) {
 			struct rjd_slot next = {
 				.index = rjd_math_truncate_u32_to_u16(i),
@@ -4381,44 +5789,46 @@ struct rjd_slotmap_header* rjd_slotmap_getheader(const void* map)
 	return header;
 }
 
-void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t count, struct rjd_mem_allocator* allocator)
+void* rjd_slotmap_grow(void* oldmap, size_t sizeof_type, uint32_t capacity, struct rjd_mem_allocator* allocator)
 {
 	struct rjd_slotmap_header* oldheader = oldmap ? rjd_slotmap_getheader(oldmap) : NULL;
 
-	uint32_t oldcount = oldheader ? oldheader->count : 0;
-	if (count <= oldcount) {
+	uint32_t oldcapacity = oldheader ? oldheader->capacity : 0;
+	if (capacity <= oldcapacity) {
 		return oldmap;
 	}
 
-	size_t total_mem_size = sizeof(struct rjd_slotmap_header) + sizeof_type * count + sizeof(uint16_t) * count;
+	size_t total_mem_size = sizeof(struct rjd_slotmap_header) + sizeof_type * capacity + sizeof(uint16_t) * capacity;
 	char* mem = rjd_mem_alloc_array(char, total_mem_size, allocator);
 	memset(mem, 0, total_mem_size);
 
 	struct rjd_slotmap_header* header = (struct rjd_slotmap_header*)mem;
 	header->allocator = allocator;
 	header->sizeof_type = (uint32_t)sizeof_type;
-	header->count = count;
+	header->capacity = capacity;
+    header->count = 0;
 	header->data = (void*)(mem + sizeof(struct rjd_slotmap_header));
-	header->salts = (uint16_t*)((char*)header->data + sizeof_type * count);
-	header->used = rjd_array_alloc(bool, count, allocator);
-	header->freelist = rjd_array_alloc(uint32_t, count, allocator);
+	header->salts = (uint16_t*)((char*)header->data + sizeof_type * capacity);
+	header->used = rjd_array_alloc(bool, capacity, allocator);
+	header->freelist = rjd_array_alloc(uint32_t, capacity, allocator);
 	header->debug_sentinel = RJD_SLOTMAP_DEBUG_SENTINEL;
 
-	memset(header->salts + oldcount, 0, (header->count - oldcount) * sizeof(*header->salts));
+	memset(header->salts + oldcapacity, 0, (header->capacity - oldcapacity) * sizeof(*header->salts));
 
-	rjd_array_resize(header->used, count);
+	rjd_array_resize(header->used, capacity);
 	if (oldheader) {
-		memcpy(header->used, oldheader->used, sizeof(*header->used) * oldheader->count);
+		memcpy(header->used, oldheader->used, sizeof(*header->used) * oldheader->capacity);
+        header->count = oldheader->count;
 	}
 
-	for (uint32_t i = oldcount; i < count; ++i) {
+	for (uint32_t i = oldcapacity; i < capacity; ++i) {
 		rjd_array_push(header->freelist, i);
 	}
 
 	// copy existing data
 	if (oldheader) {
-		memcpy(header->data, oldheader->data, sizeof_type * oldheader->count);
-		memcpy(header->salts, oldheader->salts, sizeof(uint16_t) * oldheader->count);
+		memcpy(header->data, oldheader->data, sizeof_type * oldheader->capacity);
+		memcpy(header->salts, oldheader->salts, sizeof(uint16_t) * oldheader->capacity);
 		rjd_slotmap_free(oldmap);
 	}
 
@@ -5214,17 +6624,13 @@ void rjd_strhash_global_destroy(void)
 
 struct rjd_strhash rjd_strhash_init(const char* str)
 {
-	struct rjd_hash64 hash = {0};
-	struct rjd_strref* debug_string = NULL;
-
-	if (str != NULL) {
-		hash = rjd_hash64_str(str);
-		if (g_strhash_strpool && hash.value != 0)
-		{
-			// TODO make threadsafe
-			debug_string = rjd_strpool_add(g_strhash_strpool, str);
-		}
-	}
+    struct rjd_hash64 hash = rjd_hash64_str(str);
+    struct rjd_strref* debug_string = NULL;
+    if (g_strhash_strpool && hash.value != 0)
+    {
+        // TODO make threadsafe
+        debug_string = rjd_strpool_add(g_strhash_strpool, str);
+    }
 
 	struct rjd_strhash strhash = {
 		.debug_string = debug_string,
@@ -5406,7 +6812,6 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 static inline void rjd_resource_loader_destroy(struct rjd_resource_loader* loader);
 static inline struct rjd_result rjd_resource_loader_get_type(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
 static inline struct rjd_result rjd_resource_loader_load(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_mem_allocator* allocator, struct rjd_istream* out);
-// TODO update load() to return an rjd_istream instead of loading the entire file at once?
 
 ////////////////////////////////////////////////////////////////////////////////
 // Inline implementation
@@ -6138,4 +7543,1260 @@ static struct rjd_resource_dependency rjd_resource_get_dependency(struct rjd_res
 
 #endif // RJD_IMPL
 
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_window.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#define RJD_WINDOW_H 1
+
+struct rjd_window;
+struct rjd_window_environment;
+
+typedef void (*rjd_window_environment_init_func)(const struct rjd_window_environment* env);
+typedef void (*rjd_window_on_init_func)(struct rjd_window* window, const struct rjd_window_environment* env);
+typedef void (*rjd_window_on_update_func)(struct rjd_window* window, const struct rjd_window_environment* env);
+typedef void (*rjd_window_on_close_func)(struct rjd_window* window, const struct rjd_window_environment* env);
+
+struct rjd_window_data_win32
+{
+#if RJD_PLATFORM_WINDOWS
+	HINSTANCE handle_instance
+#else
+	char unused;
+#endif
+};
+
+struct rjd_window_environment
+{
+	void* userdata;
+	const char** argv;
+	int argc;
+
+	struct rjd_window_data_win32 win32;
+};
+
+struct rjd_window_size
+{
+	uint16_t width;
+	uint16_t height;
+};
+
+struct rjd_window_desc
+{
+    const char* title;
+	struct rjd_window_size requested_size;
+    struct rjd_window_environment env;
+    
+    rjd_window_on_init_func init_func;
+    rjd_window_on_update_func update_func;
+    rjd_window_on_close_func close_func;
+    
+    struct rjd_window_data_win32 win32;
+};
+
+struct rjd_window
+{
+	char impl[40];
+};
+
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func init_func);
+struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_desc desc);
+void rjd_window_runloop(struct rjd_window* window);
+struct rjd_window_size rjd_window_size_get(const struct rjd_window* window);
+void rjd_window_close(struct rjd_window* window);
+
+#if RJD_PLATFORM_WINDOWS
+	HWND rjd_window_win32_get_hwnd(const struct rjd_window* window);
+#elif RJD_PLATFORM_OSX
+	#if RJD_LANG_OBJC
+		@class MTKView;
+		RJD_STATIC_ASSERT(sizeof(MTKView*) == sizeof(void*));
+	#else
+		typedef void MTKView;
+	#endif
+	MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window);
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
+// implementation
+
+#if RJD_IMPL
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+// windows os
+
+#if RJD_PLATFORM_WINDOWS
+
+static uint32_t global_window_count = 0;
+
+struct rjd_window_win32
+{
+	rjd_window_on_init_func init_func;
+	rjd_window_on_update_func update_func;
+	rjd_window_on_close_func close_func;
+	HWND handle;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_win32));
+
+static LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM lparam);
+
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func init_func)
+{
+	if (init_func) {
+		init_func(env);
+	}
+
+	while (global_window_count > 0)
+	{
+		// other threads could be running their own window loops, so just wait until
+		// all of them are closed before exiting
+	}
+}
+
+struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_desc desc)
+{
+	if (desc.title == NULL) {
+		desc.title = "";
+	}
+
+	WNDCLASSEX window_class = { 0 };
+	window_class.cbSize = sizeof(WNDCLASSEX);
+	window_class.style = CS_HREDRAW | CS_VREDRAW;
+	window_class.lpfnWndProc = WindowProc;
+	window_class.hInstance = handle_instance;
+	window_class.lpszClassName = "EngineWindowClass";
+	window_class.hCursor = LoadCursor(NULL, IDC_ARROW);
+	//window_class.hIcon = LoadImage(NULL, IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
+	if (!RegisterClassEx(&window_class))
+	{
+		return RJD_RESULT("Failed to create window class");
+	}
+
+	const DWORD window_style = WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_SYSMENU;
+	RECT window_rect = {0, 0, desc.width, desc.height};
+	if (!AdjustWindowRect(&window_rect, window_style, FALSE))
+	{
+		return RJD_RESULT("Failed to adjust window rect");
+	} 
+
+	HWND window_handle = CreateWindowEx(0,
+		"EngineWindowClass",
+		desc.title,
+		window_style, 
+		1024, 80,
+		window_rect.right - window_rect.left, window_rect.bottom - window_rect.top,
+		NULL,
+		NULL,
+		handle_instance,
+		NULL);
+	if (!window_handle)
+	{
+		return RJD_RESULT("Failed to create window from class");
+	}
+
+	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)out;
+	window_win32->handle = window_handle;
+
+	if (desc.init_func) {
+		desc.init_func(out, env);
+	}
+
+	++global_window_count;
+}
+
+void rjd_window_runloop(struct rjd_window* window, struct rjd_window_environment env)
+{
+	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
+	if (window_win32->init_func) {
+		window_win32->init_func(env);
+	}
+
+	bool running = true;
+	while (running)
+	{
+		MSG msg = {0};
+		while (PeekMessage(&msg, window_win32->handle, 0, 0, PM_REMOVE))
+		{
+			// TODO support running multiple windows in the same thread?
+			if (msg.message == WM_DESTROY)
+			{
+				running = false;
+			}
+			else
+			{
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
+		}
+
+		if (running && window_win32->update_func) {
+			window_win32->update_func(window, env);
+		}
+	}
+
+	if (window_win32->close_func) {
+		window_win32->close_func(window, env);
+	}
+}
+
+struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
+{
+	#error Unimplemented
+}
+
+void rjd_window_close(struct rjd_window* window)
+{
+	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
+	DestroyWindow(window->handle);
+}
+
+HWND rjd_window_win32_get_hwnd(const struct rjd_window* window)
+{
+	return window->handle;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Local helpers
+
+LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    const POINT kMinSize = {1, 1};
+    switch (msg)
+    {
+    //case WM_CLOSE:
+    //    PostQuitMessage(0);
+    //    break;
+    case WM_GETMINMAXINFO:
+        ((MINMAXINFO*)lparam)->ptMinTrackSize = kMinSize;
+        break;
+		// TODO forward resize message
+    //case WM_SIZE:
+	//	//width = LOWORD(lparam);
+	//	//height = HIWORD(lparam);
+	//	//glViewport(0, 0, g_window_size.width, g_window_size.height);
+    //    break;
+    }
+    return DefWindowProc(handle_window, msg, wparam, lparam);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+// osx os
+
+#elif RJD_PLATFORM_OSX
+
+#if !RJD_LANG_OBJC
+    #error "rjd_window.h must be implemented in a .m file on OSX"
+#endif
+
+#import <Cocoa/Cocoa.h>
+#import <Carbon/Carbon.h>
+#import <MetalKit/MetalKit.h>
+
+struct rjd_window_osx
+{
+    NSWindow* window;
+    MTKView* view;
+    
+    rjd_window_on_init_func init_func;
+    rjd_window_on_update_func update_func;
+    rjd_window_on_close_func close_func;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_osx));
+
+@interface AppDelegate : NSObject <NSApplicationDelegate>
+@property (retain) NSWindow *window;
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func)func env:(struct rjd_window_environment)env;
+@end
+
+@interface GameViewController : NSViewController
+-(instancetype)initWithWidth:(uint16_t)width height:(uint16_t)height window:(struct rjd_window*)window env:(struct rjd_window_environment)env;
+@end
+
+@interface Renderer : NSObject <MTKViewDelegate>
+-(instancetype)initWithWindow:(struct rjd_window*)window env:(struct rjd_window_environment)env;
+@end
+
+////////////////////////////////////////////////////////////////////////////////
+// interface implementation
+
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func init_func)
+{
+    AppDelegate* delegate = [[AppDelegate alloc] initWithEnvFunc:init_func env:env];
+    NSApplication* app = [NSApplication sharedApplication];
+    [app setDelegate:delegate];
+    [app run];
+}
+
+struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_desc desc)
+{
+    if (desc.title == NULL) {
+        desc.title = "";
+    }
+    
+    NSRect rect = {0};
+    rect.size.height = 320;
+    rect.size.width = 480;
+    
+    NSWindowStyleMask style =   NSWindowStyleMaskResizable |
+                                NSWindowStyleMaskTitled    |
+                                NSWindowStyleMaskClosable  |
+                                NSWindowStyleMaskMiniaturizable;
+
+    NSWindow* window = [[NSWindow alloc] initWithContentRect:rect styleMask:style backing:NSBackingStoreBuffered defer:false];
+    window.title = [NSString stringWithUTF8String:desc.title];
+    
+    struct rjd_window_size size = desc.requested_size;
+
+    GameViewController* viewController = [[GameViewController alloc]
+                                          initWithWidth:size.width height:size.height window:out env:desc.env];
+    MTKView* view = [[MTKView alloc] initWithFrame:rect device:MTLCreateSystemDefaultDevice()];
+    
+    struct rjd_window_osx* window_osx = (struct rjd_window_osx*)out;
+    window_osx->window = window;
+    window_osx->init_func = desc.init_func;
+    window_osx->update_func = desc.update_func;
+    window_osx->close_func = desc.close_func;
+    window_osx->view = view;
+
+    viewController.view = view;
+    [viewController loadView];
+    window.contentViewController = viewController;
+
+    [window makeKeyAndOrderFront:nil];
+
+    return RJD_RESULT_OK();
+}
+
+void rjd_window_runloop(struct rjd_window* window)
+{
+	// no-op since OSX is event driven
+	RJD_UNUSED_PARAM(window);
+}
+
+struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
+{
+	const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
+	CGSize size = window_osx->view.drawableSize;
+	struct rjd_window_size windowsize = {
+		.width = size.width,
+		.height = size.height,
+	};
+	return windowsize;
+}
+
+MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
+{
+    const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
+	return window_osx->view;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// local helpers
+
+@implementation AppDelegate
+{
+    rjd_window_environment_init_func init_func;
+	struct rjd_window_environment env;
+}
+
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func)func env:(struct rjd_window_environment)_env
+{
+    if (self = [super init]) {
+        self->init_func = func;
+		self->env = _env;
+    }
+    return self;
+}
+
+-(void)applicationDidFinishLaunching:(NSNotification*)notification
+{
+	RJD_UNUSED_PARAM(notification);
+
+	if (self->init_func) {
+		self->init_func(&self->env);
+	}
+}
+
+-(BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender
+{
+	RJD_UNUSED_PARAM(sender);
+
+    return YES;
+}
+
+@end
+
+@implementation GameViewController
+{
+    Renderer* renderer;
+    uint16_t width;
+    uint16_t height;
+    struct rjd_window* window;
+    struct rjd_window_environment env;
+}
+
+-(instancetype)initWithWidth:(uint16_t)_width height:(uint16_t)_height window:(struct rjd_window*)_window env:(struct rjd_window_environment)_env
+{
+    if (self = [super init]) {
+        self->width = _width;
+        self->height = _height;
+        self->window = _window;
+        self->env = _env;
+    }
+    return self;
+}
+
+-(void)loadView
+{
+    MTKView* view = (MTKView*)self.view;
+    if(!view.device)
+    {
+        NSLog(@"Metal is not supported on this device");
+        self.view = [[NSView alloc] initWithFrame:self.view.frame];
+        return;
+    }
+    
+    struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
+    if (window_osx->init_func) {
+        window_osx->init_func(self->window, &self->env);
+    }
+
+    // We need to hold a strong reference to the Renderer or it will go out of scope
+    // after this function and be destroyed. MTKView.delegate is a weak reference.
+    self->renderer = [[Renderer alloc] initWithWindow:self->window env:self->env];
+    [self->renderer mtkView:view drawableSizeWillChange:view.bounds.size];
+    view.delegate = renderer;
+    self.view = view;
+}
+@end
+
+@implementation Renderer
+{
+    id<MTLDevice> device;
+	struct rjd_window* window;
+	struct rjd_window_environment env;
+}
+
+-(instancetype)initWithWindow:(struct rjd_window*)_window env:(struct rjd_window_environment)_env
+{
+	if (self = [super init]) {
+		self->window = _window;
+		self->env = _env;
+        
+        struct rjd_window_osx* window_osx = (struct rjd_window_osx*)window;
+
+        [[NSNotificationCenter defaultCenter]    addObserver:self
+                                                selector:@selector(windowWillClose:)
+                                                name:NSWindowWillCloseNotification
+                                                object:window_osx->window];
+	}
+    
+    return self;
+}
+
+-(void)drawInMTKView:(MTKView*)view
+{
+	RJD_UNUSED_PARAM(view);
+
+    struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
+	if (window_osx->update_func) {
+		window_osx->update_func(self->window, &self->env);
+	}
+}
+
+-(void)windowWillClose:(NSNotification*)notification
+{
+	RJD_UNUSED_PARAM(notification);
+
+    struct rjd_window_osx* window_osx = (struct rjd_window_osx*)window;
+
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowWillCloseNotification object:window_osx->window];
+
+    if (window_osx->close_func) {
+        window_osx->close_func(self->window, &self->env);
+    }
+}
+
+-(void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size
+{
+	RJD_UNUSED_PARAM(view);
+	RJD_UNUSED_PARAM(size);
+}
+@end
+
+#else
+	#error Unsupported platform.
+#endif
+
+#endif // RJD_IMPL
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_input.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#define RJD_INPUT_H 1
+
+struct rjd_input
+{
+	char impl[32];
+};
+
+enum rjd_input_keyboard
+{
+	RJD_INPUT_KEYBOARD_LEFTCONTROL,
+	RJD_INPUT_KEYBOARD_RIGHTCONTROL,
+	RJD_INPUT_KEYBOARD_LEFTSHIFT,
+	RJD_INPUT_KEYBOARD_RIGHTSHIFT,
+	RJD_INPUT_KEYBOARD_LEFTALT,
+	RJD_INPUT_KEYBOARD_RIGHTALT,
+	RJD_INPUT_KEYBOARD_ESCAPE,
+	RJD_INPUT_KEYBOARD_UTF8_BEGIN, // Add the utf8 codepoint to this value to check if the corresponding key is down
+};
+
+enum rjd_input_mouse
+{
+	RJD_INPUT_MOUSE_XMOVEDELTA,
+	RJD_INPUT_MOUSE_YMOVEDELTA,
+	RJD_INPUT_MOUSE_SCROLLWHEEL,
+	RJD_INPUT_MOUSE_BUTTON_BEGIN, // Add the index of the desired button to this value
+};
+
+const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_LEFT = RJD_INPUT_MOUSE_BUTTON_BEGIN + 0;
+const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_RIGHT = RJD_INPUT_MOUSE_BUTTON_BEGIN + 1;
+const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_MIDDLE = RJD_INPUT_MOUSE_BUTTON_BEGIN + 2;
+
+void rjd_input_create(struct rjd_input* out, struct rjd_mem_allocator* allocator);
+void rjd_input_destroy(struct rjd_input* input);
+struct rjd_result rjd_input_hook(struct rjd_input* input, struct rjd_window* window, struct rjd_window_environment* env);
+void rjd_input_unhook(struct rjd_input* input);
+
+float rjd_input_keyboard_getvalue(enum rjd_input_keyboard code);
+float rjd_input_mouse_getvalue(enum rjd_input_mouse code);
+
+// TODO could add support for controllers, joysticks, driving wheels, etc
+
+#if RJD_IMPL && RJD_PLATFORM_WINDOWS
+
+void rjd_input_create(struct rjd_input* out, struct rjd_mem_allocator* allocator)
+{
+}
+
+void rjd_input_destroy(struct rjd_input* input)
+{
+}
+
+struct rjd_result rjd_input_hook(struct rjd_input* input, struct rjd_window* window, struct rjd_window_environment* env)
+{
+	return RJD_RESULT("Not implemented");
+}
+
+void rjd_input_unhook(struct rjd_input* input)
+{
+}
+
+float rjd_input_keyboard_getvalue(enum rjd_input_keyboard code)
+{
+	return 0;
+}
+
+float rjd_input_mouse_getvalue(enum rjd_input_mouse code)
+{
+	return 0;
+}
+
+#elif RJD_IMPL && RJD_PLATFORM_OSX
+
+struct rjd_input_osx;
+
+@interface InputResponder : NSObject <NSResponder>
+	-(instancetype)initWithInput:(struct rjd_input_osx*)_input;
+@end
+
+struct rjd_input_osx
+{
+	InputResponder* responder;
+	struct rjd_window* window;
+	//struct rjd_mem_allocator* allocator;
+};
+
+RJD_STATIC_ASSERT(sizeof(struct rjd_input_osx) <= sizeof(struct rjd_input));
+
+////////////////////////////////////////////////////////////////////////////////
+// Interface implementation
+
+void rjd_input_create(struct rjd_input* out, struct rjd_mem_allocator* allocator)
+{
+	RJD_ASSERT(input);
+	RJD_ASSERT(allocator);
+
+	memset(out, 0, sizeof(*out));
+
+	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)out;
+	input_osx->responder = nil;
+	//input_osx->allocator = allocator;
+}
+
+void rjd_input_destroy(struct rjd_input* input)
+{
+	RJD_ASSERT(input);
+
+	rjd_input_unhook(input);
+	memset(input, 0, sizeof(*input));
+}
+
+struct rjd_result rjd_input_hook(struct rjd_input* input, struct rjd_window* window, struct rjd_window_environment* env)
+{
+	RJD_ASSERT(input);
+	RJD_ASSERT(env);
+	RJD_ASSERT(window);
+	RJD_UNUSED_PARAM(env); // used in win32
+
+	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)out;
+
+	MTKView* view = rjd_window_osx_get_mtkview(window);
+	if (view == nil) {
+		return RJD_RESULT("No view available in the window to hook. Did the window initialize correctly?");
+	}
+
+	input_osx->responder = [[alloc InputResponder] initWithInput:input_osx];
+	if (input_osx->responder == nil) {
+		return RJD_RESULT("Failed to allocate NSResponder listener. Are you out of memory?");
+	}
+
+	view.nextResponder = input_osx->responder;
+
+	return RJD_RESULT_OK();
+}
+
+void rjd_input_unhook(struct rjd_input* input)
+{
+	if (input)
+	{
+		struct rjd_input_osx* input_osx = (struct rjd_input_osx*)out;
+		if (input_osx->window) {
+			MTKView* view = rjd_window_osx_get_mtkview(input_osx->window);
+			if (view && view.nextResponder == input_osx->responder) {
+				view.nextResponder = nil;
+			}
+			input_osx->responder = nil;
+		}
+	}
+}
+
+float rjd_input_keyboard_getvalue(enum rjd_input_keyboard code)
+{
+	return 0;
+}
+
+float rjd_input_mouse_getvalue(enum rjd_input_mouse code)
+{
+	return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Local helpers
+
+@implementation InputResponder
+{
+	struct rjd_input_osx* input;
+}
+
+-initWithInput:(struct rjd_input_osx*)_input
+{
+    if (self = [super init]) {
+		self->input = _input;
+    }
+    return self;
+}
+
+-(void)keyDown:(NSEvent*)event
+{
+	printf("keyDown: %h\n", event.keyCode);
+}
+
+-(void)keyUp:(NSEvent*)event
+{
+	printf("keyUp: %h\n", event.keyCode);
+}
+
+@end
+
+#endif // RJD_IMPL
+
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_gfx.h
+////////////////////////////////////////////////////////////////////////////////
+
+#pragma once
+
+#include <stdint.h>
+
+#define RJD_GFX_H 1
+
+// interface dependencies:
+// * rjd_result
+
+// impl dependencies:
+// * rjd_mem
+// * rjd_math
+
+// Supported RJG_GFX_BACKEND_* values:
+// RJD_GFX_BACKEND_METAL (osx only)
+
+#ifndef RJD_GFX_BACKEND_METAL
+	#define RJD_GFX_BACKEND_METAL 0
+#endif
+
+#if !RJD_GFX_BACKEND_METAL
+	#error	"You must #define one of the RJD_GFX_BACKEND_* macros to 1 before including this file. "
+			"See the above comment for a list of supported values."
+#endif
+
+#if RJD_GFX_BACKEND_METAL
+	#if RJD_PLATFORM_OSX
+	    // Workaround .c files not being able to read objective-c forward declarations
+	    #if RJD_LANG_OBJC
+	        @class MTKView;
+	        RJD_STATIC_ASSERT(sizeof(void*) == sizeof(MTKView*));
+	    #else
+	        typedef void MTKView;
+	    #endif
+	#else
+		#error "Metal is only supported on OSX"
+	#endif
+#endif
+
+struct rjd_mem_allocator;
+
+struct rjd_gfx_viewport // TODO figure out if this should have a start x,y pair
+{
+	uint32_t width;
+	uint32_t height;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// render configuration
+
+enum rjd_gfx_stencilmode
+{
+	RJD_GFX_STENCILMODE_DISABLED,
+	RJD_GFX_STENCILMODE_TEST,
+	RJD_GFX_STENCILMODE_WRITE,
+	RJD_GFX_STENCILMODE_COUNT,
+};
+
+//struct rjd_gfx_render_config
+//{
+//	struct rjd_gfx_viewport window_size; // TODO upgrade this into a render view (render target w/ size & offset)?
+//	enum rjd_gfx_stencilmode stencil_mode;
+//	int use_buffer_color: 1;
+//	int use_buffer_depth: 1;
+//};
+//
+//struct rjd_gfx_render_geo2d
+//{
+//	struct rjd_math_float16* transforms;
+//	union rjd_gfx_quad_uv* uvs;
+//	rjd_math_float4* tints;
+//	uint32_t count;
+//};
+
+////////////////////////////////////////////////////////////////////////////////
+// resources
+
+enum rjd_gfx_format
+{
+	RJD_GFX_FORMAT_COLOR_U8_RGBA,
+	RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM,
+	RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB,
+    RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32,
+	RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8,
+	RJD_GFX_FORMAT_COUNT,
+};
+
+// all values correspond to the entry in the enum rjd_gfx_format
+struct rjd_gfx_format_value
+{
+	enum rjd_gfx_format type;
+	union
+	{
+		uint8_t color_u8_rgba[4];
+		union { 
+			uint32_t value; 
+			struct { 
+				uint32_t depth:24; 
+				uint32_t stencil:8; 
+			} parts; 
+		} depthstencil_u32_d24_s8;
+        float depthstencil_f32_d32;
+	};
+};
+
+enum rjd_gfx_texture_access
+{
+	RJD_GFX_TEXTURE_ACCESS_CPU_WRITE_GPU_READWRITE,
+	RJD_GFX_TEXTURE_ACCESS_CPU_NONE_GPU_READWRITE,
+	RJD_GFX_TEXTURE_ACCESS_COUNT,
+};
+
+enum rjd_gfx_texture_usage
+{
+	RJD_GFX_TEXTURE_USAGE_DEFAULT,
+	RJD_GFX_TEXTURE_USAGE_RENDERTARGET,
+    RJD_GFX_TEXTURE_USAGE_COUNT,
+};
+
+struct rjd_gfx_texture_desc
+{
+	void* data;
+    uint32_t data_length;
+	uint32_t pixels_width;
+	uint32_t pixels_height;
+	enum rjd_gfx_format format;
+	enum rjd_gfx_texture_access access;
+	enum rjd_gfx_texture_usage usage;
+	const char* debug_label;
+};
+
+struct rjd_gfx_texture
+{
+	struct rjd_slot handle;
+};
+
+//enum rjd_gfx_shader_input_buffer_type_flags
+//{
+//	RJD_GFX_SHADER_INPUT_USAGE_VERTEX = 0x1,
+//	RJD_GFX_SHADER_INPUT_USAGE_FRAGMENT = 0x2,
+//};
+
+// TODO determine if this is a good idea or not
+//struct rjd_gfx_shader_input_slot
+//{
+//	const char* name;
+//	uint32_t index;
+//	enum rjd_gfx_shader_input_buffer_type_flags type_flags;
+//};
+
+// TODO provide a precompiled path as well, e.g. bool is_compiled
+struct rjd_gfx_shader_desc
+{
+	const void* data;
+	//struct rjd_gfx_shader_input_slot* slots;
+
+	uint32_t count_data;
+	//uint32_t count_slots;
+};
+
+struct rjd_gfx_shader
+{
+	struct rjd_slot handle;
+};
+
+enum rjd_gfx_vertex_format_type
+{
+	RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT1,
+	RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT2,
+	RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT3,
+	RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT4,
+	RJD_GFX_VERTEX_FORMAT_TYPE_COUNT,
+};
+
+enum rjd_gfx_vertex_format_step
+{
+	RJD_GFX_VERTEX_FORMAT_STEP_VERTEX,
+	RJD_GFX_VERTEX_FORMAT_STEP_INSTANCE,
+	RJD_GFX_VERTEX_FORMAT_STEP_CONSTANT,
+};
+
+struct rjd_gfx_vertex_format_attribute
+{
+	enum rjd_gfx_vertex_format_type type;
+	enum rjd_gfx_vertex_format_step step;
+	uint32_t attribute_index;
+	uint32_t buffer_index;
+	uint32_t stride;
+    uint32_t step_rate;
+	uint32_t offset;
+};
+
+enum rjd_gfx_depth_compare
+{
+	RJD_GFX_DEPTH_COMPARE_DISABLED,
+	RJD_GFX_DEPTH_COMPARE_ALWAYS_FAIL,
+	RJD_GFX_DEPTH_COMPARE_ALWAYS_SUCCEED,
+	RJD_GFX_DEPTH_COMPARE_LESS,
+	RJD_GFX_DEPTH_COMPARE_LESSEQUAL,
+	RJD_GFX_DEPTH_COMPARE_GREATER,
+	RJD_GFX_DEPTH_COMPARE_GREATEREQUAL,
+	RJD_GFX_DEPTH_COMPARE_EQUAL,
+	RJD_GFX_DEPTH_COMPARE_NOTEQUAL,
+};
+
+struct rjd_gfx_pipeline_state_desc
+{
+	const char* debug_name;
+	struct rjd_gfx_shader shader;
+	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
+	struct rjd_gfx_texture depthstencil_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
+	struct rjd_gfx_vertex_format_attribute* vertex_attributes;
+	uint32_t count_vertex_attributes;
+	enum rjd_gfx_depth_compare depth_compare;
+	// TODO stencil config
+};
+
+struct rjd_gfx_pipeline_state
+{
+	struct rjd_slot handle;
+};
+
+enum rjd_gfx_primitive_type
+{
+	RJD_GFX_PRIMITIVE_TYPE_TRIANGLES,
+};
+
+enum rjd_gfx_index_type
+{
+	RJD_GFX_INDEX_TYPE_UINT32,
+	RJD_GFX_INDEX_TYPE_UINT16,
+};
+
+enum rjd_gfx_mesh_buffer_type
+{
+	RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS,
+	RJD_GFX_MESH_BUFFER_TYPE_VERTEX,
+};
+
+enum rjd_gfx_mesh_buffer_usage_flags
+{
+	RJD_GFX_MESH_BUFFER_USAGE_VERTEX = 0x1,
+	RJD_GFX_MESH_BUFFER_USAGE_FRAGMENT = 0x2,
+};
+
+union rjd_gfx_mesh_buffer_common_desc
+{
+	struct {
+		uint32_t capacity;
+	} uniforms;
+
+	struct {
+		const void* data;
+		uint32_t length;
+	} vertex;
+};
+
+// TODO vertex_buffer isn't a great name, since it can also be inputs to fragment shaders. Maybe just mesh_shader_buffer?
+struct rjd_gfx_mesh_vertex_buffer_desc
+{
+	enum rjd_gfx_mesh_buffer_type type;
+	union rjd_gfx_mesh_buffer_common_desc common;
+	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
+	uint32_t buffer_index; // TODO maybe this should be name and index? buffer_slot? shader_input_slot?
+};
+
+//struct rjd_gfx_mesh_index_buffer_desc
+//{
+//	union rjd_gfx_mesh_buffer_desc buffer_desc;
+//	enum rjd_gfx_index_type type;
+//};
+// TODO implement the other 2 descs later
+struct rjd_gfx_mesh_vertexed_desc
+{
+	enum rjd_gfx_primitive_type primitive;
+	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
+	uint32_t count_buffers;
+	uint32_t count_vertices;
+};
+
+//struct rjd_gfx_mesh_indexed_desc
+//{
+//	enum rjd_gfx_mesh_type type;
+//	enum rjd_gfx_primitive_type primitive;
+//	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
+//	union rjd_gfx_mesh_index_buffer_desc* buffers;
+//	uint32_t count_vertex_buffers;
+//	uint32_t count_index_buffers;
+//};
+
+//struct rjd_gfx_mesh_instanced_desc
+//{
+//	enum rjd_gfx_mesh_type type;
+//	enum rjd_gfx_primitive_type primitive;
+//	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
+//	uint32_t count_vertex_buffers;
+//	uint32_t instance_count;
+//};
+
+struct rjd_gfx_mesh
+{
+	struct rjd_slot handle;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// render commands
+
+enum rjd_gfx_winding_order
+{
+	RJD_GFX_WINDING_ORDER_CLOCKWISE,
+	RJD_GFX_WINDING_ORDER_COUNTERCLOCKWISE,
+};
+
+enum rjd_gfx_cull
+{
+	RJD_GFX_CULL_NONE,
+	RJD_GFX_CULL_BACK,
+	RJD_GFX_CULL_FRONT,
+};
+
+struct rjd_gfx_pass_begin_desc
+{
+	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
+	struct rjd_gfx_format_value clear_color;
+	struct rjd_gfx_format_value clear_depthstencil;
+	const char* debug_label;
+};
+
+struct rjd_gfx_pass_draw_desc
+{
+	const struct rjd_gfx_viewport* viewport;
+	const struct rjd_gfx_pipeline_state* pipeline_state;
+	const struct rjd_gfx_mesh* meshes;
+	const struct rjd_gfx_texture* textures;
+	const uint32_t* texture_indices; // parallel array with textures
+	uint32_t count_meshes;
+	uint32_t count_textures;
+	enum rjd_gfx_cull cull_mode;
+	enum rjd_gfx_winding_order winding_order;
+
+	const char* debug_label;
+};
+
+struct rjd_gfx_command_buffer
+{
+	struct rjd_slot handle;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// gfx context
+
+struct rjd_gfx_context_desc
+{
+	enum rjd_gfx_format backbuffer_color_format;
+	enum rjd_gfx_format backbuffer_depth_format;
+	struct rjd_mem_allocator* allocator;
+	uint32_t msaa_samples;
+
+	// TODO forward declare HWND somehow
+	#if RJD_PLATFORM_WINDOWS
+		struct {
+			HWND window_handle;
+		} win32;
+	#elif RJD_PLATFORM_OSX
+		struct {
+			MTKView* view;
+		} osx;
+	#endif
+};
+
+struct rjd_gfx_context
+{
+	char pimpl[128];
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// interface
+
+// backend
+static inline int32_t rjd_gfx_backend_ismetal(void);
+
+// context
+// NOTE: all functions that deal with a context are not threadsafe for simplicity. If you are making a multithreaded
+// renderer, you must have a strategy for synchronizing resource creation and drawing with the context.
+struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd_gfx_context_desc desc);
+void rjd_gfx_context_destroy(struct rjd_gfx_context* context);
+
+bool rjd_gfx_msaa_is_count_supported(const struct rjd_gfx_context* context, uint32_t count); // count is usually: 1,2,4, or 8
+void rjd_gfx_msaa_set_count(struct rjd_gfx_context* context, uint32_t count);
+bool rjd_gfx_vsync_try_enable(struct rjd_gfx_context* context);
+struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context);
+struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context);
+
+// commands
+struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out);
+struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_begin_desc* command);
+struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_draw_desc* command);
+struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer);
+
+// resources
+struct rjd_result rjd_gfx_texture_create(struct rjd_gfx_context* context, struct rjd_gfx_texture* out, struct rjd_gfx_texture_desc desc);
+void rjd_gfx_texture_destroy(struct rjd_gfx_context* context, struct rjd_gfx_texture* texture);
+struct rjd_result rjd_gfx_shader_create(struct rjd_gfx_context* context, struct rjd_gfx_shader* out, struct rjd_gfx_shader_desc desc);
+void rjd_gfx_shader_destroy(struct rjd_gfx_context* context, struct rjd_gfx_shader* shader);
+struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context, struct rjd_gfx_pipeline_state* out, struct rjd_gfx_pipeline_state_desc desc);
+void rjd_gfx_pipeline_state_destroy(struct rjd_gfx_context* context, struct rjd_gfx_pipeline_state* pipeline_state);
+struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc, struct rjd_mem_allocator* allocator);
+//struct rjd_result rjd_gfx_mesh_create_indexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_indexed_desc desc);
+struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length);
+void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh);
+
+// format
+struct rjd_gfx_format_value rjd_gfx_format_value_from_u32(enum rjd_gfx_format, uint32_t value);
+uint32_t rjd_gfx_format_bytesize(enum rjd_gfx_format format);
+bool rjd_gfx_format_iscolor(enum rjd_gfx_format format);
+bool rjd_gfx_format_isdepthstencil(enum rjd_gfx_format format);
+bool rjd_gfx_format_isdepth(enum rjd_gfx_format format);
+bool rjd_gfx_format_isstencil(enum rjd_gfx_format format);
+
+static inline struct rjd_gfx_format_value rjd_gfx_format_make_color_u8_rgba(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
+static inline struct rjd_gfx_format_value rjd_gfx_format_make_depthstencil_f32_d32(float depth);
+
+// constants
+const extern struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER;
+
+////////////////////////////////////////////////////////////////////////////////
+// inline implementations
+
+static inline int32_t rjd_gfx_backend_ismetal(void)
+{
+	return RJD_GFX_BACKEND_METAL;
+}
+
+static inline struct rjd_gfx_format_value rjd_gfx_format_make_color_u8_rgba(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
+{
+	struct rjd_gfx_format_value value;
+	value.type = RJD_GFX_FORMAT_COLOR_U8_RGBA;
+	value.color_u8_rgba[0] = red;
+	value.color_u8_rgba[1] = green;
+	value.color_u8_rgba[2] = blue;
+	value.color_u8_rgba[3] = alpha;
+    return value;
+}
+
+static inline struct rjd_gfx_format_value rjd_gfx_format_make_depthstencil_f32_d32(float depth)
+{
+	struct rjd_gfx_format_value value = {
+		.type = RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32,
+		.depthstencil_f32_d32 = depth,
+	};
+	return value;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+#if RJD_IMPL
+
+const static struct rjd_logchannel logchannel_default = {
+	.enabled = true,
+	.name = "rjd_gfx default",
+};
+
+const static struct rjd_logchannel logchannel_error = {
+	.enabled = true,
+	.name = "rjd_gfx error",
+};
+
+#define RJD_GFX_LOG(...) RJD_LOG_CHANNEL(&logchannel_default, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
+#define RJD_GFX_LOG_ERROR(...) RJD_LOG_CHANNEL(&logchannel_error, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
+
+////////////////////////////////////////////////////////////////////////////////
+// platform-independent format
+
+uint32_t rjd_gfx_format_bytesize(enum rjd_gfx_format format)
+{
+	switch (format)
+	{
+		case RJD_GFX_FORMAT_COLOR_U8_RGBA: return sizeof(char[4]);
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM: return sizeof(char[4]);
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB: return sizeof(char[4]);
+        case RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32: return sizeof(float);
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8: return sizeof(uint32_t);
+		case RJD_GFX_FORMAT_COUNT: break;
+	}
+
+	RJD_ASSERTFAIL("Invalid value %d", format);
+	return 0;
+}
+
+bool rjd_gfx_format_iscolor(enum rjd_gfx_format format)
+{
+	switch (format)
+	{
+		case RJD_GFX_FORMAT_COLOR_U8_RGBA: return true;
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM: return true;
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB: return true;
+        case RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32: return false;
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8: return false;
+		case RJD_GFX_FORMAT_COUNT: break;
+	}
+
+	RJD_ASSERTFAIL("Invalid value %d", format);
+	return false;
+}
+
+bool rjd_gfx_format_isdepthstencil(enum rjd_gfx_format format)
+{
+	bool is_depth = rjd_gfx_format_isdepth(format);
+	bool is_stencil = rjd_gfx_format_isstencil(format);
+	return is_depth || is_stencil;
+}
+
+bool rjd_gfx_format_isdepth(enum rjd_gfx_format format)
+{
+	switch (format)
+	{
+		case RJD_GFX_FORMAT_COLOR_U8_RGBA: return false;
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM: return false;
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB: return false;
+        case RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32: return true;
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8: return true;
+		case RJD_GFX_FORMAT_COUNT: break;
+	}
+
+	RJD_ASSERTFAIL("Invalid value %d", format);
+	return false;
+
+}
+
+bool rjd_gfx_format_isstencil(enum rjd_gfx_format format)
+{
+	switch (format)
+	{
+		case RJD_GFX_FORMAT_COLOR_U8_RGBA: return false;
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM: return false;
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB: return false;
+        case RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32: return false;
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8: return true;
+		case RJD_GFX_FORMAT_COUNT: break;
+	}
+
+	RJD_ASSERTFAIL("Invalid value %d", format);
+	return false;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// gfx implementation is in API-specific headers
+// TODO merge these headers into this file
+
+#if RJD_GFX_BACKEND_METAL
+	#if RJD_PLATFORM_OSX
+		#include "rjd_gfx_metal.h"
+	#else
+		#error "Metal backend is only supported on OSX."
+	#endif
+#else
+	#error "Unknown RJD_GFX_BACKEND. Ensure you are #defining to a known rjd_gfx_backend value.
+#endif
+
+#endif // RJD_IMPL
 

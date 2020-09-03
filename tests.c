@@ -22,6 +22,13 @@ void expect_float(double expected, double actual)
 	}
 }
 
+void expect_bool(bool expected, bool actual)
+{
+	if (expected != actual) {
+		RJD_ASSERTFAIL("Expected: %d, but got: %d", expected, actual);
+	}
+}
+
 void expect_int32(int32_t expected, int32_t actual) {
 	if (expected != actual) {
 		RJD_ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
@@ -59,12 +66,18 @@ void expect_path(const char* expected, struct rjd_path path)
 
 void expect_result_ok(struct rjd_result actual)
 {
-	RJD_ASSERT(actual.error == NULL);
+	RJD_ASSERTMSG(actual.error == NULL, "Expected OK result, but got error '%s'", actual.error);
 }
 
 void expect_result_notok(struct rjd_result actual)
 {
-	RJD_ASSERT(actual.error != NULL);
+	RJD_ASSERTMSG(actual.error != NULL, "Expected bad result, but got OK");
+}
+
+void expect_no_leaks(const struct rjd_mem_allocator* allocator)
+{
+	struct rjd_mem_allocator_stats stats = rjd_mem_allocator_getstats(allocator);
+	RJD_ASSERTMSG(stats.current.used == 0, "Found some leaks");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -342,32 +355,32 @@ void test_mem()
 
 	// default allocator
 	{
-		struct rjd_mem_allocator a = rjd_mem_allocator_init_default();
-		int32_t* p0 = rjd_mem_alloc(int32_t, &a);
+		struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+		int32_t* p0 = rjd_mem_alloc(int32_t, &allocator);
 		expect_true(p0 != NULL);
 		*p0 = 1337;
 
-		char* p1 = rjd_mem_alloc_array(char, 128, &a);
+		char* p1 = rjd_mem_alloc_array(char, 128, &allocator);
 		expect_true(p1 != NULL);
 		strncpy(p1, "thequickbrownfoxjumpedoverthesuperdeduperlazydog!", 128);
 		p1[127] = 0;
 
-		char* p2 = rjd_mem_alloc_array(char, 64, &a);
+		char* p2 = rjd_mem_alloc_array(char, 64, &allocator);
 		expect_true(p2 != NULL);
 		strncpy(p2, "this fox wasn't as quick as the last one", 64);
 		p2[63] = 0;
 
-		char* p3 = rjd_mem_alloc_aligned(char, &a, 64);
+		char* p3 = rjd_mem_alloc_aligned(char, &allocator, 64);
 		expect_true(p3 != NULL);
 		expect_uint64(RJD_MEM_ALIGN((uint64_t)p3, 64), (uint64_t)p3);
 
 		struct aligned_struct {
-			double a;
+			double allocator;
 			double b;
 			double c;
 			double e;
 		};
-		char* p4 = rjd_mem_alloc_array_aligned(char, 8, &a, 32);
+		char* p4 = rjd_mem_alloc_array_aligned(char, 8, &allocator, 32);
 		expect_true(p4 != NULL);
 		expect_uint64(RJD_MEM_ALIGN((uint64_t)p4, 32), (uint64_t)p4);
 
@@ -377,55 +390,56 @@ void test_mem()
 		rjd_mem_free(p3);
 		rjd_mem_free(p4);
 
-		expect_false(rjd_mem_allocator_reset(&a));
+		expect_no_leaks(&allocator);
+		expect_false(rjd_mem_allocator_reset(&allocator));
 	}
 
 	// linear allocator
 	{
 		char stackmem[1024];
-		struct rjd_mem_allocator a = rjd_mem_allocator_init_linear(stackmem, sizeof(stackmem));
+		struct rjd_mem_allocator allocator = rjd_mem_allocator_init_linear(stackmem, sizeof(stackmem));
 
-		expect_true(rjd_mem_allocator_type(&a) != NULL);
+		expect_true(rjd_mem_allocator_type(&allocator) != NULL);
 
-		expect_true(rjd_mem_alloc_array(char, 256, &a) != NULL);
-		expect_true(rjd_mem_alloc_array(char, 256, &a) != NULL);
-		expect_true(rjd_mem_alloc_array(char, 256, &a) != NULL);
+		expect_true(rjd_mem_alloc_array(char, 256, &allocator) != NULL);
+		expect_true(rjd_mem_alloc_array(char, 256, &allocator) != NULL);
+		expect_true(rjd_mem_alloc_array(char, 256, &allocator) != NULL);
 
-		expect_true(a.stats.total_size <= sizeof(stackmem));
+		expect_true(allocator.stats.total_size <= sizeof(stackmem));
 		{
-			const uint32_t total = a.stats.total_size;
-			expect_uint32(a.stats.current.used - a.stats.current.overhead, 256 * 3);
-			expect_uint32(a.stats.current.peak, a.stats.current.used);
-			expect_uint32(a.stats.current.unused, total - ((256 * 3) + a.stats.current.overhead));
-			expect_uint32(a.stats.current.allocs, 3);
-			expect_uint32(a.stats.current.frees, 0);
+			const uint32_t total = allocator.stats.total_size;
+			expect_uint32(allocator.stats.current.used - allocator.stats.current.overhead, 256 * 3);
+			expect_uint32(allocator.stats.current.peak, allocator.stats.current.used);
+			expect_uint32(allocator.stats.current.unused, total - ((256 * 3) + allocator.stats.current.overhead));
+			expect_uint32(allocator.stats.current.allocs, 3);
+			expect_uint32(allocator.stats.current.frees, 0);
 
-			expect_uint32(a.stats.lifetime.peak, a.stats.current.peak);
-			expect_uint32(a.stats.lifetime.allocs, 3);
-			expect_uint32(a.stats.lifetime.frees, 0);
-			expect_uint32(a.stats.lifetime.resets, 0);
+			expect_uint32(allocator.stats.lifetime.peak, allocator.stats.current.peak);
+			expect_uint32(allocator.stats.lifetime.allocs, 3);
+			expect_uint32(allocator.stats.lifetime.frees, 0);
+			expect_uint32(allocator.stats.lifetime.resets, 0);
 		}
 
-        const uint32_t old_peak = a.stats.lifetime.peak;
-		expect_true(rjd_mem_allocator_reset(&a));
+        const uint32_t old_peak = allocator.stats.lifetime.peak;
+		expect_true(rjd_mem_allocator_reset(&allocator));
 
-		expect_true(rjd_mem_alloc_array(char, 512, &a) != NULL);
+		expect_true(rjd_mem_alloc_array(char, 512, &allocator) != NULL);
 		{
-			const uint32_t total = a.stats.total_size;
-			expect_uint32(a.stats.current.used - a.stats.current.overhead, 512);
-			expect_uint32(a.stats.current.peak, a.stats.current.used);
-			expect_uint32(a.stats.current.unused, total - (512 + a.stats.current.overhead));
-			expect_uint32(a.stats.current.allocs, 1);
-			expect_uint32(a.stats.current.frees, 0);
+			const uint32_t total = allocator.stats.total_size;
+			expect_uint32(allocator.stats.current.used - allocator.stats.current.overhead, 512);
+			expect_uint32(allocator.stats.current.peak, allocator.stats.current.used);
+			expect_uint32(allocator.stats.current.unused, total - (512 + allocator.stats.current.overhead));
+			expect_uint32(allocator.stats.current.allocs, 1);
+			expect_uint32(allocator.stats.current.frees, 0);
 
-			expect_uint32(a.stats.lifetime.peak, old_peak);
-			expect_uint32(a.stats.lifetime.allocs, 4);
-			expect_uint32(a.stats.lifetime.frees, 0);
-			expect_uint32(a.stats.lifetime.resets, 1);
+			expect_uint32(allocator.stats.lifetime.peak, old_peak);
+			expect_uint32(allocator.stats.lifetime.allocs, 4);
+			expect_uint32(allocator.stats.lifetime.frees, 0);
+			expect_uint32(allocator.stats.lifetime.resets, 1);
 		}
 
-		expect_true(rjd_mem_allocator_reset(&a));
-		expect_uint32(a.stats.lifetime.resets, 2);
+		expect_true(rjd_mem_allocator_reset(&allocator));
+		expect_uint32(allocator.stats.lifetime.resets, 2);
 	}
 
 	// mem_swap
@@ -542,6 +556,8 @@ void test_array()
 
 		rjd_array_free(a);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// clone
 	{
@@ -559,6 +575,8 @@ void test_array()
 		rjd_array_free(a);
 		rjd_array_free(b);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// growing from push test
 	{
@@ -576,6 +594,8 @@ void test_array()
 
 		rjd_array_free(a);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// reserve
 	{
@@ -596,6 +616,8 @@ void test_array()
 
 		rjd_array_free(a);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// insert
 	{
@@ -640,6 +662,8 @@ void test_array()
 
 		rjd_array_free(a);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// find and sort tests
 	{
@@ -768,6 +792,8 @@ void test_array()
 		rjd_array_free(shuffled);
 		rjd_array_free(shuffled2);
 	}
+    
+    expect_no_leaks(&allocator);
 
 	// functional-style tests
 	{
@@ -818,8 +844,11 @@ void test_array()
 		expect_int32(0, b[4]);
 
 		rjd_array_free(b);
+        rjd_array_free(mapped);
 	}
 
+    expect_no_leaks(&allocator);
+    
 	// rng tests
 	{
 		struct rjd_rng rng = rjd_rng_init(0x1337C0DE);
@@ -840,7 +869,11 @@ void test_array()
 		expect_int32(4, a[5]);
 		expect_int32(1, a[6]);
 		expect_int32(5, a[7]);
+        
+        rjd_array_free(a);
 	}
+
+	expect_no_leaks(&allocator);
 }
 
 void expect_vec4(rjd_math_vec4 expected, rjd_math_vec4 actual) 
@@ -858,39 +891,6 @@ void expect_vec3(rjd_math_vec3 expected, rjd_math_vec3 actual)
 		RJD_ASSERTFAIL("Expected (%.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f)", 
 			rjd_math_vec3_x(expected), rjd_math_vec3_y(expected), rjd_math_vec3_z(expected), 
 			rjd_math_vec3_x(actual), rjd_math_vec3_y(actual), rjd_math_vec3_z(actual));
-	}
-}
-
-void expect_float2(rjd_math_float2 expected, rjd_math_float2 actual)
-{
-	if (!rjd_math_isequalf(expected.x, actual.x) ||
-		!rjd_math_isequalf(expected.y, actual.y))
-	{
-		RJD_ASSERTFAIL("Expected (%.2f, %.2f), but got: (%.2f, %.2f)", 
-			expected.x, expected.y, actual.x, actual.y);
-	}
-}
-
-void expect_float3(rjd_math_float3 expected, rjd_math_float3 actual)
-{
-	if (!rjd_math_isequalf(expected.x, actual.x) ||
-		!rjd_math_isequalf(expected.y, actual.y) ||
-		!rjd_math_isequalf(expected.z, actual.z))
-	{
-		RJD_ASSERTFAIL("Expected (%.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f)", 
-			expected.x, expected.y, expected.z, actual.x, actual.y, actual.z);
-	}
-}
-
-void expect_float4(rjd_math_float4 expected, rjd_math_float4 actual)
-{
-	if (!rjd_math_isequalf(expected.x, actual.x) ||
-		!rjd_math_isequalf(expected.y, actual.y) ||
-		!rjd_math_isequalf(expected.z, actual.z) ||
-		!rjd_math_isequalf(expected.w, actual.w))
-	{
-		RJD_ASSERTFAIL("Expected (%.2f, %.2f, %.2f, %.2f), but got: (%.2f, %.2f, %.2f, %.2f)", 
-			expected.x, expected.y, expected.z, expected.w, actual.x, actual.y, actual.z, actual.w);
 	}
 }
 
@@ -942,27 +942,47 @@ void test_math(void)
 	expect_int32(2,		rjd_math_max32(2, 1));
 	expect_int32(1100,	rjd_math_maxu32(10, 1100));
 
-	// float <-> vec translations
+	// vec and matrix alignment
 	{
-		rjd_math_float2 f2 = rjd_math_float2_xy(78, 99);
-		rjd_math_float3 f3 = rjd_math_float3_xyz(12, 32, 11);
-		rjd_math_float4 f4 = rjd_math_float4_xyzw(60, 56, 77, 28);
+		char a1;
+		rjd_math_vec3 v1 = rjd_math_vec3_xyz(1,2,3);
+		char a2;
+		rjd_math_vec4 v2 = rjd_math_vec4_xyzw(1,2,3,4);
+		char a3, a4;
+		rjd_math_mat4 m1 = rjd_math_mat4_identity();;
 
-		expect_vec3(rjd_math_vec3_xyz(78, 99, 4), rjd_math_float2_to_vec3(f2, 4));
-		expect_vec3(rjd_math_vec3_xyz(12, 32, 11), rjd_math_float3_to_vec3(f3));
-		expect_vec3(rjd_math_vec3_xyz(60, 56, 77), rjd_math_float4_to_vec3(f4));
-		
-		expect_vec4(rjd_math_vec4_xyzw(78, 99, 55, 44), rjd_math_float2_to_vec4(f2, 55, 44));
-		expect_vec4(rjd_math_vec4_xyzw(12, 32, 11, 55), rjd_math_float3_to_vec4(f3, 55));
-		expect_vec4(rjd_math_vec4_xyzw(60, 56, 77, 28), rjd_math_float4_to_vec4(f4));
-		
-		expect_float2(f2, rjd_math_vec3_to_float2(rjd_math_vec3_xyz(78, 99, 23)));
-		expect_float3(f3, rjd_math_vec3_to_float3(rjd_math_vec3_xyz(12, 32, 11)));
-		expect_float4(f4, rjd_math_vec3_to_float4(rjd_math_vec3_xyz(60, 56, 77), 28));
-		
-		expect_float2(f2, rjd_math_vec4_to_float2(rjd_math_vec4_xyzw(78, 99, 23, 87)));
-		expect_float3(f3, rjd_math_vec4_to_float3(rjd_math_vec4_xyzw(12, 32, 11, 87)));
-		expect_float4(f4, rjd_math_vec4_to_float4(rjd_math_vec4_xyzw(60, 56, 77, 28)));
+		expect_uint32(0, (uint32_t)(&v1) & 0xF);
+		expect_uint32(0, (uint32_t)(&v2) & 0xF);
+		expect_uint32(0, (uint32_t)(&m1) & 0xF);
+
+		RJD_UNUSED_PARAM(a1);
+		RJD_UNUSED_PARAM(a2);
+		RJD_UNUSED_PARAM(a3);
+		RJD_UNUSED_PARAM(a4);
+
+		float* f1 = (float*)&v1;
+		expect_float(1, f1[0]);
+		expect_float(2, f1[1]);
+		expect_float(3, f1[2]);
+
+		f1[0] = 10;
+		f1[1] = 20;
+		f1[2] = 30;
+		expect_float(10, f1[0]);
+		expect_float(20, f1[1]);
+		expect_float(30, f1[2]);
+
+		const float* f2 = (float*)&v2;
+		expect_float(1, f2[0]);
+		expect_float(2, f2[1]);
+		expect_float(3, f2[2]);
+		expect_float(4, f2[3]);
+
+		const float* f3 = (float*)&m1;
+		expect_float(1, f3[0]); expect_float(0, f3[1]); expect_float(0, f3[2]); expect_float(0, f3[3]);
+		expect_float(0, f3[4]); expect_float(1, f3[5]); expect_float(0, f3[6]); expect_float(0, f3[7]);
+		expect_float(0, f3[8]); expect_float(0, f3[9]); expect_float(1, f3[10]); expect_float(0, f3[11]);
+		expect_float(0, f3[12]); expect_float(0, f3[13]); expect_float(0, f3[14]); expect_float(1, f3[15]);
 	}
 
 	// vec4
@@ -986,6 +1006,13 @@ void test_math(void)
 	expect_float(4, rjd_math_vec4_length(rjd_math_vec4_xyzw(4,0,0,0)));
 	expect_float(5, rjd_math_vec4_length(rjd_math_vec4_xyzw(3,0,0,4)));
 	expect_vec4(rjd_math_vec4_xyzw(1,0,0,0), rjd_math_vec4_normalize(rjd_math_vec4_xyzw(7368,0,0,0)));
+	expect_vec4(rjd_math_vec4_xyzw(1,1,0,FLT_MAX), rjd_math_vec4_abs(rjd_math_vec4_xyzw(1, -1, -0, -FLT_MAX)));
+	expect_vec4(rjd_math_vec4_xyzw(-1,1,-0,FLT_MAX), rjd_math_vec4_neg(rjd_math_vec4_xyzw(1, -1, 0, -FLT_MAX)));
+	expect_vec4(rjd_math_vec4_xyzw(0,0,0,-1), rjd_math_vec4_floor(rjd_math_vec4_xyzw(0, .5, .99, -0.1)));
+	expect_vec4(rjd_math_vec4_xyzw(0,1,1,-.0), rjd_math_vec4_ceil(rjd_math_vec4_xyzw(0, .5, .01, -0.9)));
+	expect_vec4(rjd_math_vec4_xyzw(0,0,0,1), rjd_math_vec4_round(rjd_math_vec4_xyzw(0, .1, .5, .9)));
+	expect_vec4(rjd_math_vec4_xyzw(1,0,0,-1), rjd_math_vec4_round(rjd_math_vec4_xyzw(1, -.1, -.5, -.9)));
+	expect_vec4(rjd_math_vec4_xyzw(-1,-2,2,0), rjd_math_vec4_round(rjd_math_vec4_xyzw(-1, -1.5, 1.5, 0)));
 	expect_vec4(rjd_math_vec4_xyzw(26, 60, 44, 6), rjd_math_vec4_scale(rjd_math_vec4_xyzw(13, 30, 22, 3), 2));
 	expect_vec4(rjd_math_vec4_xyzw(3,3,3,3), rjd_math_vec4_add(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(2,2,2,2)));
 	expect_vec4(rjd_math_vec4_xyzw(-1,-1,-1,-1), rjd_math_vec4_sub(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(2,2,2,2)));
@@ -994,6 +1021,7 @@ void test_math(void)
 	expect_vec4(rjd_math_vec4_xyzw(23,45,21,5), rjd_math_vec4_min(rjd_math_vec4_xyzw(23,45,72,5), rjd_math_vec4_xyzw(43,75,21,6)));
 	expect_vec4(rjd_math_vec4_xyzw(43,75,72,6), rjd_math_vec4_max(rjd_math_vec4_xyzw(23,45,72,5), rjd_math_vec4_xyzw(43,75,21,6)));
 	expect_vec4(rjd_math_vec4_xyzw(1,0,0,0), rjd_math_vec4_project(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(1,0,0,0)));
+	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5));
 	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5));
 
 	// vec3
@@ -1032,6 +1060,39 @@ void test_math(void)
 
 	// matrix
 	// TODO
+}
+
+void test_procgeo()
+{
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+
+	for (enum rjd_procgeo_type type = 0; type < RJD_PROCGEO_TYPE_COUNT; ++type)
+	{
+		for (uint32_t tesselation = 0; tesselation < 32; ++tesselation)
+		{
+			uint32_t verts = rjd_procgeo_calc_num_verts(type, tesselation);
+			float* data = rjd_mem_alloc_array(float, verts * 3, &allocator);
+			float* data_strided = rjd_mem_alloc_array(float, verts * 5, &allocator);
+			
+			float* data_end = rjd_procgeo(type, tesselation, 1.0f, 1.0f, 1.0f, data, verts * 3, 0);
+			float* data_strided_end = rjd_procgeo(type, tesselation, 1.0f, 1.0f, 1.0f, data_strided, verts * 5, 2);
+
+			RJD_ASSERT(data_end != NULL);
+			RJD_ASSERT(data_strided_end != NULL);
+
+			for (uint32_t vert = 0; vert < verts; ++vert)
+			{
+				expect_float(data[vert * 3 + 0], data_strided[vert * 5 + 0]);
+                expect_float(data[vert * 3 + 1], data_strided[vert * 5 + 1]);
+                expect_float(data[vert * 3 + 2], data_strided[vert * 5 + 2]);
+			}
+
+			rjd_mem_free(data);
+			rjd_mem_free(data_strided);
+		}
+
+		expect_no_leaks(&allocator);
+	}
 }
 
 void test_geo()
@@ -1092,7 +1153,7 @@ void test_geo()
 		expect_false(rjd_geo_point_box(p4, b4));
 	}
 
-	// point-rjd_geo_point_rect
+	// point-circle
 	{
 		rjd_math_vec3 p1 = rjd_math_vec3_xyz(0,0,0);
 		rjd_math_vec3 p2 = rjd_math_vec3_xyz(5,1,0);
@@ -1148,7 +1209,7 @@ void test_geo()
 		expect_false(rjd_geo_point_sphere(p4, s3));
 	}
 
-	// rjd_geo_point_rect-rjd_geo_point_rect
+	// circle-circle
 	{
 		rjd_geo_circle c1 = rjd_geo_circle_xyr(0,0,1);
 		rjd_geo_circle c2 = rjd_geo_circle_xyr(-2,-1,2);
@@ -1176,7 +1237,7 @@ void test_geo()
 		expect_true(rjd_geo_circle_circle(c4, c4));
 	}
 
-	// rjd_geo_point_rect-rect
+	// circle-rect
 	{
 		rjd_geo_circle c1 = rjd_geo_circle_xyr(0,0,1);
 		rjd_geo_circle c2 = rjd_geo_circle_xyr(2,1,.5);
@@ -1318,9 +1379,9 @@ void test_easing()
 
 void test_strbuf(void)
 {	
-	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 
-	struct rjd_strbuf builder = rjd_strbuf_init(&context);
+	struct rjd_strbuf builder = rjd_strbuf_init(&allocator);
 
 	// regular append
 	rjd_strbuf_append(&builder, "test");
@@ -1354,6 +1415,8 @@ void test_strbuf(void)
 	// append substring
 	rjd_strbuf_appendl(&builder, "only see this, no comma", (uint32_t)strlen("only see this"));
 	expect_str("only see this", rjd_strbuf_str(&builder));
+
+	expect_no_leaks(&allocator);
 }
 
 void test_profiler(void)
@@ -1369,10 +1432,10 @@ void test_profiler(void)
 
 void test_cmd()
 {
-	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 	
 	const char* argv0[] = { "test.exe", NULL };
-	struct rjd_cmd cmd = rjd_cmd_init(rjd_countof(argv0), argv0, &context);
+	struct rjd_cmd cmd = rjd_cmd_init(rjd_countof(argv0), argv0, &allocator);
 
 	expect_true(rjd_cmd_ok(&cmd));
 
@@ -1425,6 +1488,8 @@ void test_cmd()
 	rjd_cmd_help(&cmd);
 
 	rjd_cmd_free(&cmd);
+
+	expect_no_leaks(&allocator);
 }
 
 void test_rng()
@@ -1449,9 +1514,9 @@ void test_rng()
 
 void test_dict()
 {
-	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 	
-	struct rjd_dict dict = rjd_dict_init(&context, 0);
+	struct rjd_dict dict = rjd_dict_init(&allocator, 0);
 	expect_str(NULL, (char*)rjd_dict_get_hashstr(&dict, "key"));
 	expect_str(NULL, (char*)rjd_dict_erase_hashstr(&dict, "key"));
 
@@ -1493,6 +1558,8 @@ void test_dict()
 	}
 
 	rjd_dict_free(&dict);
+
+	expect_no_leaks(&allocator);
 }
 
 void expect_fio_ok(bool expected_ok, struct rjd_result actual)
@@ -1506,7 +1573,7 @@ void expect_fio_ok(bool expected_ok, struct rjd_result actual)
 
 void test_fio()
 {
-	struct rjd_mem_allocator context = rjd_mem_allocator_init_default();
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 
 	const char expected_contents[] = "this is a test file that has ä utf-8 character!";
 
@@ -1516,20 +1583,22 @@ void test_fio()
 	expect_fio_ok(true, result);
 
 	char* buffer;
-	result = rjd_fio_read("does_not_exist.txt", &buffer, &context);
-	expect_fio_ok(false, result);
-	result = rjd_fio_read("test.txt", &buffer, &context);
-	expect_fio_ok(true, result);
-	expect_uint32(sizeof(expected_contents), rjd_array_count(buffer));
-	expect_true(!memcmp(buffer, expected_contents, sizeof(expected_contents)));
+    result = rjd_fio_read("does_not_exist.txt", &buffer, &allocator);
+    expect_fio_ok(false, result);
+    result = rjd_fio_read("test.txt", &buffer, &allocator);
+    expect_fio_ok(true, result);
+    expect_uint32(sizeof(expected_contents), rjd_array_count(buffer));
+    expect_true(!memcmp(buffer, expected_contents, sizeof(expected_contents)));
+    rjd_array_free(buffer);
 
 	result = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_REPLACE);
 	expect_fio_ok(true, result);
 	result = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_APPEND);
 	char* buffer2;
-	result = rjd_fio_read("test2.txt", &buffer2, &context);
+	result = rjd_fio_read("test2.txt", &buffer2, &allocator);
 	expect_fio_ok(true, result);
 	expect_uint32(sizeof(expected_contents)*2, rjd_array_count(buffer2));
+    rjd_array_free(buffer2);
 
 	size_t filesize;
 	result = rjd_fio_size("does_not_exist.txt", &filesize);
@@ -1560,6 +1629,218 @@ void test_fio()
     result = rjd_fio_delete("test_folder");
     expect_result_ok(result);
     expect_false(rjd_fio_exists("test_folder"));
+
+	expect_no_leaks(&allocator);
+}
+
+enum test_thread_stage
+{
+	TEST_THREAD_STAGE_PENDING,
+	TEST_THREAD_STAGE_STARTED,
+	TEST_THREAD_STAGE_ACQUIRE_LOCK,
+    TEST_THREAD_STAGE_ACQUIRE_READ_LOCK,
+    TEST_THREAD_STAGE_ACQUIRE_WRITE_LOCK,
+	TEST_THREAD_STAGE_FINISHED,
+};
+
+struct test_thread_data
+{
+	struct rjd_condvar goto_next_main;
+	struct rjd_condvar goto_next_thread;
+	struct rjd_lock lock;
+	struct rjd_rwlock rwlock;
+	enum test_thread_stage stage;
+};
+
+void test_thread_entrypoint(void* userdata)
+{
+	struct test_thread_data* data = (struct test_thread_data*)userdata;
+	struct rjd_result result = RJD_RESULT_OK();
+
+	data->stage = TEST_THREAD_STAGE_STARTED;
+    result = rjd_condvar_lock(&data->goto_next_thread);
+    expect_result_ok(result);
+	result = rjd_condvar_signal_single(&data->goto_next_main);
+    expect_result_ok(result);
+	result = rjd_condvar_wait(&data->goto_next_thread);
+	expect_result_ok(result);
+    
+    data->stage = TEST_THREAD_STAGE_ACQUIRE_LOCK;
+	result = rjd_lock_acquire(&data->lock);
+	expect_result_ok(result);
+    result = rjd_condvar_signal_single(&data->goto_next_main);
+    expect_result_ok(result);
+	result = rjd_condvar_wait(&data->goto_next_thread);
+	expect_result_ok(result);
+    
+    data->stage = TEST_THREAD_STAGE_ACQUIRE_READ_LOCK;
+	result = rjd_lock_release(&data->lock);
+	expect_result_ok(result);
+    result = rjd_rwlock_acquire_reader(&data->rwlock);
+    expect_result_ok(result);
+    result = rjd_condvar_signal_single(&data->goto_next_main);
+    expect_result_ok(result);
+	result = rjd_condvar_wait(&data->goto_next_thread);
+	expect_result_ok(result);
+    
+    // promote reader to writer lock
+    data->stage = TEST_THREAD_STAGE_ACQUIRE_WRITE_LOCK;
+    result = rjd_rwlock_try_acquire_writer(&data->rwlock);
+    expect_result_notok(result);
+    result = rjd_rwlock_release(&data->rwlock);
+    expect_result_ok(result);
+    result = rjd_rwlock_acquire_writer(&data->rwlock);
+    expect_result_ok(result);
+    result = rjd_condvar_signal_single(&data->goto_next_main);
+    expect_result_ok(result);
+    result = rjd_condvar_wait(&data->goto_next_thread);
+    expect_result_ok(result);
+
+	data->stage = TEST_THREAD_STAGE_FINISHED;
+    result = rjd_rwlock_release(&data->rwlock);
+    expect_result_ok(result);
+    result = rjd_condvar_signal_all(&data->goto_next_main); // testing signal_all
+    expect_result_ok(result);
+    result = rjd_condvar_unlock(&data->goto_next_thread);
+    expect_result_ok(result);
+}
+
+void test_thread()
+{
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+
+    struct rjd_result result = RJD_RESULT_OK();
+	struct test_thread_data thread_data = {0};
+	struct rjd_thread_desc desc =
+	{
+		.entrypoint_func = test_thread_entrypoint,
+		.allocator = &allocator,
+		.userdata = &thread_data,
+        .name = "my_cool_thread!" // 16 bytes including null terminator
+	};
+
+	result = rjd_condvar_create(&thread_data.goto_next_main);
+	expect_result_ok(result);
+	result = rjd_condvar_create(&thread_data.goto_next_thread);
+	expect_result_ok(result);
+	result = rjd_lock_create(&thread_data.lock);
+	expect_result_ok(result);
+	result = rjd_rwlock_create(&thread_data.rwlock);
+	expect_result_ok(result);
+    
+    result = rjd_condvar_lock(&thread_data.goto_next_main);
+    expect_result_ok(result);
+
+	struct rjd_thread thread = {0};
+	result = rjd_thread_create(&thread, desc);
+	expect_result_ok(result);
+    
+    const uint32_t TIMEOUT = 1;
+
+	result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
+	expect_result_ok(result);
+    
+	expect_uint32(TEST_THREAD_STAGE_STARTED, thread_data.stage);
+    // now the main and child threads are in lockstep
+    {
+        char outname[32] = {0};
+        result = rjd_thread_getname(&thread, sizeof(outname), outname);
+        expect_result_ok(result);
+        expect_str("my_cool_thread!", outname);
+    }
+	result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
+	expect_result_ok(result);
+	result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
+	expect_result_ok(result);
+    
+	expect_uint32(TEST_THREAD_STAGE_ACQUIRE_LOCK, thread_data.stage);
+    result = rjd_lock_try_acquire(&thread_data.lock);
+    expect_result_notok(result); // thread should have the lock
+	result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
+	expect_result_ok(result);
+	result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
+	expect_result_ok(result);
+    
+    expect_uint32(TEST_THREAD_STAGE_ACQUIRE_READ_LOCK, thread_data.stage);
+    result = rjd_lock_try_acquire(&thread_data.lock);
+    expect_result_ok(result);
+    result = rjd_lock_release(&thread_data.lock);
+    expect_result_ok(result);
+    result = rjd_rwlock_try_acquire_reader(&thread_data.rwlock);
+    expect_result_ok(result);
+    result = rjd_rwlock_release(&thread_data.rwlock);
+    expect_result_ok(result);
+    result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
+    expect_result_ok(result);
+    result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
+    expect_result_ok(result);
+    
+    expect_uint32(TEST_THREAD_STAGE_ACQUIRE_WRITE_LOCK, thread_data.stage);
+    result = rjd_rwlock_try_acquire_writer(&thread_data.rwlock);
+    expect_result_notok(result);
+    result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
+    expect_result_ok(result);
+    result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
+    expect_result_ok(result);
+    
+    expect_uint32(TEST_THREAD_STAGE_FINISHED, thread_data.stage);
+    result = rjd_rwlock_try_acquire_writer(&thread_data.rwlock);
+    expect_result_ok(result);
+    result = rjd_rwlock_release(&thread_data.rwlock);
+    expect_result_ok(result);
+    
+    result = rjd_thread_join(&thread);
+    expect_result_ok(result);
+    
+    result = rjd_condvar_unlock(&thread_data.goto_next_main);
+    expect_result_ok(result);
+
+	result = rjd_condvar_destroy(&thread_data.goto_next_main);
+	expect_result_ok(result);
+	result = rjd_condvar_destroy(&thread_data.goto_next_thread);
+	expect_result_ok(result);
+	result = rjd_lock_destroy(&thread_data.lock);
+	expect_result_ok(result);
+	result = rjd_rwlock_destroy(&thread_data.rwlock);
+	expect_result_ok(result);
+	
+	expect_no_leaks(&allocator);
+}
+
+void test_atomic()
+{
+	struct rjd_atomic_int64 atomic_i64 = rjd_atomic_int64_init(INT64_MAX);
+	expect_int64(INT64_MAX, rjd_atomic_int64_get(&atomic_i64));
+	rjd_atomic_int64_set(&atomic_i64, 0);
+	expect_int64(0, rjd_atomic_int64_get(&atomic_i64));
+	expect_int64(0, rjd_atomic_int64_inc(&atomic_i64));
+    expect_int64(1, rjd_atomic_int64_get(&atomic_i64));
+	expect_int64(1, rjd_atomic_int64_add(&atomic_i64, 10));
+    expect_int64(11, rjd_atomic_int64_get(&atomic_i64));
+	expect_int64(11, rjd_atomic_int64_dec(&atomic_i64));
+    expect_int64(10, rjd_atomic_int64_get(&atomic_i64));
+	expect_int64(10, rjd_atomic_int64_sub(&atomic_i64, 5));
+    expect_int64(5, rjd_atomic_int64_get(&atomic_i64));
+
+	const uint32_t max_iterations = 1000;
+	uint32_t iterations = 0;
+	int64_t expected = 0;
+	while (!rjd_atomic_int64_compare_exchange_weak(&atomic_i64, &expected, 0)) {
+		rjd_atomic_int64_dec(&atomic_i64);
+		if (++iterations > max_iterations) {
+			break;
+		}
+	}
+
+	rjd_atomic_int64_set(&atomic_i64, 5);
+
+	iterations = 0;
+	while (!rjd_atomic_int64_compare_exchange_weak(&atomic_i64, &expected, 0)) {
+		rjd_atomic_int64_dec(&atomic_i64);
+		if (++iterations > max_iterations) {
+			break;
+		}
+	}
 }
 
 void test_strpool()
@@ -1611,6 +1892,8 @@ void test_strpool()
 	expect_str(rjd_strref_str(ref5), test5);
 
 	rjd_strpool_free(&pool);
+
+	expect_no_leaks(&allocator);
 }
 
 void test_slotmap(void)
@@ -1620,54 +1903,56 @@ void test_slotmap(void)
 	{
 		uint32_t* map = rjd_slotmap_alloc(uint32_t, 8, &allocator);
 
-		expect_uint32(8, rjd_slotmap_count(map));
+        expect_uint32(0, rjd_slotmap_count(map));
 
-		struct rjd_slot slots[25] = {0};
-		for (uint32_t i = 0; i < rjd_countof(slots); ++i) {
-			rjd_slotmap_insert(map, i + 1337, slots + i);
-		}
+        struct rjd_slot slots[25] = {0};
+        for (uint32_t i = 0; i < rjd_countof(slots); ++i) {
+            rjd_slotmap_insert(map, i + 1337, slots + i);
+        }
 
-		expect_uint32(32, rjd_slotmap_count(map));
+        expect_uint32(25, rjd_slotmap_count(map));
 
-		const uint32_t* const_map = map;
+        const uint32_t* const_map = map;
 
-		for (uint32_t i = 0; i < rjd_countof(slots); ++i) {
-			uint32_t value = *rjd_slotmap_get(const_map, slots[i]);
-			expect_uint32(i + 1337, value);
-		}
+        for (uint32_t i = 0; i < rjd_countof(slots); ++i) {
+            uint32_t value = *rjd_slotmap_get(const_map, slots[i]);
+            expect_uint32(i + 1337, value);
+        }
 
-		uint32_t visited = 0;
-		for (struct rjd_slot s = rjd_slotmap_next(map, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(map, &s))
-		{
-			++visited;
-		}
-		expect_uint32(25, visited);
+        uint32_t visited = 0;
+        for (struct rjd_slot s = rjd_slotmap_next(map, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(map, &s))
+        {
+            ++visited;
+        }
+        expect_uint32(25, visited);
 
-		for (uint32_t i = 0; i < rjd_countof(slots); i += 5) {
-			rjd_slotmap_erase(map, slots[i]);
-		}
+        for (uint32_t i = 0; i < rjd_countof(slots); i += 5) {
+            rjd_slotmap_erase(map, slots[i]);
+        }
 
-		for (uint32_t i = 0; i < rjd_countof(slots); ++i)
-		{
-			bool actual = rjd_slotmap_contains(map, slots[i]);
-			bool expected = (i % 5) != 0;
-			expect_uint32(expected, actual);
-		}
+        for (uint32_t i = 0; i < rjd_countof(slots); ++i)
+        {
+            bool actual = rjd_slotmap_contains(map, slots[i]);
+            bool expected = (i % 5) != 0;
+            expect_uint32(expected, actual);
+        }
 
-		visited = 0;
-		for (struct rjd_slot s = rjd_slotmap_next(map, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(map, &s))
-		{
-			++visited;
-		}
-		expect_uint32(20, visited);
+        visited = 0;
+        for (struct rjd_slot s = rjd_slotmap_next(map, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(map, &s))
+        {
+            ++visited;
+        }
+        expect_uint32(20, visited);
 
-		struct rjd_slot s = rjd_slotmap_next(map, NULL);
-		expect_true(rjd_slot_isvalid(s));
-		rjd_slot_invalidate(&s);
-		expect_false(rjd_slot_isvalid(s));
+        struct rjd_slot s = rjd_slotmap_next(map, NULL);
+        expect_true(rjd_slot_isvalid(s));
+        rjd_slot_invalidate(&s);
+        expect_false(rjd_slot_isvalid(s));
 
 		rjd_slotmap_free(map);
 	}
+
+	expect_no_leaks(&allocator);
 }
 
 void test_utf8(void)
@@ -1949,6 +2234,8 @@ void test_stream()
         result = rjd_fio_delete("test.txt");
         expect_result_ok(result);
     }
+
+	expect_no_leaks(&allocator);
 }
 
 struct test
@@ -2075,6 +2362,8 @@ void test_strhash()
         expect_pointer(NULL, hash2.debug_string);
         expect_pointer(NULL, hash3.debug_string);
     }
+
+	expect_no_leaks(&allocator);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2288,166 +2577,168 @@ void test_resource()
 
 	// rjd_resource_loader
 	{
-		const struct rjd_resource_extension_to_type_id type_mappings[] = {
-			{ .type = rjd_strhash_init("config"), .extension = ".cfg" },
-			{ .type = rjd_strhash_init("level"), .extension = ".lvl" },
-			{ .type = rjd_strhash_init("shader"), .extension = ".shader" },
-			{ .type = rjd_strhash_init("texture"), .extension = ".bmp" },
-		};
+        const struct rjd_resource_extension_to_type_id type_mappings[] = {
+            { .type = rjd_strhash_init("config"), .extension = ".cfg" },
+            { .type = rjd_strhash_init("level"), .extension = ".lvl" },
+            { .type = rjd_strhash_init("shader"), .extension = ".shader" },
+            { .type = rjd_strhash_init("texture"), .extension = ".bmp" },
+        };
 
-		const struct rjd_resource_loader_desc desc = {
-			.type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
-			.allocator = &allocator,
-			.filesystem = {
-				.root = "test_data/resource/loader_filesystem",
-				.type_mappings = type_mappings,
-				.type_mappings_count = rjd_countof(type_mappings),
-			},
-		};
+        const struct rjd_resource_loader_desc desc = {
+            .type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
+            .allocator = &allocator,
+            .filesystem = {
+                .root = "test_data/resource/loader_filesystem",
+                .type_mappings = type_mappings,
+                .type_mappings_count = rjd_countof(type_mappings),
+            },
+        };
 
-		struct rjd_resource_loader loader;
-		struct rjd_result result = rjd_resource_loader_create(&loader, desc);
-		expect_result_ok(result);
+        struct rjd_resource_loader loader;
+        struct rjd_result result = rjd_resource_loader_create(&loader, desc);
+        expect_result_ok(result);
 
-		struct expected_resource_data
-		{
-			struct rjd_resource_id id;
-			int32_t mapping_index;
-			const char* data;
-		};
+        struct expected_resource_data
+        {
+            struct rjd_resource_id id;
+            int32_t mapping_index;
+            const char* data;
+        };
 
-		const struct expected_resource_data expected_data[] = {
-			{ rjd_resource_id_from_str("init.cfg"),					0,	"some init data is in here\n" },
-			{ rjd_resource_id_from_str("bootstrap.lvl"),		    1,	"bootstrap level\n" },
-			{ rjd_resource_id_from_str("levels/mainmenu.lvl"),	    1,	"the main menu and ui\n" },
-			{ rjd_resource_id_from_str("levels/dungeon.lvl"),	    1,	"first dungeon level\n" },
-			{ rjd_resource_id_from_str("gfx/quad.shader"),		    2,	"shader code here\n" },
-			{ rjd_resource_id_from_str("gfx/invalid.bmp"),		    3,	"placeholder bitmap\n" },
-			{ rjd_resource_id_from_str("does_not_exist.bmp"),	    -1, NULL },
-			{ rjd_resource_id_from_str("unregistered_type.txt"),    -1, NULL },
-		};
+        const struct expected_resource_data expected_data[] = {
+            { rjd_resource_id_from_str("init.cfg"),                    0,    "some init data is in here\n" },
+            { rjd_resource_id_from_str("bootstrap.lvl"),            1,    "bootstrap level\n" },
+            { rjd_resource_id_from_str("levels/mainmenu.lvl"),        1,    "the main menu and ui\n" },
+            { rjd_resource_id_from_str("levels/dungeon.lvl"),        1,    "first dungeon level\n" },
+            { rjd_resource_id_from_str("gfx/quad.shader"),            2,    "shader code here\n" },
+            { rjd_resource_id_from_str("gfx/invalid.bmp"),            3,    "placeholder bitmap\n" },
+            { rjd_resource_id_from_str("does_not_exist.bmp"),        -1, NULL },
+            { rjd_resource_id_from_str("unregistered_type.txt"),    -1, NULL },
+        };
 
-		{
-			for (uint32_t i = 0; i < rjd_countof(expected_data); ++i) {
-				struct rjd_resource_type_id out_type = {0};
-	
-				struct rjd_result result = rjd_resource_loader_get_type(&loader, expected_data[i].id, &out_type);
-				int32_t mapping_index = expected_data[i].mapping_index;
-				if (mapping_index == -1) {
-					expect_result_notok(result);
-				} else {
-					expect_result_ok(result);
-					expect_true(rjd_resource_type_id_equals(type_mappings[mapping_index].type, out_type));
-				}
-	
-				struct rjd_istream stream = {0};
-				result = rjd_resource_loader_load(&loader, expected_data[i].id, &allocator, &stream);
-				if (mapping_index == -1) {
-					expect_result_notok(result);
-				} else {
-					const char* expected_str = expected_data[i].data;
-					expect_result_ok(result);
+        {
+            for (uint32_t i = 0; i < rjd_countof(expected_data); ++i) {
+                struct rjd_resource_type_id out_type = {0};
 
-					uint64_t length = stream.end - stream.start;
-					expect_int64(strlen(expected_str), length);
-					expect_int32(0, memcmp(expected_str, stream.start, length));
-				}
-				rjd_istream_close(&stream);
-			}
-		}
+                struct rjd_result result = rjd_resource_loader_get_type(&loader, expected_data[i].id, &out_type);
+                int32_t mapping_index = expected_data[i].mapping_index;
+                if (mapping_index == -1) {
+                    expect_result_notok(result);
+                } else {
+                    expect_result_ok(result);
+                    expect_true(rjd_resource_type_id_equals(type_mappings[mapping_index].type, out_type));
+                }
+
+                struct rjd_istream stream = {0};
+                result = rjd_resource_loader_load(&loader, expected_data[i].id, &allocator, &stream);
+                if (mapping_index == -1) {
+                    expect_result_notok(result);
+                } else {
+                    const char* expected_str = expected_data[i].data;
+                    expect_result_ok(result);
+
+                    uint64_t length = stream.end - stream.start;
+                    expect_int64(strlen(expected_str), length);
+                    expect_int32(0, memcmp(expected_str, stream.start, length));
+                }
+                rjd_istream_close(&stream);
+            }
+        }
+        
+        rjd_resource_loader_destroy(&loader);
 	}
 
-	// rjd_resource
-	{
-		const struct rjd_resource_extension_to_type_id type_material = { .type = rjd_strhash_init("test_material"), .extension = ".material" };
-		const struct rjd_resource_extension_to_type_id type_shader = { .type = rjd_strhash_init("test_shader"), .extension = ".shader" };
-		const struct rjd_resource_extension_to_type_id type_texture = { .type = rjd_strhash_init("test_texture"), .extension = ".bmp" };
+    // rjd_resource
+    {
+        const struct rjd_resource_extension_to_type_id type_material = { .type = rjd_strhash_init("test_material"), .extension = ".material" };
+        const struct rjd_resource_extension_to_type_id type_shader = { .type = rjd_strhash_init("test_shader"), .extension = ".shader" };
+        const struct rjd_resource_extension_to_type_id type_texture = { .type = rjd_strhash_init("test_texture"), .extension = ".bmp" };
 
-		const struct rjd_resource_extension_to_type_id type_mappings[] = {
-			type_material,
-			type_shader,
-			type_texture,
-		};
+        const struct rjd_resource_extension_to_type_id type_mappings[] = {
+            type_material,
+            type_shader,
+            type_texture,
+        };
 
-		const struct rjd_resource_loader_desc desc = {
-			.type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
-			.allocator = &allocator,
-			.filesystem = {
-				.root = "test_data/resource/lib",
-				.type_mappings = type_mappings,
-				.type_mappings_count = rjd_countof(type_mappings),
-			},
-		};
+        const struct rjd_resource_loader_desc desc = {
+            .type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
+            .allocator = &allocator,
+            .filesystem = {
+                .root = "test_data/resource/lib",
+                .type_mappings = type_mappings,
+                .type_mappings_count = rjd_countof(type_mappings),
+            },
+        };
 
-		struct rjd_resource_loader loader;
+        struct rjd_resource_loader loader;
         {
             struct rjd_result result = rjd_resource_loader_create(&loader, desc);
             expect_result_ok(result);
         }
 
-		struct rjd_resource_lib lib;
-		{
-			struct rjd_resource_lib_desc desc = {
-				.allocator = &allocator,
-				.loader = &loader,
-			};
+        struct rjd_resource_lib lib;
+        {
+            struct rjd_resource_lib_desc desc = {
+                .allocator = &allocator,
+                .loader = &loader,
+            };
 
-			rjd_resource_lib_create(&lib, desc);
-		}
+            rjd_resource_lib_create(&lib, desc);
+        }
 
-		struct did_call_load_stages did_call_stages_material = {0};
-		struct did_call_load_stages did_call_stages_shader = {0};
-		struct did_call_load_stages did_call_stages_texture = {0};
+        struct did_call_load_stages did_call_stages_material = {0};
+        struct did_call_load_stages did_call_stages_shader = {0};
+        struct did_call_load_stages did_call_stages_texture = {0};
 
-		struct rjd_resource_type resource_types[] = 
-		{
-			{
-				.id = type_material.type,
-				.userdata = &did_call_stages_material,
-				.load_begin_func = test_material_load,
-				.optional_load_end_func = test_material_load_end,
-				.optional_unload_func = test_material_unload,
-				.in_memory_size = sizeof(struct test_material),
-			},
-			{
-				.id = type_shader.type,
-				.userdata = &did_call_stages_shader,
-				.load_begin_func = test_shader_load,
-				.optional_load_end_func = NULL,
-				.optional_unload_func = NULL,
-				.in_memory_size = sizeof(struct test_shader),
-			},
-			{
-				.id = type_texture.type,
-				.userdata = &did_call_stages_texture,
-				.load_begin_func = test_texture_load,
-				.optional_load_end_func = NULL,
-				.optional_unload_func = test_texture_unload,
-				.in_memory_size = sizeof(struct test_texture),
-			},
-		};
+        struct rjd_resource_type resource_types[] =
+        {
+            {
+                .id = type_material.type,
+                .userdata = &did_call_stages_material,
+                .load_begin_func = test_material_load,
+                .optional_load_end_func = test_material_load_end,
+                .optional_unload_func = test_material_unload,
+                .in_memory_size = sizeof(struct test_material),
+            },
+            {
+                .id = type_shader.type,
+                .userdata = &did_call_stages_shader,
+                .load_begin_func = test_shader_load,
+                .optional_load_end_func = NULL,
+                .optional_unload_func = NULL,
+                .in_memory_size = sizeof(struct test_shader),
+            },
+            {
+                .id = type_texture.type,
+                .userdata = &did_call_stages_texture,
+                .load_begin_func = test_texture_load,
+                .optional_load_end_func = NULL,
+                .optional_unload_func = test_texture_unload,
+                .in_memory_size = sizeof(struct test_texture),
+            },
+        };
 
-		for (uint32_t i = 0; i < rjd_countof(resource_types); ++i)
-		{
-			struct rjd_result result = rjd_resource_lib_register_type(&lib, resource_types[i]);
-			expect_result_ok(result);
-		}
+        for (uint32_t i = 0; i < rjd_countof(resource_types); ++i)
+        {
+            struct rjd_result result = rjd_resource_lib_register_type(&lib, resource_types[i]);
+            expect_result_ok(result);
+        }
 
-		// these should have all been registered already
-		for (uint32_t i = 0; i < rjd_countof(resource_types); ++i)
-		{
-			struct rjd_result result = rjd_resource_lib_register_type(&lib, resource_types[i]);
-			expect_result_notok(result);
-		}
-        
+        // these should have all been registered already
+        for (uint32_t i = 0; i < rjd_countof(resource_types); ++i)
+        {
+            struct rjd_result result = rjd_resource_lib_register_type(&lib, resource_types[i]);
+            expect_result_notok(result);
+        }
+
         // does not exist test
         {
             const struct rjd_resource_id id_does_not_exist = rjd_resource_id_from_str("gfx/does_not_exist.shader");
             struct rjd_resource_handle handle_does_not_exist = rjd_resource_handle_none();
-            
+
             struct rjd_result result = rjd_resource_load(&lib, id_does_not_exist, &handle_does_not_exist);
             expect_result_notok(result);
-            
+
             enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_does_not_exist);
             expect_int32(RJD_RESOURCE_STATUS_INVALID, status);
         }
@@ -2464,15 +2755,15 @@ void test_resource()
         {
             struct rjd_result result = rjd_resource_load(&lib, id_material, &handle_material);
             expect_result_ok(result);
-            
+
             enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_material);
             expect_int32(RJD_RESOURCE_STATUS_LOAD_BEGIN, status);
-            
+
             rjd_resource_lib_wait(&lib, &handle_material, 1);
-            
+
             status = rjd_resource_lib_status(&lib, handle_material);
             expect_int32(RJD_RESOURCE_STATUS_READY, status);
-            
+
             expect_true(did_call_stages_material.begin);
             expect_true(did_call_stages_material.end);
             expect_false(did_call_stages_material.unload);
@@ -2481,10 +2772,10 @@ void test_resource()
         // load shader
         {
             struct rjd_result result = rjd_resource_load(&lib, id_shader, &handle_shader);
-            
+
             enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_shader);
             expect_int32(RJD_RESOURCE_STATUS_READY, status); // should have been loaded by the material
-            
+
             expect_result_ok(result);
             expect_true(did_call_stages_shader.begin);
             expect_false(did_call_stages_shader.end); // doesn't have a load end function
@@ -2495,7 +2786,7 @@ void test_resource()
         // load texture
         {
             struct rjd_result result = rjd_resource_load(&lib, id_texture, &handle_texture);
-            
+
             enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_texture);
             expect_int32(RJD_RESOURCE_STATUS_READY, status); // should have been loaded by the material
 
@@ -2509,43 +2800,46 @@ void test_resource()
         // unload material
         {
             rjd_resource_unload(&lib, handle_material);
-            
+
             enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_material);
             expect_uint32(RJD_RESOURCE_STATUS_READY, status);
-            
+
             rjd_resource_lib_waitall(&lib);
 
             status = rjd_resource_lib_status(&lib, handle_material);
             expect_uint32(RJD_RESOURCE_STATUS_INVALID, status);
         }
 
-		// unload shader (refcount should be 1 now)
-		{
-			enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_shader);
-			expect_uint32(RJD_RESOURCE_STATUS_READY, status);
+        // unload shader (refcount should be 1 now)
+        {
+            enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_shader);
+            expect_uint32(RJD_RESOURCE_STATUS_READY, status);
 
-			rjd_resource_unload(&lib, handle_shader);
-			rjd_resource_lib_waitall(&lib);
+            rjd_resource_unload(&lib, handle_shader);
+            rjd_resource_lib_waitall(&lib);
 
-			status = rjd_resource_lib_status(&lib, handle_shader);
+            status = rjd_resource_lib_status(&lib, handle_shader);
             expect_uint32(RJD_RESOURCE_STATUS_INVALID, status);
-		}
+        }
 
-		// unload texture (refcount should be 1 now)
-		{
-			enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_texture);
-			expect_uint32(RJD_RESOURCE_STATUS_READY, status);
+        // unload texture (refcount should be 1 now)
+        {
+            enum rjd_resource_status status = rjd_resource_lib_status(&lib, handle_texture);
+            expect_uint32(RJD_RESOURCE_STATUS_READY, status);
 
-			rjd_resource_unload(&lib, handle_texture);
-			rjd_resource_lib_waitall(&lib);
+            rjd_resource_unload(&lib, handle_texture);
+            rjd_resource_lib_waitall(&lib);
 
-			status = rjd_resource_lib_status(&lib, handle_texture);
+            status = rjd_resource_lib_status(&lib, handle_texture);
             expect_uint32(RJD_RESOURCE_STATUS_INVALID, status);
-		}
+        }
 
-		rjd_resource_lib_destroy(&lib);
-	}
+        struct rjd_result result = rjd_resource_lib_destroy(&lib);
+        expect_result_ok(result);
+    }
     rjd_strhash_global_destroy();
+
+	expect_no_leaks(&allocator);
 }
 
 int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
@@ -2558,11 +2852,14 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_rng();
 	test_array();
 	test_math();
+	test_procgeo();
 	test_easing();
 	test_strbuf();
 	test_profiler();
 	test_cmd();
 	test_dict();
+	test_thread();
+	test_atomic();
 	test_fio();
 	test_strpool();
 	test_slotmap();
