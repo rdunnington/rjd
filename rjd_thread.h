@@ -78,7 +78,8 @@ struct rjd_result rjd_rwlock_acquire_reader(struct rjd_rwlock* lock);
 struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock);
 struct rjd_result rjd_rwlock_try_acquire_reader(struct rjd_rwlock* lock);
 struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock);
-struct rjd_result rjd_rwlock_release(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_release_reader(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock);
 
 #if RJD_IMPL
 
@@ -177,11 +178,9 @@ struct rjd_result rjd_condvar_signal_all(struct rjd_condvar* condvar);
 struct rjd_result rjd_condvar_wait(struct rjd_condvar* condvar);
 struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t seconds);
 
-
-
 struct rjd_result rjd_lock_create(struct rjd_lock* lock)
 {
-	struct rjd_lock_win32* lock_win32 = rjd_lock_get_win32(lock);
+	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 
 	DWORD SPIN_COUNT = 0;
 	DWORD FLAGS = 0; // maybe use CRITICAL_SECTION_NO_DEBUG_INFO in release?
@@ -199,7 +198,7 @@ struct rjd_result rjd_lock_create(struct rjd_lock* lock)
 
 struct rjd_result rjd_lock_destroy(struct rjd_lock* lock)
 {
-	struct rjd_lock_win32* lock_win32 = rjd_lock_get_win32(lock);
+	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 	if (RJD_THREAD_ID_INVALID.id != lock_win32->owning_thread.id)
 	{
 		return RJD_RESULT("The lock is still in use by a thread");
@@ -211,8 +210,7 @@ struct rjd_result rjd_lock_destroy(struct rjd_lock* lock)
 
 struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
 {
-	struct rjd_lock_win32* lock_win32 = rjd_lock_get_win32(lock);
-
+	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 	const struct rjd_thread_id current_thread = rjd_thread_current();
 	if (current_thread.id != lock_win32->owning_thread.id)
 	{
@@ -225,7 +223,7 @@ struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
 
 struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
 {
-	struct rjd_lock_win32* lock_win32 = rjd_lock_get_win32(lock);
+	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 	if (TryEnterCriticalSection(&lock_win32->cs))
 	{
 		return RJD_RESULT_OK();
@@ -235,7 +233,7 @@ struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
 
 struct rjd_result rjd_lock_release(struct rjd_lock* lock)
 {
-	struct rjd_lock_win32* lock_win32 = rjd_lock_get_win32(lock);
+	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 	const struct rjd_thread_id current_thread = rjd_thread_current();
 	if (memcmp(&current_thread, &lock_win32->owning_thread, sizeof(current_thread)) != 0)
 	{
@@ -246,13 +244,67 @@ struct rjd_result rjd_lock_release(struct rjd_lock* lock)
 	return RJD_RESULT_OK();
 }
 
-struct rjd_result rjd_rwlock_create(struct rjd_rwlock* lock);
-struct rjd_result rjd_rwlock_destroy(struct rjd_rwlock* lock);
-struct rjd_result rjd_rwlock_acquire_reader(struct rjd_rwlock* lock);
-struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock);
-struct rjd_result rjd_rwlock_try_acquire_reader(struct rjd_rwlock* lock);
-struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock);
-struct rjd_result rjd_rwlock_release(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_create(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
+	InitializeSRWLock(&lock_win32->lock);
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_rwlock_destroy(struct rjd_rwlock* lock)
+{
+	RJD_UNUSED_PARAM(lock);
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_rwlock_acquire_reader(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
+	AcquireSRWLockShared(&lock_win32->lock);
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
+	AcquireSRWLockExclusive(&lock_win32->lock);
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_rwlock_try_acquire_reader(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
+	if (TryAcquireSRWLockShared(&lock_win32->lock))
+	{
+		return RJD_RESULT_OK();
+	}
+	return RJD_RESULT("Lock in use");
+}
+
+struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
+	if (TryAcquireSRWLockExclusive(&lock_win32->lock))
+	{
+		return RJD_RESULT_OK();
+	}
+	return RJD_RESULT("Lock in use");
+}
+
+struct rjd_result rjd_rwlock_release_reader(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
+	ReleaseSRWLockShared(&lock_win32->lock);
+	ReleaseSRWLockExclusive(&lock_win32->lock);
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
+{
+	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
+	ReleaseSRWLockExclusive(&lock_win32->lock);
+	return RJD_RESULT_OK();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // local helpers
@@ -593,7 +645,13 @@ struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock)
 	return result;
 }
 
-struct rjd_result rjd_rwlock_release(struct rjd_rwlock* lock)
+struct rjd_result rjd_rwlock_release_reader(struct rjd_rwlock* lock)
+{
+	// posix doesn't have a distinction for releasing a particular mode, unlike windows
+	return rjd_rwlock_release_writer(lock);
+}
+
+struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
 	

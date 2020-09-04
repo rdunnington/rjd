@@ -1687,7 +1687,7 @@ void test_thread_entrypoint(void* userdata)
     data->stage = TEST_THREAD_STAGE_ACQUIRE_WRITE_LOCK;
     result = rjd_rwlock_try_acquire_writer(&data->rwlock);
     expect_result_notok(result);
-    result = rjd_rwlock_release(&data->rwlock);
+    result = rjd_rwlock_release_writer(&data->rwlock);
     expect_result_ok(result);
     result = rjd_rwlock_acquire_writer(&data->rwlock);
     expect_result_ok(result);
@@ -1697,7 +1697,7 @@ void test_thread_entrypoint(void* userdata)
     expect_result_ok(result);
 
 	data->stage = TEST_THREAD_STAGE_FINISHED;
-    result = rjd_rwlock_release(&data->rwlock);
+    result = rjd_rwlock_release_writer(&data->rwlock);
     expect_result_ok(result);
     result = rjd_condvar_signal_all(&data->goto_next_main); // testing signal_all
     expect_result_ok(result);
@@ -1768,7 +1768,7 @@ void test_thread()
     expect_result_ok(result);
     result = rjd_rwlock_try_acquire_reader(&thread_data.rwlock);
     expect_result_ok(result);
-    result = rjd_rwlock_release(&thread_data.rwlock);
+    result = rjd_rwlock_release_reader(&thread_data.rwlock);
     expect_result_ok(result);
     result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
     expect_result_ok(result);
@@ -1786,7 +1786,7 @@ void test_thread()
     expect_uint32(TEST_THREAD_STAGE_FINISHED, thread_data.stage);
     result = rjd_rwlock_try_acquire_writer(&thread_data.rwlock);
     expect_result_ok(result);
-    result = rjd_rwlock_release(&thread_data.rwlock);
+    result = rjd_rwlock_release_writer(&thread_data.rwlock);
     expect_result_ok(result);
     
     result = rjd_thread_join(&thread);
