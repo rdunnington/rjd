@@ -51,6 +51,7 @@ struct rjd_rwlock
 };
 
 struct rjd_thread_id rjd_thread_current(void);
+
 struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc);
 struct rjd_result rjd_thread_join(struct rjd_thread* thread);
 struct rjd_result rjd_thread_getname(struct rjd_thread* thread, uint32_t destination_max_length, char* out);
@@ -83,13 +84,182 @@ struct rjd_result rjd_rwlock_release(struct rjd_rwlock* lock);
 
 #if RJD_PLATFORM_WINDOWS
 
-#error "Unimplemented"
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x600) || !defined(WINVER) || (WINVER < 0x600)
+	// See documentation: https://docs.microsoft.com/en-us/cpp/porting/modifying-winver-and-win32-winnt
+	#error rjd_thread uses features that require WINVER and _WIN32_WINNT to be set to at least 0x600 (Windows Vista).
+#endif
+
+#include <processthreadsapi.h>
+#include <synchapi.h>
+
+const struct rjd_thread_id RJD_THREAD_ID_INVALID = { 0 };
+
+struct rjd_thread_win32
+{
+	HANDLE handle;
+	void* stack;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_thread_win32) <= sizeof(struct rjd_thread_platform));
+RJD_STATIC_ASSERT(sizeof(HANDLE) <= sizeof(uint64_t));
+
+struct rjd_thread_params
+{
+	rjd_thread_entrypoint_func* entrypoint_func;
+	void* userdata;
+	char name[RJD_THREAD_NAME_MAX_LENGTH];
+};
+
+struct rjd_condvar_win32
+{
+	int a;
+	// pthread_cond_t condition_variable;
+	// struct rjd_lock lock;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_condvar_win32) <= sizeof(struct rjd_condvar));
+
+struct rjd_lock_win32
+{
+	struct rjd_thread_id owning_thread;
+	CRITICAL_SECTION cs;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_lock_win32) <= sizeof(struct rjd_lock));
+
+struct rjd_rwlock_win32
+{
+	SRWLOCK lock;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_rwlock_win32) <= sizeof(struct rjd_rwlock));
+
+static inline struct rjd_thread_win32* rjd_thread_get_win32(struct rjd_thread* thread)
+{
+	RJD_ASSERT(thread);
+	return (struct rjd_thread_win32*)&thread->platform;
+}
+
+static inline struct rjd_condvar_win32* rjd_condvar_get_win32(struct rjd_condvar* condvar)
+{
+	RJD_ASSERT(condvar);
+	return (struct rjd_condvar_win32*)condvar;
+}
+
+static inline struct rjd_lock_win32* rjd_lock_get_win32(struct rjd_lock* lock)
+{
+	RJD_ASSERT(lock);
+	return (struct rjd_lock_win32*)lock;
+}
+
+static inline struct rjd_rwlock_win32* rjd_rwlock_get_win32(struct rjd_rwlock* rwlock)
+{
+	RJD_ASSERT(rwlock);
+	return (struct rjd_rwlock_win32*)rwlock;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// interface implementation
+
+struct rjd_thread_id rjd_thread_current(void)
+{
+	struct rjd_thread_id id = { .id = GetCurrentThreadId() };
+	return id;
+}
+
+struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc);
+struct rjd_result rjd_thread_join(struct rjd_thread* thread);
+struct rjd_result rjd_thread_getname(struct rjd_thread* thread, uint32_t destination_max_length, char* out);
+void rjd_thread_sleep(uint32_t seconds);
+
+struct rjd_result rjd_condvar_create(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_destroy(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_lock(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_unlock(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_signal_single(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_signal_all(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_wait(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t seconds);
+
+
 
 struct rjd_result rjd_lock_create(struct rjd_lock* lock)
 {
+	struct rjd_lock_win32* lock_win32 = rjd_lock_get_win32(lock);
+
+	DWORD SPIN_COUNT = 0;
+	DWORD FLAGS = 0; // maybe use CRITICAL_SECTION_NO_DEBUG_INFO in release?
+
+	lock_win32->owning_thread = RJD_THREAD_ID_INVALID;
+	if (InitializeCriticalSectionEx(&lock_win32->cs, SPIN_COUNT, FLAGS))
+	{
+		return RJD_RESULT_OK();
+	}
+
 	// posix mutex is non-rentrant but win32 critical section is. need to assert
 	// that owning thread locking the CS isn't the current thread
+	return RJD_RESULT("Win32 API call failed. Call GetLastError() for more info.");
 }
+
+struct rjd_result rjd_lock_destroy(struct rjd_lock* lock)
+{
+	struct rjd_lock_win32* lock_win32 = rjd_lock_get_win32(lock);
+	if (RJD_THREAD_ID_INVALID.id != lock_win32->owning_thread.id)
+	{
+		return RJD_RESULT("The lock is still in use by a thread");
+	}
+
+	DeleteCriticalSection(&lock_win32->cs);
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
+{
+	struct rjd_lock_win32* lock_win32 = rjd_lock_get_win32(lock);
+
+	const struct rjd_thread_id current_thread = rjd_thread_current();
+	if (current_thread.id != lock_win32->owning_thread.id)
+	{
+		return RJD_RESULT("This thread does not own this lock.");
+	}
+
+	EnterCriticalSection(&lock_win32->cs);
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
+{
+	struct rjd_lock_win32* lock_win32 = rjd_lock_get_win32(lock);
+	if (TryEnterCriticalSection(&lock_win32->cs))
+	{
+		return RJD_RESULT_OK();
+	}
+	return RJD_RESULT("Lock in use");
+}
+
+struct rjd_result rjd_lock_release(struct rjd_lock* lock)
+{
+	struct rjd_lock_win32* lock_win32 = rjd_lock_get_win32(lock);
+	const struct rjd_thread_id current_thread = rjd_thread_current();
+	if (memcmp(&current_thread, &lock_win32->owning_thread, sizeof(current_thread)) != 0)
+	{
+		return RJD_RESULT("This thread does not own this lock.");
+	}
+
+	LeaveCriticalSection(&lock_win32->cs);
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_rwlock_create(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_destroy(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_acquire_reader(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_try_acquire_reader(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock);
+struct rjd_result rjd_rwlock_release(struct rjd_rwlock* lock);
+
+////////////////////////////////////////////////////////////////////////////////
+// local helpers
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 #elif RJD_PLATFORM_OSX
 

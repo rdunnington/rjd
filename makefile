@@ -1,5 +1,5 @@
 ifeq ($(OS), Windows_NT)
-	PLATFORM_FLAGS :=
+	PLATFORM_FLAGS := -D WINVER=0x600 -D _WIN32_WINNT=0x600
 	PLATFORM_FILES := tests_rjd.c
 else
 	#SHELL_NAME := $(shell uname -s)

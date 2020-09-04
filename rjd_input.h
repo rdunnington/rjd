@@ -55,8 +55,8 @@ enum rjd_input_mouse
 	RJD_INPUT_MOUSE_COUNT,
 };
 
-const extern enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_LEFT;
-const extern enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_RIGHT;
+extern const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_LEFT;
+extern const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_RIGHT;
 
 // TODO could add support for controllers, joysticks, driving wheels, etc
 // TODO debug record/replay

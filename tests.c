@@ -951,9 +951,9 @@ void test_math(void)
 		char a3, a4;
 		rjd_math_mat4 m1 = rjd_math_mat4_identity();;
 
-		expect_uint32(0, (uint32_t)(&v1) & 0xF);
-		expect_uint32(0, (uint32_t)(&v2) & 0xF);
-		expect_uint32(0, (uint32_t)(&m1) & 0xF);
+		expect_uint64(0, (uint64_t)(&v1) & 0xF);
+		expect_uint64(0, (uint64_t)(&v2) & 0xF);
+		expect_uint64(0, (uint64_t)(&m1) & 0xF);
 
 		RJD_UNUSED_PARAM(a1);
 		RJD_UNUSED_PARAM(a2);

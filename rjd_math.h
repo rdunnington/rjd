@@ -206,7 +206,7 @@ static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float 
 static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far);
 static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near, float far);
 static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far);
-static inline rjd_math_mat4 ijd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near, float far);
 static inline rjd_math_mat4 rjd_math_mat4_lookat_righthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
 static inline rjd_math_mat4 rjd_math_mat4_lookat_lefthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
 static inline float*		rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out);

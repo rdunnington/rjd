@@ -11,14 +11,21 @@
 // * rjd_mem
 // * rjd_math
 
+////////////////////////////////////////////////////////////////////////////////
+// platform configuration
+
 // Supported RJG_GFX_BACKEND_* values:
 // RJD_GFX_BACKEND_METAL (osx only)
+// RJD_GFX_BACKEND_D3D11 (windows only)
 
 #ifndef RJD_GFX_BACKEND_METAL
 	#define RJD_GFX_BACKEND_METAL 0
 #endif
+#ifndef RJD_GFX_BACKEND_D3D11
+	#define RJD_GFX_BACKEND_D3D11 0
+#endif
 
-#if !RJD_GFX_BACKEND_METAL
+#if !RJD_GFX_BACKEND_METAL && !RJD_GFX_BACKEND_D3D11
 	#error	"You must #define one of the RJD_GFX_BACKEND_* macros to 1 before including this file. "
 			"See the above comment for a list of supported values."
 #endif
@@ -37,6 +44,17 @@
 	#endif
 #endif
 
+#if RJD_GFX_PLATFORM_D3D11
+	#if RJD_PLATFORM_WINDOWS
+		typedef void* HWND;
+	#else
+		#error "DirectX is only supported on Windows"
+	#endif
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
+// render configuration
+
 struct rjd_mem_allocator;
 
 struct rjd_gfx_viewport // TODO figure out if this should have a start x,y pair
@@ -44,9 +62,6 @@ struct rjd_gfx_viewport // TODO figure out if this should have a start x,y pair
 	uint32_t width;
 	uint32_t height;
 };
-
-////////////////////////////////////////////////////////////////////////////////
-// render configuration
 
 enum rjd_gfx_stencilmode
 {
@@ -356,10 +371,9 @@ struct rjd_gfx_context_desc
 	struct rjd_mem_allocator* allocator;
 	uint32_t msaa_samples;
 
-	// TODO forward declare HWND somehow
 	#if RJD_PLATFORM_WINDOWS
 		struct {
-			HWND window_handle;
+			void* window_handle; // HWND
 		} win32;
 	#elif RJD_PLATFORM_OSX
 		struct {
@@ -421,7 +435,7 @@ static inline struct rjd_gfx_format_value rjd_gfx_format_make_color_u8_rgba(uint
 static inline struct rjd_gfx_format_value rjd_gfx_format_make_depthstencil_f32_d32(float depth);
 
 // constants
-const extern struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER;
+extern const struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER;
 
 ////////////////////////////////////////////////////////////////////////////////
 // inline implementations
@@ -457,12 +471,12 @@ static inline struct rjd_gfx_format_value rjd_gfx_format_make_depthstencil_f32_d
 
 #if RJD_IMPL
 
-const static struct rjd_logchannel logchannel_default = {
+static const struct rjd_logchannel logchannel_default = {
 	.enabled = true,
 	.name = "rjd_gfx default",
 };
 
-const static struct rjd_logchannel logchannel_error = {
+static const struct rjd_logchannel logchannel_error = {
 	.enabled = true,
 	.name = "rjd_gfx error",
 };
@@ -555,8 +569,14 @@ bool rjd_gfx_format_isstencil(enum rjd_gfx_format format)
 	#else
 		#error "Metal backend is only supported on OSX."
 	#endif
+#elif RJD_GFX_BACKEND_D3D11
+	#if RJD_PLATFORM_WINDOWS
+		#include "rjd_gfx_d3d11.h"
+	#else
+		#error "Metal backend is only supported on OSX."
+	#endif
 #else
-	#error "Unknown RJD_GFX_BACKEND. Ensure you are #defining to a known rjd_gfx_backend value.
+	#error "Unknown RJD_GFX_BACKEND. Ensure you are #defining to a known rjd_gfx_backend value."
 #endif
 
 #endif // RJD_IMPL
