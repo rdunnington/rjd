@@ -2,11 +2,9 @@
 
 #define RJD_ARRAY_H 1
 
-// helpers
-#define RJD_MUST_BE_ARRAY(a) (RJD_STATIC_TEST(!RJD_SAME_TYPE_TEST((a), &(*a))))
-
 // static array count
-#define rjd_countof(buf) (sizeof(buf) / sizeof(*(buf)) + RJD_MUST_BE_ARRAY(buf))
+// Note that GCC is awesome and has a warning if buf is a pointer. See -Wsizeof-pointer-div
+#define rjd_countof(buf) (sizeof(buf) / sizeof(*(buf)))
 
 // dyanmic array
 #define rjd_array_alloc(type, capacity, allocator)	((type*)(rjd_array_alloc_impl((capacity), (allocator), sizeof(type))))
