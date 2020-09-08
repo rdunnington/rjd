@@ -248,15 +248,15 @@ void rjd_resource_lib_pump(struct rjd_resource_lib* lib, struct rjd_mem_allocato
 	}
 
 	if (!rjd_array_empty(lib->load_stage_queues.resolving_dependencies)) {
-		struct rjd_resource_handle handle = rjd_array_last(lib->load_stage_queues.resolving_dependencies);
-		struct rjd_resource* res = rjd_slotmap_get(lib->resources, handle.slot);
+		struct rjd_resource_handle handle_resource = rjd_array_last(lib->load_stage_queues.resolving_dependencies);
+		struct rjd_resource* res = rjd_slotmap_get(lib->resources, handle_resource.slot);
 		RJD_ASSERT(res);
 
 		bool all_loaded = true;
 		for (uint32_t i = 0; i < rjd_array_count(res->dependencies); ++i)
 		{
-			struct rjd_resource_handle handle = res->dependencies[i];
-			struct rjd_resource* dependency = rjd_slotmap_get(lib->resources, handle.slot);
+			struct rjd_resource_handle handle_dependency = res->dependencies[i];
+			struct rjd_resource* dependency = rjd_slotmap_get(lib->resources, handle_dependency.slot);
 			RJD_ASSERT(dependency);
             // failures to load dependencies don't automatically fail resources; we leave it up to
             // the resource to decide what to do in the end stage
@@ -268,9 +268,10 @@ void rjd_resource_lib_pump(struct rjd_resource_lib* lib, struct rjd_mem_allocato
 		}
 
 		if (all_loaded) {
-			struct rjd_resource_handle handle = rjd_array_pop(lib->load_stage_queues.resolving_dependencies);
+			// struct rjd_resource_handle handle_resource = rjd_array_pop(lib->load_stage_queues.resolving_dependencies);
+			rjd_array_pop(lib->load_stage_queues.resolving_dependencies);
             res->status = RJD_RESOURCE_STATUS_LOAD_END;
-			rjd_array_push(lib->load_stage_queues.end, handle);
+			rjd_array_push(lib->load_stage_queues.end, handle_resource);
 		}
 	}
 
@@ -290,7 +291,7 @@ void rjd_resource_lib_pump(struct rjd_resource_lib* lib, struct rjd_mem_allocato
 	        resource->typed_resource_data = rjd_mem_alloc_array(uint8_t, type->in_memory_size, resource_allocator);
 	        memset(resource->typed_resource_data, 0, type->in_memory_size);
 	        
-	        struct rjd_result result = RJD_RESULT_OK();
+	        result = RJD_RESULT_OK();
 			if (type->load_begin_func)
 			{
 				struct rjd_resource_load_dependency_params dependency_params = {

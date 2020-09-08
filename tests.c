@@ -8,6 +8,10 @@
 #define expect_true(condition) if (!(condition)) { RJD_ASSERTFAIL("Expected \"%s\" to be true, but got false\n", #condition); }
 #define expect_false(condition) if (condition) { RJD_ASSERTFAIL("Expected \"%s\" to be false, but got true\n", #condition); }
 
+// #define expect_str(expected, actual) 
+// 	if (expected != actual && (expected == NULL || actual == NULL || strcmp(expected, actual))) { 
+// 		RJD_ASSERTFAIL("Expected:\n%s\nbut got:\n%s\n", expected ? expected : "", actual ? actual : ""); }
+
 void expect_str(const char* expected, const char* actual)
 {
 	if (expected != actual && (expected == NULL || actual == NULL || strcmp(expected, actual))) {
@@ -64,15 +68,18 @@ void expect_path(const char* expected, struct rjd_path path)
 	expect_str(expected, rjd_path_get(&path));
 }
 
-void expect_result_ok(struct rjd_result actual)
-{
-	RJD_ASSERTMSG(actual.error == NULL, "Expected OK result, but got error '%s'", actual.error);
-}
+#define expect_result_ok(actual) RJD_ASSERTMSG(actual.error == NULL, "Expected OK result, but got error '%s'", actual.error)
 
-void expect_result_notok(struct rjd_result actual)
-{
-	RJD_ASSERTMSG(actual.error != NULL, "Expected bad result, but got OK");
-}
+#define expect_result_notok(actual) RJD_ASSERTMSG(actual.error != NULL, "Expected bad result, but got OK")
+// void expect_result_ok(struct rjd_result actual)
+// {
+// 	RJD_ASSERTMSG(actual.error == NULL, "Expected OK result, but got error '%s'", actual.error);
+// }
+
+// void expect_result_notok(struct rjd_result actual)
+// {
+// 	RJD_ASSERTMSG(actual.error != NULL, "Expected bad result, but got OK");
+// }
 
 void expect_no_leaks(const struct rjd_mem_allocator* allocator)
 {
@@ -82,7 +89,7 @@ void expect_no_leaks(const struct rjd_mem_allocator* allocator)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static int compare_int32(const void* a, const void* b)
+static int RJD_COMPILER_MSVC_ONLY(__cdecl) compare_int32(const void* a, const void* b)
 {
 	int32_t aa = *(int32_t*)a;
 	int32_t bb = *(int32_t*)b;
@@ -96,7 +103,7 @@ static int compare_int32(const void* a, const void* b)
 	}
 }
 
-static int compare_int32_c(void* context, const void* a, const void* b)
+static int RJD_COMPILER_MSVC_ONLY(__cdecl) compare_int32_c(void* context, const void* a, const void* b)
 {
 	RJD_ASSERT(context);
 	return compare_int32(a, b);
@@ -1008,11 +1015,11 @@ void test_math(void)
 	expect_vec4(rjd_math_vec4_xyzw(1,0,0,0), rjd_math_vec4_normalize(rjd_math_vec4_xyzw(7368,0,0,0)));
 	expect_vec4(rjd_math_vec4_xyzw(1,1,0,FLT_MAX), rjd_math_vec4_abs(rjd_math_vec4_xyzw(1, -1, -0, -FLT_MAX)));
 	expect_vec4(rjd_math_vec4_xyzw(-1,1,-0,FLT_MAX), rjd_math_vec4_neg(rjd_math_vec4_xyzw(1, -1, 0, -FLT_MAX)));
-	expect_vec4(rjd_math_vec4_xyzw(0,0,0,-1), rjd_math_vec4_floor(rjd_math_vec4_xyzw(0, .5, .99, -0.1)));
-	expect_vec4(rjd_math_vec4_xyzw(0,1,1,-.0), rjd_math_vec4_ceil(rjd_math_vec4_xyzw(0, .5, .01, -0.9)));
-	expect_vec4(rjd_math_vec4_xyzw(0,0,0,1), rjd_math_vec4_round(rjd_math_vec4_xyzw(0, .1, .5, .9)));
-	expect_vec4(rjd_math_vec4_xyzw(1,0,0,-1), rjd_math_vec4_round(rjd_math_vec4_xyzw(1, -.1, -.5, -.9)));
-	expect_vec4(rjd_math_vec4_xyzw(-1,-2,2,0), rjd_math_vec4_round(rjd_math_vec4_xyzw(-1, -1.5, 1.5, 0)));
+	expect_vec4(rjd_math_vec4_xyzw(0,0,0,-1), rjd_math_vec4_floor(rjd_math_vec4_xyzw(0, .5f, .99f, -0.1f)));
+	expect_vec4(rjd_math_vec4_xyzw(0,1,1,-.0), rjd_math_vec4_ceil(rjd_math_vec4_xyzw(0, .5f, .01f, -0.9f)));
+	expect_vec4(rjd_math_vec4_xyzw(0,0,0,1), rjd_math_vec4_round(rjd_math_vec4_xyzw(0, .1f, .5f, .9f)));
+	expect_vec4(rjd_math_vec4_xyzw(1,0,0,-1), rjd_math_vec4_round(rjd_math_vec4_xyzw(1, -.1f, -.5f, -.9f)));
+	expect_vec4(rjd_math_vec4_xyzw(-1,-2,2,0), rjd_math_vec4_round(rjd_math_vec4_xyzw(-1, -1.5f, 1.5f, 0)));
 	expect_vec4(rjd_math_vec4_xyzw(26, 60, 44, 6), rjd_math_vec4_scale(rjd_math_vec4_xyzw(13, 30, 22, 3), 2));
 	expect_vec4(rjd_math_vec4_xyzw(3,3,3,3), rjd_math_vec4_add(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(2,2,2,2)));
 	expect_vec4(rjd_math_vec4_xyzw(-1,-1,-1,-1), rjd_math_vec4_sub(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(2,2,2,2)));
@@ -1021,8 +1028,8 @@ void test_math(void)
 	expect_vec4(rjd_math_vec4_xyzw(23,45,21,5), rjd_math_vec4_min(rjd_math_vec4_xyzw(23,45,72,5), rjd_math_vec4_xyzw(43,75,21,6)));
 	expect_vec4(rjd_math_vec4_xyzw(43,75,72,6), rjd_math_vec4_max(rjd_math_vec4_xyzw(23,45,72,5), rjd_math_vec4_xyzw(43,75,21,6)));
 	expect_vec4(rjd_math_vec4_xyzw(1,0,0,0), rjd_math_vec4_project(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(1,0,0,0)));
-	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5));
-	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5));
+	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5f));
+	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5f));
 
 	// vec3
 	expect_true(rjd_math_vec3_eq(rjd_math_vec3_left(), rjd_math_vec3_left()));
@@ -1716,7 +1723,7 @@ void test_thread()
 		.entrypoint_func = test_thread_entrypoint,
 		.allocator = &allocator,
 		.userdata = &thread_data,
-        .name = "my_cool_thread!" // 16 bytes including null terminator
+        .optional_name = "my_cool_thread!" // 16 bytes including null terminator
 	};
 
 	result = rjd_condvar_create(&thread_data.goto_next_main);
@@ -1959,14 +1966,14 @@ void test_utf8(void)
 {
 	// rjd_utf8_bom_skip
 	{
-		const char buffer_with_bom[] = { (char)0xEF, (char)0xBB, (char)0xBF, 0 };
-		const char buffer_no_bom[] = "hey this is a normal string";
+		const uint8_t buffer_with_bom[] = { 0xEF, 0xBB, 0xBF, 0 };
+		const uint8_t buffer_no_bom[] = "hey this is a normal string";
 
-		const char* expected_with_bom = buffer_with_bom + 3;
-		const char* expected_no_bom = buffer_no_bom;
+		const uint8_t* expected_with_bom = buffer_with_bom + 3;
+		const uint8_t* expected_no_bom = buffer_no_bom;
 
-		expect_pointer(expected_with_bom, rjd_utf8_bom_skip(buffer_with_bom));
-		expect_pointer(expected_no_bom, rjd_utf8_bom_skip(buffer_no_bom));
+		expect_pointer(expected_with_bom, rjd_utf8_bom_skip((char*)buffer_with_bom));
+		expect_pointer(expected_no_bom, rjd_utf8_bom_skip((char*)buffer_no_bom));
 	}
 
 	// rjd_utf8_bom_write
@@ -1990,7 +1997,7 @@ void test_utf8(void)
 		const char ascii[] = "12345";
 		const char utf8[] = "aæ࠳ab߉නc𐤈𐤀";
         //const char invalid_utf8[] = { 0b11111100, 0b11111110, 0b11111001, 0 };
-        const char invalid_utf8[] = { (char)0xFB, (char)0xFE, (char)0xF9, 0 };
+        const uint8_t invalid_utf8[] = { 0xFB, 0xFE, 0xF9, 0 };
 
 		const char* p = NULL;
 
@@ -2033,11 +2040,11 @@ void test_utf8(void)
 		p = rjd_utf8_next(utf8 + 2+1+1);
 		expect_pointer(utf8 + 1+2+3, p);
 
-		p = rjd_utf8_next(invalid_utf8 + 0);
+		p = rjd_utf8_next((char*)invalid_utf8 + 0);
 		expect_pointer(NULL, p);
-        p = rjd_utf8_next(invalid_utf8 + 1);
+        p = rjd_utf8_next((char*)invalid_utf8 + 1);
         expect_pointer(NULL, p);
-        p = rjd_utf8_next(invalid_utf8 + 2);
+        p = rjd_utf8_next((char*)invalid_utf8 + 2);
         expect_pointer(NULL, p);
 	}
 }
@@ -2154,7 +2161,7 @@ void test_stream()
 		char file_expected[500] = {0};
 		for (size_t i = 0; i < sizeof(file_expected); ++i) {
 			int range = 'z' - 'a';
-			file_expected[i] = 'a' + (i % range);
+			file_expected[i] = 'a' + (char)(i % range);
 		}
 
 		struct rjd_result result = rjd_fio_write("test.txt", file_expected, sizeof(file_expected), RJD_FIO_WRITEMODE_REPLACE);
@@ -2211,7 +2218,7 @@ void test_stream()
         char file_expected[500] = {0};
         for (size_t i = 0; i < sizeof(file_expected); ++i) {
             int range = 'z' - 'a';
-            file_expected[i] = 'a' + (i % range);
+            file_expected[i] = 'a' + (char)(i % range);
         }
         
         const size_t chunksize = sizeof(file_expected) / 2;
@@ -2595,8 +2602,10 @@ void test_resource()
         };
 
         struct rjd_resource_loader loader;
-        struct rjd_result result = rjd_resource_loader_create(&loader, desc);
-        expect_result_ok(result);
+        {
+	        struct rjd_result result = rjd_resource_loader_create(&loader, desc);
+	        expect_result_ok(result);
+	    }
 
         struct expected_resource_data
         {
@@ -2639,7 +2648,7 @@ void test_resource()
 
                     uint64_t length = stream.end - stream.start;
                     expect_int64(strlen(expected_str), length);
-                    expect_int32(0, memcmp(expected_str, stream.start, length));
+                    expect_int32(0, memcmp(expected_str, stream.start, (size_t)length));
                 }
                 rjd_istream_close(&stream);
             }
@@ -2660,18 +2669,18 @@ void test_resource()
             type_texture,
         };
 
-        const struct rjd_resource_loader_desc desc = {
-            .type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
-            .allocator = &allocator,
-            .filesystem = {
-                .root = "test_data/resource/lib",
-                .type_mappings = type_mappings,
-                .type_mappings_count = rjd_countof(type_mappings),
-            },
-        };
-
         struct rjd_resource_loader loader;
         {
+	        const struct rjd_resource_loader_desc desc = {
+	            .type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
+	            .allocator = &allocator,
+	            .filesystem = {
+	                .root = "test_data/resource/lib",
+	                .type_mappings = type_mappings,
+	                .type_mappings_count = rjd_countof(type_mappings),
+	            },
+	        };
+
             struct rjd_result result = rjd_resource_loader_create(&loader, desc);
             expect_result_ok(result);
         }

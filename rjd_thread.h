@@ -37,7 +37,7 @@ struct rjd_thread
 
 struct rjd_condvar
 {
-	char platform_impl[128];
+	char platform_impl[128 + 256];
 };
 
 struct rjd_lock
@@ -85,11 +85,6 @@ struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock);
 
 #if RJD_PLATFORM_WINDOWS
 
-#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x600) || !defined(WINVER) || (WINVER < 0x600)
-	// See documentation: https://docs.microsoft.com/en-us/cpp/porting/modifying-winver-and-win32-winnt
-	#error rjd_thread uses features that require WINVER and _WIN32_WINNT to be set to at least 0x600 (Windows Vista).
-#endif
-
 #include <processthreadsapi.h>
 #include <synchapi.h>
 
@@ -130,6 +125,33 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_rwlock_win32) <= sizeof(struct rjd_rwlock));
 
 DWORD WINAPI rjd_thread_entrypoint_win32(LPVOID lpParameter);
 
+#if defined(_WIN32_WINNT) &&(_WIN32_WINNT >= _WIN32_WINNT_WIN10)	\
+	&& defined(WINVER) && (WINVER >= _WIN32_WINNT_WIN10)			\
+	&& defined(WDK_NTDDI_VERSION) && (WDK_NTDDI_VERSION >= NTDDI_WIN10_RS1)
+	#define RJD_THREAD_NAME_AVAILABLE 1
+#else 
+	#define RJD_THREAD_NAME_AVAILABLE 0
+
+	const struct rjd_result RJD_RESULT_THREADNAME_UNAVAILABLE = {
+		"Thread naming uses features that require WINVER and _WIN32_WINNT to be set to at least "
+		"_WIN32_WINNT_WIN10 (0x0A00), and WDK_NTDDI_VERSION set to NTDDI_WIN10_RS1 (0x0A000002)" };
+#endif
+
+#if RJD_THREAD_NAME_AVAILABLE && RJD_COMPILER_GCC
+	// The headers don't have the declarations for these functions but the imports exist in the libs,
+	// so this is a workaround until that bug gets fixed.
+	WINBASEAPI HRESULT WINAPI SetThreadDescription(
+	    _In_ HANDLE hThread,
+	    _In_ PCWSTR lpThreadDescription
+	    );
+
+	 
+	WINBASEAPI HRESULT WINAPI GetThreadDescription(
+	    _In_ HANDLE hThread,
+	    _Outptr_result_z_ PWSTR* ppszThreadDescription
+	    );
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
 
@@ -143,7 +165,7 @@ struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread
 {
 	struct rjd_thread_win32* thread_win32 = (struct rjd_thread_win32*)thread;
 
-	const SECURITY_ATTRIBUTES security = { 
+	SECURITY_ATTRIBUTES security = { 
 		.nLength = sizeof(SECURITY_ATTRIBUTES),
 		.bInheritHandle = false,
 	};
@@ -164,13 +186,17 @@ struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread
 	thread_win32->handle = handle;
 
 	if (desc.optional_name) {
-		wchar_t widename[32];
-		size_t length = mbstowcs(widename, desc.optional_name, rjd_countof(widename) - 1);
-		widename[length] = '\0';
+		#if RJD_THREAD_NAME_AVAILABLE
+			wchar_t widename[32];
+			size_t length = mbstowcs(widename, desc.optional_name, rjd_countof(widename) - 1);
+			widename[length] = '\0';
 
-		if (FAILED(SetThreadDescription(handle, widename))) {
-			return RJD_RESULT("Thread was created, but name was unable to be set. Call GetLastError for more info");
-		}
+			if (FAILED(SetThreadDescription(handle, widename))) {
+				return RJD_RESULT("Thread was created, but name was unable to be set. Call GetLastError for more info");
+			}
+		#else
+			return RJD_RESULT_THREADNAME_UNAVAILABLE;
+		#endif
 	}
 
 	return RJD_RESULT_OK();
@@ -189,17 +215,27 @@ struct rjd_result rjd_thread_join(struct rjd_thread* thread)
 
 struct rjd_result rjd_thread_getname(struct rjd_thread* thread, uint32_t destination_max_length, char* out)
 {
-	struct rjd_thread_win32* thread_win32 = (struct rjd_thread_win32*)thread;
+	#if RJD_THREAD_NAME_AVAILABLE
+		struct rjd_thread_win32* thread_win32 = (struct rjd_thread_win32*)thread;
 
-	wchar_t thread_name[256];
-	if (FAILED(GetThreadDescription(thread_win32->handle, thread_name))) {
-		return RJD_RESULT("Unable to get thread name. Call GetLastError for more info");
-	}
+		wchar_t* thread_name = NULL;
+		if (FAILED(GetThreadDescription(thread_win32->handle, &thread_name)) || !thread_name) {
+			return RJD_RESULT("Unable to get thread name. Call GetLastError for more info");
+		}
 
-	size_t length = wcstombs(out, thread_name, destination_max_length - 1);
-	out[length] = '\0';
-	
-	return RJD_RESULT_OK();
+		size_t length = wcstombs(out, thread_name, destination_max_length - 1);
+		out[length] = '\0';
+
+		LocalFree(thread_name);
+		
+		return RJD_RESULT_OK();	
+	#else
+		RJD_UNUSED_PARAM(thread);
+		if (destination_max_length > 0) {
+			out[0] = '\0';
+		}
+		return RJD_RESULT_THREADNAME_UNAVAILABLE;
+	#endif
 }
 
 void rjd_thread_sleep(uint32_t seconds)
@@ -209,7 +245,7 @@ void rjd_thread_sleep(uint32_t seconds)
 
 struct rjd_result rjd_condvar_create(struct rjd_condvar* condvar)
 {
-	struct rjd_condvar_win32* condvar_win32 = (struct rjd_convar_win32*)condvar;
+	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	
 	InitializeConditionVariable(&condvar_win32->condition_variable);
 	return rjd_rwlock_create(&condvar_win32->lock);
@@ -218,32 +254,32 @@ struct rjd_result rjd_condvar_create(struct rjd_condvar* condvar)
 struct rjd_result rjd_condvar_destroy(struct rjd_condvar* condvar)
 {
 	// nothing to do for CONDITION_VARIABLE
-	struct rjd_condvar_win32* condvar_win32 = (struct rjd_convar_win32*)condvar;
+	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	return rjd_rwlock_destroy(&condvar_win32->lock);
 }
 
 struct rjd_result rjd_condvar_lock(struct rjd_condvar* condvar)
 {
-	struct rjd_condvar_win32* condvar_win32 = (struct rjd_convar_win32*)condvar;
+	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	return rjd_rwlock_acquire_writer(&condvar_win32->lock);
 }
 
 struct rjd_result rjd_condvar_unlock(struct rjd_condvar* condvar)
 {
-	struct rjd_condvar_win32* condvar_win32 = (struct rjd_convar_win32*)condvar;
+	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	return rjd_rwlock_release_writer(&condvar_win32->lock);
 }
 
 struct rjd_result rjd_condvar_signal_single(struct rjd_condvar* condvar)
 {
-	struct rjd_condvar_win32* condvar_win32 = (struct rjd_convar_win32*)condvar;
+	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	WakeConditionVariable(&condvar_win32->condition_variable);
 	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_condvar_signal_all(struct rjd_condvar* condvar)
 {
-	struct rjd_condvar_win32* condvar_win32 = (struct rjd_convar_win32*)condvar;
+	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	WakeAllConditionVariable(&condvar_win32->condition_variable);
 	return RJD_RESULT_OK();
 }
@@ -255,7 +291,7 @@ struct rjd_result rjd_condvar_wait(struct rjd_condvar* condvar)
 
 struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t seconds)
 {
-	struct rjd_condvar_win32* condvar_win32 = (struct rjd_convar_win32*)condvar;
+	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)&condvar_win32->lock;
 
 	uint32_t ms = (seconds == INFINITE) ? INFINITE : seconds * 1000;
@@ -268,7 +304,7 @@ struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t s
 		}
 	}
 
-	return RJD_RESULT(); 
+	return RJD_RESULT_OK(); 
 }
 
 struct rjd_result rjd_lock_create(struct rjd_lock* lock)
@@ -303,31 +339,32 @@ struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 	const struct rjd_thread_id current_thread = rjd_thread_current();
-	if (current_thread.id != lock_win32->owning_thread.id) {
-		return RJD_RESULT("This thread does not own this lock.");
-	}
-
 	EnterCriticalSection(&lock_win32->cs);
+	lock_win32->owning_thread = current_thread;
 	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
-	if (TryEnterCriticalSection(&lock_win32->cs)) {
-		return RJD_RESULT_OK();
+	const struct rjd_thread_id current_thread = rjd_thread_current();
+	if (!TryEnterCriticalSection(&lock_win32->cs)) {
+		return RJD_RESULT("Lock in use");
 	}
-	return RJD_RESULT("Lock in use");
+	lock_win32->owning_thread = current_thread;
+	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_lock_release(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 	const struct rjd_thread_id current_thread = rjd_thread_current();
+
 	if (current_thread.id != lock_win32->owning_thread.id) {
 		return RJD_RESULT("This thread does not own this lock.");
 	}
 
+	lock_win32->owning_thread = RJD_THREAD_ID_INVALID;
 	LeaveCriticalSection(&lock_win32->cs);
 	return RJD_RESULT_OK();
 }
@@ -362,19 +399,19 @@ struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock)
 struct rjd_result rjd_rwlock_try_acquire_reader(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
-	if (TryAcquireSRWLockShared(&lock_win32->lock)) {
-		return RJD_RESULT_OK();
+	if (!TryAcquireSRWLockShared(&lock_win32->lock)) {
+		return RJD_RESULT("Lock in use");
 	}
-	return RJD_RESULT("Lock in use");
+	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
-	if (TryAcquireSRWLockExclusive(&lock_win32->lock)) {
-		return RJD_RESULT_OK();
+	if (!TryAcquireSRWLockExclusive(&lock_win32->lock)) {
+		return RJD_RESULT("Lock in use");
 	}
-	return RJD_RESULT("Lock in use");
+	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_rwlock_release_reader(struct rjd_rwlock* lock)
@@ -398,7 +435,7 @@ struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
 DWORD WINAPI rjd_thread_entrypoint_win32(LPVOID lpParameter)
 {
 	struct rjd_thread_params params = *(struct rjd_thread_params*)lpParameter;
-	rjd_mem_free(params_untyped);
+	rjd_mem_free(lpParameter);
 
 	params.entrypoint_func(params.userdata);
 	return 0;

@@ -230,7 +230,7 @@ void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint3
 	struct rjd_mem_allocation_header* header = (void*)(aligned_user - header_size);
 	header->allocator = allocator;
 	header->total_blocksize = (uint32_t)total_size;
-    header->offset_to_block_begin_from_user = offset_to_block_begin_from_user;
+    header->offset_to_block_begin_from_user = (uint16_t)offset_to_block_begin_from_user;
 	header->debug_sentinel = allocator->debug_sentinel;
 
 	{

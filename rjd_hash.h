@@ -66,8 +66,8 @@ struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 		return hash;
 	}
 
-	const uint64_t PRIME = 16777619;
-	const uint64_t SEED  = 2166136261;
+	const uint32_t PRIME = 16777619;
+	const uint32_t SEED  = 2166136261;
 
 	struct rjd_hash32 hash = { SEED };
 	if (length == -1) {

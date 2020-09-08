@@ -31,8 +31,8 @@
 #define rjd_array_last(buf)							(rjd_array_get_validate((buf), 0), (buf)[rjd_array_count(buf) - 1])
 
 // searching/sorting
-typedef int32_t (*rjd_array_compare_func)(const void* left, const void* right);
-typedef int32_t (*rjd_array_compare_c_func)(void* context, const void* left, const void* right);
+typedef int32_t RJD_COMPILER_MSVC_ONLY(__cdecl) rjd_array_compare_func(const void* left, const void* right);
+typedef int32_t RJD_COMPILER_MSVC_ONLY(__cdecl) rjd_array_compare_c_func(void* context, const void* left, const void* right);
 
 enum { RJD_ARRAY_NOT_FOUND = -1 };
 
@@ -102,14 +102,14 @@ void* rjd_array_insert_impl(void* array, const void* insert, size_t sizeof_type,
 void rjd_array_get_validate(void* array, uint32_t index);
 int32_t rjd_array_find_impl(const void* array, const void* search, size_t sizeof_type, int unused);
 bool rjd_array_contains_impl(const void* array, const void* search, size_t sizeof_type, int unused);
-void rjd_array_sort_impl(void* array, size_t sizeof_type, rjd_array_compare_func comparer);
-int32_t rjd_array_lowerbound_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused);
-int32_t rjd_array_find_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused);
-bool rjd_array_contains_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused);
-void rjd_array_sort_c_impl(void* array, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context);
-int32_t rjd_array_lowerbound_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused);
-int32_t rjd_array_find_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused);
-bool rjd_array_contains_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused);
+void rjd_array_sort_impl(void* array, size_t sizeof_type, rjd_array_compare_func* comparer);
+int32_t rjd_array_lowerbound_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func* comparer, int unused);
+int32_t rjd_array_find_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func* comparer, int unused);
+bool rjd_array_contains_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func* comparer, int unused);
+void rjd_array_sort_c_impl(void* array, size_t sizeof_type, rjd_array_compare_c_func* comparer, void* context);
+int32_t rjd_array_lowerbound_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func* comparer, void* context, int unused);
+int32_t rjd_array_find_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func* comparer, void* context, int unused);
+bool rjd_array_contains_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func* comparer, void* context, int unused);
 void rjd_array_shuffle_impl(void* array, struct rjd_rng* rng, size_t sizeof_type);
 void rjd_array_reverse_impl(void* array, size_t sizeof_type);
 
@@ -358,14 +358,14 @@ bool rjd_array_contains_impl(const void* array, const void* search, size_t sizeo
 	return index != RJD_ARRAY_NOT_FOUND;
 }
 
-void rjd_array_sort_impl(void* array, size_t sizeof_type, rjd_array_compare_func comparer)
+void rjd_array_sort_impl(void* array, size_t sizeof_type, rjd_array_compare_func* comparer)
 {
 	rjd_array_validate(array);
 	size_t length = rjd_array_count(array);
 	qsort(array, length, sizeof_type, comparer);
 }
 
-int32_t rjd_array_lowerbound_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused)
+int32_t rjd_array_lowerbound_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func* comparer, int unused)
 {
 	RJD_UNUSED_PARAM(unused);
 
@@ -401,7 +401,7 @@ int32_t rjd_array_lowerbound_impl(const void* array, const void* needle, size_t 
 	return index;
 }
 
-int32_t rjd_array_find_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused)
+int32_t rjd_array_find_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func* comparer, int unused)
 {
 	RJD_UNUSED_PARAM(unused);
 
@@ -413,7 +413,7 @@ int32_t rjd_array_find_sorted_impl(const void* array, const void* needle, size_t
 	return RJD_ARRAY_NOT_FOUND;
 }
 
-bool rjd_array_contains_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func comparer, int unused)
+bool rjd_array_contains_sorted_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_func* comparer, int unused)
 {
 	RJD_UNUSED_PARAM(unused);
 
@@ -421,18 +421,18 @@ bool rjd_array_contains_sorted_impl(const void* array, const void* needle, size_
 	return index != RJD_ARRAY_NOT_FOUND;
 }
 
-void rjd_array_sort_c_impl(void* array, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context)
+void rjd_array_sort_c_impl(void* array, size_t sizeof_type, rjd_array_compare_c_func* comparer, void* context)
 {
 	rjd_array_validate(array);
 	const size_t length = rjd_array_count(array);
 #if RJD_COMPILER_MSVC
-	qsort_s(array, length, sizeof_type, context, comparer);
+	qsort_s(array, length, sizeof_type, comparer, context);
 #else
 	qsort_r(array, length, sizeof_type, context, comparer);
 #endif
 }
 
-int32_t rjd_array_lowerbound_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused)
+int32_t rjd_array_lowerbound_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func* comparer, void* context, int unused)
 {
 	RJD_UNUSED_PARAM(unused);
 
@@ -468,7 +468,7 @@ int32_t rjd_array_lowerbound_c_impl(const void* array, const void* needle, size_
 	return index;
 }
 
-int32_t rjd_array_find_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused)
+int32_t rjd_array_find_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func* comparer, void* context, int unused)
 {
 	RJD_UNUSED_PARAM(unused);
 
@@ -480,7 +480,7 @@ int32_t rjd_array_find_sorted_c_impl(const void* array, const void* needle, size
 	return RJD_ARRAY_NOT_FOUND;
 }
 
-bool rjd_array_contains_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func comparer, void* context, int unused)
+bool rjd_array_contains_sorted_c_impl(const void* array, const void* needle, size_t sizeof_type, rjd_array_compare_c_func* comparer, void* context, int unused)
 {
 	RJD_UNUSED_PARAM(unused);
 

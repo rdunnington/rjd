@@ -154,9 +154,10 @@ struct rjd_result rjd_fio_mkdir(const char* path)
 static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
 {
 	struct rjd_result result = RJD_RESULT_OK();
-	if (CreateDirectoryA(foldername)) {
+	SECURITY_ATTRIBUTES security = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
+	if (CreateDirectoryA(foldername, &security)) {
 		const int error = GetLastError();
-		RJD_ASSERTMSG(error != ERROR_PATH_NOT_FOUND, "The rjd_fio_mkdir() code should handle this case."); break;
+		RJD_ASSERTMSG(error != ERROR_PATH_NOT_FOUND, "The rjd_fio_mkdir() code should handle this case.");
 		switch (GetLastError())
 		{
 			case ERROR_ALREADY_EXISTS: result = RJD_RESULT("Folder already exists"); break;
@@ -170,7 +171,7 @@ static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
 
 bool rjd_fio_exists(const char* path)
 {
-	SECURITY_ATTRIBUTES security = { .nlength = sizeof(SECURITY_ATTRIBUTES) };
+	SECURITY_ATTRIBUTES security = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
 	HANDLE file = CreateFileA(path,
 							GENERIC_READ,
 							FILE_SHARE_READ,

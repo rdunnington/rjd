@@ -211,10 +211,16 @@ struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
 	RECT rect = {0};
 	GetWindowRect(window_win32->hwnd, &rect);
 
+	uint32_t width = rect.right - rect.left;
+	uint32_t height = rect.bottom - rect.top;
+
+	RJD_ASSERT(width <= UINT16_MAX);
+	RJD_ASSERT(height <= UINT16_MAX);
+
 	struct rjd_window_size size = 
 	{
-		.width = rect.right - rect.left,
-		.height = rect.bottom - rect.top,
+		.width = (uint16_t)width,
+		.height = (uint16_t)height,
 	};
 	return size;
 }

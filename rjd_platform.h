@@ -83,7 +83,9 @@
 
 #if RJD_COMPILER_MSVC
 	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer (this is ok in C99)
-	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (all major compilers support this)
+	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (gcc and clang support this)
+	#pragma warning(disable:4221) // nonstandard extension used: initializing struct with address of local variable (gcc and clang support this)
+
 #elif RJD_COMPILER_CLANG
 	#pragma clang diagnostic ignored "-Wmissing-braces" // clang is paranoid about zero-init for nested structs
 #endif
