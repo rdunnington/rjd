@@ -18,6 +18,10 @@ bool rjd_fio_exists(const char* path);
 
 #if RJD_IMPL
 
+#if RJD_COMPILER_MSVC
+	#include <shellapi.h>
+#endif
+
 #if RJD_COMPILER_GCC || RJD_COMPILER_CLANG
 #include <sys/stat.h>
 #include <ftw.h>
@@ -142,14 +146,26 @@ struct rjd_result rjd_fio_mkdir(const char* path)
 
 #if RJD_COMPILER_MSVC
 
-//struct rjd_result rjd_fio_delete_recursive(const char* path)
-//{
-//}
-//
-//struct rjd_result rjd_fio_delete(const char* path)
-//{
-//	return RJD_RESULT("not implmented");
-//}
+struct rjd_result rjd_fio_delete(const char* path)
+{
+	SHFILEOPSTRUCTA ops = 
+	{
+		.wFunc = FO_DELETE,
+		.pFrom = path,
+	};
+
+	if (SHFileOperationA(&ops))
+	{
+		return RJD_RESULT("Delete failed. Check GetLastError() for more info.");
+	}
+
+	if (ops.fAnyOperationsAborted)
+	{
+		return RJD_RESULT("Operation aborted early. Did someone cancel it?");
+	}
+
+	return RJD_RESULT_OK();
+}
 
 static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
 {

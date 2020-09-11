@@ -415,38 +415,38 @@ void test_mem()
 		expect_true(allocator.stats.total_size <= sizeof(stackmem));
 		{
 			const uint32_t total = allocator.stats.total_size;
-			expect_uint32(allocator.stats.current.used - allocator.stats.current.overhead, 256 * 3);
-			expect_uint32(allocator.stats.current.peak, allocator.stats.current.used);
-			expect_uint32(allocator.stats.current.unused, total - ((256 * 3) + allocator.stats.current.overhead));
-			expect_uint32(allocator.stats.current.allocs, 3);
-			expect_uint32(allocator.stats.current.frees, 0);
+			expect_uint64(allocator.stats.current.used - allocator.stats.current.overhead, 256 * 3);
+			expect_uint64(allocator.stats.current.peak, allocator.stats.current.used);
+			expect_uint64(allocator.stats.current.unused, total - ((256 * 3) + allocator.stats.current.overhead));
+			expect_uint64(allocator.stats.current.allocs, 3);
+			expect_uint64(allocator.stats.current.frees, 0);
 
-			expect_uint32(allocator.stats.lifetime.peak, allocator.stats.current.peak);
-			expect_uint32(allocator.stats.lifetime.allocs, 3);
-			expect_uint32(allocator.stats.lifetime.frees, 0);
-			expect_uint32(allocator.stats.lifetime.resets, 0);
+			expect_uint64(allocator.stats.lifetime.peak, allocator.stats.current.peak);
+			expect_uint64(allocator.stats.lifetime.allocs, 3);
+			expect_uint64(allocator.stats.lifetime.frees, 0);
+			expect_uint64(allocator.stats.lifetime.resets, 0);
 		}
 
-        const uint32_t old_peak = allocator.stats.lifetime.peak;
+        const uint64_t old_peak = allocator.stats.lifetime.peak;
 		expect_true(rjd_mem_allocator_reset(&allocator));
 
 		expect_true(rjd_mem_alloc_array(char, 512, &allocator) != NULL);
 		{
 			const uint32_t total = allocator.stats.total_size;
-			expect_uint32(allocator.stats.current.used - allocator.stats.current.overhead, 512);
-			expect_uint32(allocator.stats.current.peak, allocator.stats.current.used);
-			expect_uint32(allocator.stats.current.unused, total - (512 + allocator.stats.current.overhead));
-			expect_uint32(allocator.stats.current.allocs, 1);
-			expect_uint32(allocator.stats.current.frees, 0);
+			expect_uint64(allocator.stats.current.used - allocator.stats.current.overhead, 512);
+			expect_uint64(allocator.stats.current.peak, allocator.stats.current.used);
+			expect_uint64(allocator.stats.current.unused, total - (512 + allocator.stats.current.overhead));
+			expect_uint64(allocator.stats.current.allocs, 1);
+			expect_uint64(allocator.stats.current.frees, 0);
 
-			expect_uint32(allocator.stats.lifetime.peak, old_peak);
-			expect_uint32(allocator.stats.lifetime.allocs, 4);
-			expect_uint32(allocator.stats.lifetime.frees, 0);
-			expect_uint32(allocator.stats.lifetime.resets, 1);
+			expect_uint64(allocator.stats.lifetime.peak, old_peak);
+			expect_uint64(allocator.stats.lifetime.allocs, 4);
+			expect_uint64(allocator.stats.lifetime.frees, 0);
+			expect_uint64(allocator.stats.lifetime.resets, 1);
 		}
 
 		expect_true(rjd_mem_allocator_reset(&allocator));
-		expect_uint32(allocator.stats.lifetime.resets, 2);
+		expect_uint64(allocator.stats.lifetime.resets, 2);
 	}
 
 	// mem_swap
@@ -1820,29 +1820,19 @@ void test_atomic()
 	expect_int64(INT64_MAX, rjd_atomic_int64_get(&atomic_i64));
 	rjd_atomic_int64_set(&atomic_i64, 0);
 	expect_int64(0, rjd_atomic_int64_get(&atomic_i64));
-	expect_int64(0, rjd_atomic_int64_inc(&atomic_i64));
+	expect_int64(1, rjd_atomic_int64_inc(&atomic_i64));
     expect_int64(1, rjd_atomic_int64_get(&atomic_i64));
-	expect_int64(1, rjd_atomic_int64_add(&atomic_i64, 10));
+	expect_int64(11, rjd_atomic_int64_add(&atomic_i64, 10));
     expect_int64(11, rjd_atomic_int64_get(&atomic_i64));
-	expect_int64(11, rjd_atomic_int64_dec(&atomic_i64));
+	expect_int64(10, rjd_atomic_int64_dec(&atomic_i64));
     expect_int64(10, rjd_atomic_int64_get(&atomic_i64));
-	expect_int64(10, rjd_atomic_int64_sub(&atomic_i64, 5));
+	expect_int64(5, rjd_atomic_int64_sub(&atomic_i64, 5));
     expect_int64(5, rjd_atomic_int64_get(&atomic_i64));
 
 	const uint32_t max_iterations = 1000;
 	uint32_t iterations = 0;
 	int64_t expected = 0;
-	while (!rjd_atomic_int64_compare_exchange_weak(&atomic_i64, &expected, 0)) {
-		rjd_atomic_int64_dec(&atomic_i64);
-		if (++iterations > max_iterations) {
-			break;
-		}
-	}
-
-	rjd_atomic_int64_set(&atomic_i64, 5);
-
-	iterations = 0;
-	while (!rjd_atomic_int64_compare_exchange_weak(&atomic_i64, &expected, 0)) {
+	while (!rjd_atomic_int64_compare_exchange(&atomic_i64, &expected, 0)) {
 		rjd_atomic_int64_dec(&atomic_i64);
 		if (++iterations > max_iterations) {
 			break;

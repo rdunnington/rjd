@@ -6,18 +6,18 @@ struct rjd_mem_allocator_stats
 {
 	uint32_t total_size;
 	struct {
-		uint32_t used;
-		uint32_t overhead;
-		uint32_t peak;
-		uint32_t unused;
-		uint32_t allocs;
-		uint32_t frees;
+		uint64_t used;
+		uint64_t overhead;
+		uint64_t peak;
+		uint64_t unused;
+		uint64_t allocs;
+		uint64_t frees;
 	} current;
 	struct {
-		uint32_t peak;
-		uint32_t allocs;
-		uint32_t frees;
-		uint32_t resets;
+		uint64_t peak;
+		uint64_t allocs;
+		uint64_t frees;
+		uint64_t resets;
 	} lifetime;
 };
 
@@ -234,9 +234,9 @@ void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint3
 	header->debug_sentinel = allocator->debug_sentinel;
 
 	{
-		uint32_t* current_used = &allocator->stats.current.used;
-		uint32_t* current_peak = &allocator->stats.current.peak;
-		uint32_t* lifetime_peak = &allocator->stats.lifetime.peak;
+		uint64_t* current_used = &allocator->stats.current.used;
+		uint64_t* current_peak = &allocator->stats.current.peak;
+		uint64_t* lifetime_peak = &allocator->stats.lifetime.peak;
 		*current_used += total_size;
 		allocator->stats.current.overhead += total_size - size;
 		*current_peak = (*current_peak < *current_used) ? *current_used : *current_peak;

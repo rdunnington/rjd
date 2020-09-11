@@ -73,14 +73,14 @@ void rjd_path_append(struct rjd_path* path, const char* str)
 		++start;
 	}
 
-	uint32_t append_length = strlen(str);
-	uint32_t new_length = append_length + path->length;
+	size_t append_length = strlen(str);
+	size_t new_length = append_length + path->length;
 	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH, 
 				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u).",
 				RJD_PATH_BUFFER_LENGTH, new_length);
 	strncpy(path->str + path->length, str, append_length);
 	path->str[new_length] = 0;
-	path->length = rjd_path_normalize_slashes(path->str, new_length);
+	path->length = rjd_path_normalize_slashes(path->str, (uint32_t)new_length);
 }
 
 void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2)
