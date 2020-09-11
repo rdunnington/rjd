@@ -133,7 +133,7 @@ inline uint16_t rjd_reinterpret_i16_as_u16(int16_t value)
 	return caster.u;
 }
 
-inline int16_t rjd_reinterpret_u16_as_s16(uint16_t value)
+inline int16_t rjd_reinterpret_u16_as_i16(uint16_t value)
 {
 	union { int16_t s; int16_t u; } caster;
 	caster.u = value;
@@ -147,7 +147,7 @@ inline uint8_t rjd_reinterpret_i8_as_u8(int8_t value)
 	return caster.u;
 }
 
-inline int8_t rjd_reinterpret_u8_as_s8(uint8_t value)
+inline int8_t rjd_reinterpret_u8_as_i8(uint8_t value)
 {
 	union { int8_t s; int8_t u; } caster;
 	caster.u = value;
@@ -512,6 +512,126 @@ bool rjd_atomic_uint32_compare_exchange(struct rjd_atomic_uint32* atomic, uint32
 {
 	struct rjd_atomic_uint32_msvc* atomic_msvc = (struct rjd_atomic_uint32_msvc*)atomic;
 	return rjd_atomic_int32_compare_exchange(&atomic_msvc->atomic, (int32_t*)expected, rjd_reinterpret_u32_as_i32(desired));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_uint16 rjd_atomic_uint16_init(uint16_t value)
+{
+	struct rjd_atomic_uint16 out = {0};
+	struct rjd_atomic_uint16_msvc* atomic_msvc = (struct rjd_atomic_uint16_msvc*)&out;
+	struct rjd_atomic_int16_msvc* atomic_signed_msvc = (struct rjd_atomic_int16_msvc*)&atomic_msvc->atomic;
+	atomic_signed_msvc->value_unsigned = value;
+	return out;
+}
+
+uint16_t rjd_atomic_uint16_get(struct rjd_atomic_uint16* atomic)
+{
+	struct rjd_atomic_uint16_msvc* atomic_msvc = (struct rjd_atomic_uint16_msvc*)atomic;
+	struct rjd_atomic_int16_msvc* atomic_signed_msvc = (struct rjd_atomic_int16_msvc*)&atomic_msvc->atomic;
+	return atomic_signed_msvc->value_unsigned;
+}
+
+uint16_t rjd_atomic_uint16_set(struct rjd_atomic_uint16* atomic, uint16_t value)
+{
+	struct rjd_atomic_uint16_msvc* atomic_msvc = (struct rjd_atomic_uint16_msvc*)atomic;
+	struct rjd_atomic_int16_msvc* atomic_signed_msvc = (struct rjd_atomic_int16_msvc*)&atomic_msvc->atomic;
+	atomic_signed_msvc->value_unsigned = value;
+	return value;
+}
+
+uint16_t rjd_atomic_uint16_add(struct rjd_atomic_uint16* atomic, uint16_t value)
+{
+	struct rjd_atomic_uint16_msvc* atomic_msvc = (struct rjd_atomic_uint16_msvc*)atomic;
+	int16_t result = rjd_atomic_int16_add(&atomic_msvc->atomic, rjd_reinterpret_u16_as_i16(value));
+	return rjd_reinterpret_i16_as_u16(result);
+}
+
+uint16_t rjd_atomic_uint16_sub(struct rjd_atomic_uint16* atomic, uint16_t value)
+{
+	struct rjd_atomic_uint16_msvc* atomic_msvc = (struct rjd_atomic_uint16_msvc*)atomic;
+	int16_t result = rjd_atomic_int16_add(&atomic_msvc->atomic, -rjd_reinterpret_u16_as_i16(value));
+	return rjd_reinterpret_i16_as_u16(result);
+}
+
+uint16_t rjd_atomic_uint16_inc(struct rjd_atomic_uint16* atomic)
+{
+	struct rjd_atomic_uint16_msvc* atomic_msvc = (struct rjd_atomic_uint16_msvc*)atomic;
+	int16_t result = rjd_atomic_int16_inc(&atomic_msvc->atomic);
+	return rjd_reinterpret_i16_as_u16(result);
+}
+
+uint16_t rjd_atomic_uint16_dec(struct rjd_atomic_uint16* atomic)
+{
+	struct rjd_atomic_uint16_msvc* atomic_msvc = (struct rjd_atomic_uint16_msvc*)atomic;
+	int16_t result = rjd_atomic_int16_dec(&atomic_msvc->atomic);
+	return rjd_reinterpret_i16_as_u16(result);
+}
+
+bool rjd_atomic_uint16_compare_exchange(struct rjd_atomic_uint16* atomic, uint16_t* expected, uint16_t desired)
+{
+	struct rjd_atomic_uint16_msvc* atomic_msvc = (struct rjd_atomic_uint16_msvc*)atomic;
+	return rjd_atomic_int16_compare_exchange(&atomic_msvc->atomic, (int16_t*)expected, rjd_reinterpret_u16_as_i16(desired));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct rjd_atomic_uint8 rjd_atomic_uint8_init(uint8_t value)
+{
+	struct rjd_atomic_uint8 out = {0};
+	struct rjd_atomic_uint8_msvc* atomic_msvc = (struct rjd_atomic_uint8_msvc*)&out;
+	struct rjd_atomic_int8_msvc* atomic_signed_msvc = (struct rjd_atomic_int8_msvc*)&atomic_msvc->atomic;
+	atomic_signed_msvc->value_unsigned = value;
+	return out;
+}
+
+uint8_t rjd_atomic_uint8_get(struct rjd_atomic_uint8* atomic)
+{
+	struct rjd_atomic_uint8_msvc* atomic_msvc = (struct rjd_atomic_uint8_msvc*)atomic;
+	struct rjd_atomic_int8_msvc* atomic_signed_msvc = (struct rjd_atomic_int8_msvc*)&atomic_msvc->atomic;
+	return atomic_signed_msvc->value_unsigned;
+}
+
+uint8_t rjd_atomic_uint8_set(struct rjd_atomic_uint8* atomic, uint8_t value)
+{
+	struct rjd_atomic_uint8_msvc* atomic_msvc = (struct rjd_atomic_uint8_msvc*)atomic;
+	struct rjd_atomic_int8_msvc* atomic_signed_msvc = (struct rjd_atomic_int8_msvc*)&atomic_msvc->atomic;
+	atomic_signed_msvc->value_unsigned = value;
+	return value;
+}
+
+uint8_t rjd_atomic_uint8_add(struct rjd_atomic_uint8* atomic, uint8_t value)
+{
+	struct rjd_atomic_uint8_msvc* atomic_msvc = (struct rjd_atomic_uint8_msvc*)atomic;
+	int8_t result = rjd_atomic_int8_add(&atomic_msvc->atomic, rjd_reinterpret_u8_as_i8(value));
+	return rjd_reinterpret_i8_as_u8(result);
+}
+
+uint8_t rjd_atomic_uint8_sub(struct rjd_atomic_uint8* atomic, uint8_t value)
+{
+	struct rjd_atomic_uint8_msvc* atomic_msvc = (struct rjd_atomic_uint8_msvc*)atomic;
+	int8_t result = rjd_atomic_int8_add(&atomic_msvc->atomic, -rjd_reinterpret_u8_as_i8(value));
+	return rjd_reinterpret_i8_as_u8(result);
+}
+
+uint8_t rjd_atomic_uint8_inc(struct rjd_atomic_uint8* atomic)
+{
+	struct rjd_atomic_uint8_msvc* atomic_msvc = (struct rjd_atomic_uint8_msvc*)atomic;
+	int8_t result = rjd_atomic_int8_inc(&atomic_msvc->atomic);
+	return rjd_reinterpret_i8_as_u8(result);
+}
+
+uint8_t rjd_atomic_uint8_dec(struct rjd_atomic_uint8* atomic)
+{
+	struct rjd_atomic_uint8_msvc* atomic_msvc = (struct rjd_atomic_uint8_msvc*)atomic;
+	int8_t result = rjd_atomic_int8_dec(&atomic_msvc->atomic);
+	return rjd_reinterpret_i8_as_u8(result);
+}
+
+bool rjd_atomic_uint8_compare_exchange(struct rjd_atomic_uint8* atomic, uint8_t* expected, uint8_t desired)
+{
+	struct rjd_atomic_uint8_msvc* atomic_msvc = (struct rjd_atomic_uint8_msvc*)atomic;
+	return rjd_atomic_int8_compare_exchange(&atomic_msvc->atomic, (int8_t*)expected, rjd_reinterpret_u8_as_i8(desired));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
