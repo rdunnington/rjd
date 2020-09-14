@@ -61,8 +61,8 @@ struct rjd_result rjd_condvar_create(struct rjd_condvar* condvar);
 struct rjd_result rjd_condvar_destroy(struct rjd_condvar* condvar);
 struct rjd_result rjd_condvar_lock(struct rjd_condvar* condvar);
 struct rjd_result rjd_condvar_unlock(struct rjd_condvar* condvar);
-struct rjd_result rjd_condvar_signal_single(struct rjd_condvar* condvar);
-struct rjd_result rjd_condvar_signal_all(struct rjd_condvar* condvar);
+struct rjd_result rjd_condvar_signal_single(struct rjd_condvar* condvar); // automatically unlocks
+struct rjd_result rjd_condvar_signal_all(struct rjd_condvar* condvar); // automatically unlocks
 struct rjd_result rjd_condvar_wait(struct rjd_condvar* condvar);
 struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t seconds);
 
@@ -107,6 +107,7 @@ struct rjd_condvar_win32
 {
 	CONDITION_VARIABLE condition_variable;
 	struct rjd_rwlock lock;
+	bool is_locked;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_condvar_win32) <= sizeof(struct rjd_condvar));
 
@@ -119,6 +120,7 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_lock_win32) <= sizeof(struct rjd_lock));
 
 struct rjd_rwlock_win32
 {
+	struct rjd_thread_id exclusive_owning_thread;
 	SRWLOCK lock;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_rwlock_win32) <= sizeof(struct rjd_rwlock));
@@ -293,8 +295,12 @@ struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t s
 {
 	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)&condvar_win32->lock;
+	RJD_ASSERTMSG(lock_win32->exclusive_owning_thread.id != RJD_THREAD_ID_INVALID.id, 
+		"You must lock the condvar before waiting on it.");
 
 	uint32_t ms = (seconds == INFINITE) ? INFINITE : seconds * 1000;
+
+	lock_win32->exclusive_owning_thread = RJD_THREAD_ID_INVALID;
 
 	if (!SleepConditionVariableSRW(&condvar_win32->condition_variable, &lock_win32->lock, ms, 0)) {
 		if (GetLastError() == ERROR_TIMEOUT) {
@@ -303,6 +309,9 @@ struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t s
 			return RJD_RESULT("Unknown failure. Call GetLastError() to know more");
 		}
 	}
+
+	const struct rjd_thread_id current_thread = rjd_thread_current();
+	lock_win32->exclusive_owning_thread = current_thread;
 
 	return RJD_RESULT_OK(); 
 }
@@ -392,7 +401,9 @@ struct rjd_result rjd_rwlock_acquire_reader(struct rjd_rwlock* lock)
 struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
+	const struct rjd_thread_id current_thread = rjd_thread_current();
 	AcquireSRWLockExclusive(&lock_win32->lock);
+	lock_win32->exclusive_owning_thread = current_thread;
 	return RJD_RESULT_OK();
 }
 
@@ -408,9 +419,11 @@ struct rjd_result rjd_rwlock_try_acquire_reader(struct rjd_rwlock* lock)
 struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
+	const struct rjd_thread_id current_thread = rjd_thread_current();
 	if (!TryAcquireSRWLockExclusive(&lock_win32->lock)) {
 		return RJD_RESULT("Lock in use");
 	}
+	lock_win32->exclusive_owning_thread = current_thread;
 	return RJD_RESULT_OK();
 }
 
@@ -418,13 +431,17 @@ struct rjd_result rjd_rwlock_release_reader(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
 	ReleaseSRWLockShared(&lock_win32->lock);
-	ReleaseSRWLockExclusive(&lock_win32->lock);
 	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
+	const struct rjd_thread_id current_thread = rjd_thread_current();
+	if (lock_win32->exclusive_owning_thread.id != current_thread.id) {
+		return RJD_RESULT("This thread does not own this lock.");
+	}
+	lock_win32->exclusive_owning_thread = RJD_THREAD_ID_INVALID;
 	ReleaseSRWLockExclusive(&lock_win32->lock);
 	return RJD_RESULT_OK();
 }

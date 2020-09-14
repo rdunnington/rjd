@@ -37,7 +37,7 @@ int32_t rjd_atomic_int32_add(struct rjd_atomic_int32* atomic, int32_t value);
 int32_t rjd_atomic_int32_sub(struct rjd_atomic_int32* atomic, int32_t value);
 int32_t rjd_atomic_int32_inc(struct rjd_atomic_int32* atomic);
 int32_t rjd_atomic_int32_dec(struct rjd_atomic_int32* atomic);
-bool rjd_atomic_int_compare_exchange(struct rjd_atomic_int32* atomic, int32_t* expected, int32_t desired);
+bool rjd_atomic_int32_compare_exchange(struct rjd_atomic_int32* atomic, int32_t* expected, int32_t desired);
 
 struct rjd_atomic_int16 rjd_atomic_int16_init (int16_t  value);
 int16_t rjd_atomic_int16_get(struct rjd_atomic_int16* atomic);
@@ -198,7 +198,7 @@ int64_t rjd_atomic_int64_set(struct rjd_atomic_int64* atomic, int64_t value)
 int64_t rjd_atomic_int64_add(struct rjd_atomic_int64* atomic, int64_t value)
 {
 	struct rjd_atomic_int64_msvc* atomic_msvc = (struct rjd_atomic_int64_msvc*)atomic;
-	return InterlockedExchangeAdd64(&atomic_msvc->value_signed, value);
+	return InterlockedExchangeAdd64(&atomic_msvc->value_signed, value) + value;
 }
 
 int64_t rjd_atomic_int64_sub(struct rjd_atomic_int64* atomic, int64_t value)
@@ -250,7 +250,7 @@ int32_t rjd_atomic_int32_set(struct rjd_atomic_int32* atomic, int32_t value)
 int32_t rjd_atomic_int32_add(struct rjd_atomic_int32* atomic, int32_t value)
 {
 	struct rjd_atomic_int32_msvc* atomic_msvc = (struct rjd_atomic_int32_msvc*)atomic;
-	return InterlockedExchangeAdd(&atomic_msvc->value_signed, value);
+	return InterlockedExchangeAdd(&atomic_msvc->value_signed, value) + value;
 }
 
 int32_t rjd_atomic_int32_sub(struct rjd_atomic_int32* atomic, int32_t value)
@@ -692,7 +692,7 @@ int64_t rjd_atomic_int64_add(struct rjd_atomic_int64* atomic, int64_t value)
 int64_t rjd_atomic_int64_sub(struct rjd_atomic_int64* atomic, int64_t value)
 {
 	struct rjd_atomic_int64_c11* atomic_c11 = (struct rjd_atomic_int64_c11*)atomic;
-	return atomic_fetch_sub(&atomic_c11->value, value) + value;
+	return atomic_fetch_sub(&atomic_c11->value, value) - value;
 }
 
 int64_t rjd_atomic_int64_inc(struct rjd_atomic_int64* atomic)
