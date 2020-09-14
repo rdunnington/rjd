@@ -18,15 +18,6 @@ bool rjd_fio_exists(const char* path);
 
 #if RJD_IMPL
 
-#if RJD_COMPILER_MSVC
-	#include <shellapi.h>
-#endif
-
-#if RJD_COMPILER_GCC || RJD_COMPILER_CLANG
-#include <sys/stat.h>
-#include <ftw.h>
-#endif
-
 static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername);
 
 struct rjd_result rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* allocator)
@@ -127,51 +118,95 @@ struct rjd_result rjd_fio_mkdir(const char* path)
         const char* subpath = NULL;
 
 		if (end) {
-            RJD_ASSERT(end - next < (ptrdiff_t)sizeof(stackbuffer));
-			memcpy(stackbuffer, next, end - next);
-			stackbuffer[end - next] = '\0';
+			size_t length = end - next;
+            RJD_ASSERT(length < (ptrdiff_t)sizeof(stackbuffer));
+			memcpy(stackbuffer, next, length);
+			stackbuffer[length] = '\0';
+			if (stackbuffer[length - 1] == '/') {
+				stackbuffer[length - 1] = '\0';
+			}
             subpath = stackbuffer;
 		} else {
 			subpath = next;
 		}
 
-		result = rjd_fio_mkdir_platform(subpath);
-		if (!rjd_result_isok(result)) {
-			break;
+		if (rjd_fio_exists(subpath)) {
+			result = RJD_RESULT("Path already exists");
+		} else {
+			result = rjd_fio_mkdir_platform(subpath);
+			if (!rjd_result_isok(result)) {
+				break;
+			}
 		}
+		next = end;
     } while (end != NULL);
     
     return result;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
 #if RJD_COMPILER_MSVC
+
+#include <shellapi.h>
+
+static struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path);
+
+#define RJD_FIO_UTF8_TO_UTF16(utf8, out_utf16_name)							\
+	const size_t length_utf16 = mbstowcs(NULL, utf8, INT_MAX);				\
+	wchar_t* out_utf16_name = _alloca(sizeof(wchar_t) * (length_utf16 + 1));\
+	mbstowcs(out_utf16_name, utf8, INT_MAX);
 
 struct rjd_result rjd_fio_delete(const char* path)
 {
-	SHFILEOPSTRUCTA ops = 
-	{
-		.wFunc = FO_DELETE,
-		.pFrom = path,
-	};
+	RJD_ASSERT(path && *path);
+	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
 
-	if (SHFileOperationA(&ops))
+	DWORD attributes = GetFileAttributesW(path_wide);
+	if (attributes == INVALID_FILE_ATTRIBUTES)
 	{
-		return RJD_RESULT("Delete failed. Check GetLastError() for more info.");
+		return RJD_RESULT("Failed getting path attributes. Check permissions and verify the path exists.");
 	}
 
-	if (ops.fAnyOperationsAborted)
-	{
-		return RJD_RESULT("Operation aborted early. Did someone cancel it?");
+	if (attributes & FILE_ATTRIBUTE_READONLY) {
+		return RJD_RESULT("Path is read-only");
+	}
+
+	if (attributes & FILE_ATTRIBUTE_DIRECTORY) {
+		return rjd_fio_delete_folder_recursive(path_wide);
+	}
+
+	if (!DeleteFileW(path_wide)) {
+		return RJD_RESULT("Failed to delete file. Check GetLastError() for more info.");
 	}
 
 	return RJD_RESULT_OK();
 }
 
+bool rjd_fio_exists(const char* path)
+{
+	RJD_ASSERT(path);
+	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
+
+	DWORD attributes = GetFileAttributesW(path_wide);
+	DWORD err = GetLastError();
+	const bool exists = attributes != INVALID_FILE_ATTRIBUTES || 
+		(err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND);
+
+	return exists;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
 {
+	RJD_FIO_UTF8_TO_UTF16(foldername, foldername_wide);
+
 	struct rjd_result result = RJD_RESULT_OK();
 	SECURITY_ATTRIBUTES security = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
-	if (CreateDirectoryA(foldername, &security)) {
+	if (!CreateDirectoryW(foldername_wide, &security)) {
 		const int error = GetLastError();
 		RJD_ASSERTMSG(error != ERROR_PATH_NOT_FOUND, "The rjd_fio_mkdir() code should handle this case.");
 		switch (GetLastError())
@@ -184,34 +219,51 @@ static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
 	return result;
 }
 
-
-bool rjd_fio_exists(const char* path)
+struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path)
 {
-	SECURITY_ATTRIBUTES security = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
-	HANDLE file = CreateFileA(path,
-							GENERIC_READ,
-							FILE_SHARE_READ,
-							&security,
-							OPEN_EXISTING,
-							FILE_ATTRIBUTE_NORMAL,
-							NULL);
+	WIN32_FIND_DATAW find_data = {0};
+	HANDLE find_handle = FindFirstFileW(directory_path, &find_data);
+	if (find_handle == INVALID_HANDLE_VALUE) {
+		if (GetLastError() == ERROR_FILE_NOT_FOUND) {
+			return RJD_RESULT("Directory not found");
+		}
+		return RJD_RESULT("Failed while enumerating directory contents. Check GetLastError() for more info");
+	}
 
-	const bool exists = file != INVALID_HANDLE_VALUE;
+	do
+	{
+		if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+			if (wcscmp(find_data.cFileName, directory_path) != 0) {
+				return rjd_fio_delete_folder_recursive(find_data.cFileName);
+			}
+		} else {
+			if (!DeleteFileW(find_data.cFileName)) {
+				return RJD_RESULT("Failed to delete file. Check GetLastError() for more info.");
+			}
+		}
+	} while (FindNextFileW(find_handle, &find_data));
 
-	CloseHandle(file);
+	if (GetLastError() != ERROR_NO_MORE_FILES) {
+		return RJD_RESULT("Failed while enumerating directory contents. Check GetLastError() for more info");
+	}
 
-	return exists;
+	if (!RemoveDirectoryW(directory_path)) {
+		return RJD_RESULT("Failed to delete the directory. Check GetLastError() for more info");
+	}
+
+	return RJD_RESULT_OK();
 }
 
-#else
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
-{
-	RJD_UNUSED_PARAM(sb);
-	RJD_UNUSED_PARAM(typeflag);
-	RJD_UNUSED_PARAM(ftwbuf);
-	return remove(path);
-}
+#elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
+
+#include <sys/stat.h>
+#include <ftw.h>
+
+static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf);
 
 struct rjd_result rjd_fio_delete(const char* path)
 {
@@ -228,6 +280,16 @@ bool rjd_fio_exists(const char* path)
 {
     struct stat unused;
     return !stat(path, &unused);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+{
+	RJD_UNUSED_PARAM(sb);
+	RJD_UNUSED_PARAM(typeflag);
+	RJD_UNUSED_PARAM(ftwbuf);
+	return remove(path);
 }
 
 static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
