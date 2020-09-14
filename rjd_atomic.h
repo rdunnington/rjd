@@ -743,7 +743,7 @@ int32_t rjd_atomic_int32_add(struct rjd_atomic_int32* atomic, int32_t value)
 int32_t rjd_atomic_int32_sub(struct rjd_atomic_int32* atomic, int32_t value)
 {
 	struct rjd_atomic_int32_c11* atomic_c11 = (struct rjd_atomic_int32_c11*)atomic;
-	return atomic_fetch_sub(&atomic_c11->value, value) + value;
+	return atomic_fetch_sub(&atomic_c11->value, value) - value;
 }
 
 int32_t rjd_atomic_int32_inc(struct rjd_atomic_int32* atomic)
@@ -794,7 +794,7 @@ int16_t rjd_atomic_int16_add(struct rjd_atomic_int16* atomic, int16_t value)
 int16_t rjd_atomic_int16_sub(struct rjd_atomic_int16* atomic, int16_t value)
 {
 	struct rjd_atomic_int16_c11* atomic_c11 = (struct rjd_atomic_int16_c11*)atomic;
-	return atomic_fetch_sub(&atomic_c11->value, value) + value;
+	return atomic_fetch_sub(&atomic_c11->value, value) - value;
 }
 
 int16_t rjd_atomic_int16_inc(struct rjd_atomic_int16* atomic)
@@ -845,7 +845,7 @@ int8_t rjd_atomic_int8_add(struct rjd_atomic_int8* atomic, int8_t value)
 int8_t rjd_atomic_int8_sub(struct rjd_atomic_int8* atomic, int8_t value)
 {
 	struct rjd_atomic_int8_c11* atomic_c11 = (struct rjd_atomic_int8_c11*)atomic;
-	return atomic_fetch_sub(&atomic_c11->value, value) + value;
+	return atomic_fetch_sub(&atomic_c11->value, value) - value;
 }
 
 int8_t rjd_atomic_int8_inc(struct rjd_atomic_int8* atomic)
@@ -858,7 +858,7 @@ int8_t rjd_atomic_int8_dec(struct rjd_atomic_int8* atomic)
 	return rjd_atomic_int8_sub(atomic, 1);
 }
 
-bool rjd_atomic_int8_compare_exchange_strong(struct rjd_atomic_int8* atomic, int8_t* expected, int8_t desired)
+bool rjd_atomic_int8_compare_exchange(struct rjd_atomic_int8* atomic, int8_t* expected, int8_t desired)
 {
 	struct rjd_atomic_int8_c11* atomic_c11 = (struct rjd_atomic_int8_c11*)atomic;
 	return atomic_compare_exchange_strong(&atomic_c11->value, expected, desired);
@@ -896,7 +896,7 @@ uint64_t rjd_atomic_uint64_add(struct rjd_atomic_uint64* atomic, uint64_t value)
 uint64_t rjd_atomic_uint64_sub(struct rjd_atomic_uint64* atomic, uint64_t value)
 {
 	struct rjd_atomic_uint64_c11* atomic_c11 = (struct rjd_atomic_uint64_c11*)atomic;
-	return atomic_fetch_sub(&atomic_c11->value, value) + value;
+	return atomic_fetch_sub(&atomic_c11->value, value) - value;
 }
 
 uint64_t rjd_atomic_uint64_inc(struct rjd_atomic_uint64* atomic)
@@ -947,7 +947,7 @@ uint32_t rjd_atomic_uint32_add(struct rjd_atomic_uint32* atomic, uint32_t value)
 uint32_t rjd_atomic_uint32_sub(struct rjd_atomic_uint32* atomic, uint32_t value)
 {
 	struct rjd_atomic_uint32_c11* atomic_c11 = (struct rjd_atomic_uint32_c11*)atomic;
-	return atomic_fetch_sub(&atomic_c11->value, value) + value;
+	return atomic_fetch_sub(&atomic_c11->value, value) - value;
 }
 
 uint32_t rjd_atomic_uint32_inc(struct rjd_atomic_uint32* atomic)
@@ -998,7 +998,7 @@ uint16_t rjd_atomic_uint16_add(struct rjd_atomic_uint16* atomic, uint16_t value)
 uint16_t rjd_atomic_uint16_sub(struct rjd_atomic_uint16* atomic, uint16_t value)
 {
 	struct rjd_atomic_uint16_c11* atomic_c11 = (struct rjd_atomic_uint16_c11*)atomic;
-	return atomic_fetch_sub(&atomic_c11->value, value) + value;
+	return atomic_fetch_sub(&atomic_c11->value, value) - value;
 }
 
 uint16_t rjd_atomic_uint16_inc(struct rjd_atomic_uint16* atomic)
@@ -1049,7 +1049,7 @@ uint8_t rjd_atomic_uint8_add(struct rjd_atomic_uint8* atomic, uint8_t value)
 uint8_t rjd_atomic_uint8_sub(struct rjd_atomic_uint8* atomic, uint8_t value)
 {
 	struct rjd_atomic_uint8_c11* atomic_c11 = (struct rjd_atomic_uint8_c11*)atomic;
-	return atomic_fetch_sub(&atomic_c11->value, value) + value;
+	return atomic_fetch_sub(&atomic_c11->value, value) - value;
 }
 
 uint8_t rjd_atomic_uint8_inc(struct rjd_atomic_uint8* atomic)
