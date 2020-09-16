@@ -138,7 +138,6 @@ struct rjd_result rjd_fio_mkdir(const char* path)
 				break;
 			}
 		}
-		next = end;
     } while (end != NULL);
     
     return result;
@@ -191,11 +190,12 @@ bool rjd_fio_exists(const char* path)
 	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
 
 	DWORD attributes = GetFileAttributesW(path_wide);
-	DWORD err = GetLastError();
-	const bool exists = attributes != INVALID_FILE_ATTRIBUTES || 
-		(err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND);
+	if (attributes == INVALID_FILE_ATTRIBUTES) {
+		DWORD err = GetLastError();
+		return err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND;
+	}
 
-	return exists;
+	return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -221,10 +221,20 @@ static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
 
 struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path)
 {
+	wchar_t* path_with_search_spec = NULL;
+	const size_t path_length = wcslen(directory_path);
+	{
+		const wchar_t search_spec[] = L"\\*";
+		path_with_search_spec = _alloca((sizeof(wchar_t) * (path_length + 1)) + sizeof(search_spec));
+		wcscpy(path_with_search_spec, directory_path);
+		wcscpy(path_with_search_spec + path_length, search_spec);
+	}
+
 	WIN32_FIND_DATAW find_data = {0};
-	HANDLE find_handle = FindFirstFileW(directory_path, &find_data);
+	const HANDLE find_handle = FindFirstFileW(path_with_search_spec, &find_data);
 	if (find_handle == INVALID_HANDLE_VALUE) {
-		if (GetLastError() == ERROR_FILE_NOT_FOUND) {
+		const DWORD err = GetLastError();
+		if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) {
 			return RJD_RESULT("Directory not found");
 		}
 		return RJD_RESULT("Failed while enumerating directory contents. Check GetLastError() for more info");
@@ -233,15 +243,29 @@ struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path)
 	do
 	{
 		if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-			if (wcscmp(find_data.cFileName, directory_path) != 0) {
-				return rjd_fio_delete_folder_recursive(find_data.cFileName);
+			if (wcscmp(find_data.cFileName, L".") != 0 &&
+				wcscmp(find_data.cFileName, L"..") != 0) {
+
+				size_t nested_path_length = wcslen(find_data.cFileName);
+				wchar_t* nested_path = _alloca((path_length + nested_path_length + 2) * sizeof(wchar_t)); // +2 for null and path separator
+				wcscpy(nested_path, directory_path);
+				wcscpy(nested_path + path_length, L"/");
+				wcscpy(nested_path + path_length + 1, find_data.cFileName);
+
+				struct rjd_result result = rjd_fio_delete_folder_recursive(nested_path);
+				if (!rjd_result_isok(result)) {
+					return result;
+				}
 			}
 		} else {
 			if (!DeleteFileW(find_data.cFileName)) {
+				FindClose(find_handle);
 				return RJD_RESULT("Failed to delete file. Check GetLastError() for more info.");
 			}
 		}
 	} while (FindNextFileW(find_handle, &find_data));
+
+	FindClose(find_handle);
 
 	if (GetLastError() != ERROR_NO_MORE_FILES) {
 		return RJD_RESULT("Failed while enumerating directory contents. Check GetLastError() for more info");
