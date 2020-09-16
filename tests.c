@@ -474,6 +474,34 @@ void test_mem()
 		expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.resets), 2);
 	}
 
+	// stack allocations
+	{
+		const uint32_t SENTINEL = 0xFFFFFFFF;
+		{
+			uint32_t before = SENTINEL;
+			uint32_t* single = rjd_mem_alloc_stack_noclear(uint32_t);
+			uint32_t after = SENTINEL;
+
+			*single = 0;
+			expect_uint32(SENTINEL, before);
+			expect_uint32(SENTINEL, after);
+		}
+
+		{
+			uint32_t before = SENTINEL;
+			const size_t count = 9;
+			uint32_t* array = rjd_mem_alloc_stack_array_noclear(uint32_t, 9);
+			uint32_t after = SENTINEL;
+
+			for (size_t i = 0; i < count; ++i) {
+				array[i] = 0;
+			}
+			expect_uint32(SENTINEL, before);
+			expect_uint32(SENTINEL, after);
+		}
+
+	}
+
 	// mem_swap
 	{
 		char test1[] = { 'm','y','t','e','s','t','\0' };
