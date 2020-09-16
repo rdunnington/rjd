@@ -71,6 +71,7 @@ void rjd_path_append(struct rjd_path* path, const char* str)
 	if (start > 0 && start < max_length && path->str[start - 1] != slash && str[0] != slash) {
 		path->str[start] = slash;
 		++start;
+		++path->length;
 	}
 
 	size_t append_length = strlen(str);
@@ -167,24 +168,35 @@ static uint32_t rjd_path_normalize_slashes(char* path, uint32_t length)
 struct rjd_path_enumerator_state_win32
 {
 	struct rjd_mem_allocator* allocator;
-	const char* nextpath;
-	const char* root;
+	char* nextpath;
+	const wchar_t* root;
 	HANDLE handle;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_win32) <= sizeof(struct rjd_path_enumerator_state));
 
-static const char* rjd_path_enumerate_copystring(const char* path, struct rjd_mem_allocator* allocator);
-
 struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* string_allocator)
 {
 	RJD_ASSERT(path);
-	RJD_ASSERT(string_allocator);
+	RJD_ASSERT(allocator);
+
+	wchar_t* path_wide_stack = NULL;
+	{
+		const size_t path_length = strlen(path);
+		const wchar_t search_spec[] = L"/*";
+		path_wide_stack = _alloca((sizeof(wchar_t) * (path_length + 1)) + sizeof(search_spec));
+		mbstowcs(path_wide_stack, path, INT_MAX);
+		wcscpy(path_wide_stack + path_length, search_spec);
+	}
+
+	size_t path_length = wcslen(path_wide_stack) + 1;
+	wchar_t* path_wide_heap = rjd_mem_alloc_array_noclear(wchar_t, path_length, allocator);
+	wcscpy(path_wide_heap, path_wide_stack);
 
 	struct rjd_path_enumerator_state state = {0};
 	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)&state;
-	state_win32->allocator = string_allocator;
+	state_win32->allocator = allocator;
 	state_win32->nextpath = NULL;
-	state_win32->root = rjd_path_enumerate_copystring(path, string_allocator);
+	state_win32->root = path_wide_heap;
 	state_win32->handle = INVALID_HANDLE_VALUE;
 
 	return state;
@@ -194,27 +206,42 @@ const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
 {
 	RJD_ASSERT(state);
 
-	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)&state;
+	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)state;
 
 	if (state_win32->nextpath) {
 		rjd_mem_free(state_win32->nextpath);
 		state_win32->nextpath = NULL;
 	}
 
-	WIN32_FIND_DATAA find_data = {0};
+	WIN32_FIND_DATAW find_data = {0};
 
-	bool success = true;
+	bool success = false;
 	if (state_win32->handle == INVALID_HANDLE_VALUE) {
-		state_win32->handle = FindFirstFileA(state_win32->root, &find_data);
-		success = state_win32->handle != INVALID_HANDLE_VALUE;
-		state_win32->root = NULL;
+		if (state_win32->root) {
+			state_win32->handle = FindFirstFileW(state_win32->root, &find_data);
+			success = state_win32->handle != INVALID_HANDLE_VALUE;
+			state_win32->root = NULL;
+		}
 	} else {
-		success = FindNextFileA(state_win32->handle, &find_data);
+		success = FindNextFileW(state_win32->handle, &find_data);
+	}
+	
+	while (!wcscmp(find_data.cFileName, L".") || !wcscmp(find_data.cFileName, L"..")) {
+		success = FindNextFileW(state_win32->handle, &find_data);
 	}
 
 	if (success)
 	{
-		state_win32->nextpath = rjd_path_enumerate_copystring(find_data.cFileName, state_win32->allocator);
+		char* path_narrow_stack = NULL;
+		{
+			const size_t path_length = wcslen(find_data.cFileName);
+			path_narrow_stack = _alloca(sizeof(char) * (path_length + 1));
+			wcstombs(path_narrow_stack, find_data.cFileName, INT_MAX);
+		}
+
+		size_t path_length = strlen(path_narrow_stack) + 1;
+		state_win32->nextpath = rjd_mem_alloc_array_noclear(char, path_length, state_win32->allocator);
+		strcpy(state_win32->nextpath, path_narrow_stack);
 	}
 
 	return state_win32->nextpath;
@@ -224,7 +251,7 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
 {
 	RJD_ASSERT(state);
 
-	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)&state;
+	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)state;
 
 	rjd_mem_free(state_win32->root);
 	if (state_win32->nextpath) {
@@ -232,14 +259,6 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
 	}
 
 	FindClose(state_win32->handle);
-}
-
-static const char* rjd_path_enumerate_copystring(const char* path, struct rjd_mem_allocator* allocator)
-{
-	uint32_t length = (uint32_t)strlen(path) + 1;
-	char* copy = rjd_mem_alloc_array_noclear(char, length, allocator);
-	memcpy(copy, path, length);
-	return copy;
 }
 
 #elif RJD_PLATFORM_OSX
