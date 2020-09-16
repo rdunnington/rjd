@@ -14,7 +14,13 @@ struct rjd_path
 
 struct rjd_path_enumerator_state
 {
-	char impl[32];
+	char impl[40];
+};
+
+enum RJD_PATH_ENUMERATE_MODE
+{
+	RJD_PATH_ENUMERATE_MODE_RECURSIVE,
+	RJD_PATH_ENUMERATE_MODE_FLAT,
 };
 
 struct rjd_path rjd_path_create(void);
@@ -26,7 +32,7 @@ void rjd_path_clear(struct rjd_path* path);
 const char* rjd_path_extension(const struct rjd_path* path);
 const char* rjd_path_extension_str(const char* path);
 
-struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* string_allocator);
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode);
 const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state);
 void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state);
 
@@ -165,39 +171,41 @@ static uint32_t rjd_path_normalize_slashes(char* path, uint32_t length)
 
 #if RJD_PLATFORM_WINDOWS
 
+#include <wchar.h>
+#include <shellapi.h>
+#include <limits.h> // INT_MAX
+
 struct rjd_path_enumerator_state_win32
 {
 	struct rjd_mem_allocator* allocator;
 	char* nextpath;
 	const wchar_t* root;
 	HANDLE handle;
+	bool is_recursive;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_win32) <= sizeof(struct rjd_path_enumerator_state));
 
-struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* string_allocator)
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode)
 {
 	RJD_ASSERT(path);
 	RJD_ASSERT(allocator);
 
-	wchar_t* path_wide_stack = NULL;
+	wchar_t* path_wide = NULL;
 	{
-		const size_t path_length = strlen(path);
+		const size_t path_length = mbstowcs(NULL, path, INT_MAX);
 		const wchar_t search_spec[] = L"/*";
-		path_wide_stack = _alloca((sizeof(wchar_t) * (path_length + 1)) + sizeof(search_spec));
-		mbstowcs(path_wide_stack, path, INT_MAX);
-		wcscpy(path_wide_stack + path_length, search_spec);
+		path_wide = rjd_mem_alloc_array_noclear(wchar_t, path_length + rjd_countof(search_spec) + 1, allocator);
+		mbstowcs(path_wide, path, INT_MAX);
+		wcscpy(path_wide + path_length, search_spec);
 	}
-
-	size_t path_length = wcslen(path_wide_stack) + 1;
-	wchar_t* path_wide_heap = rjd_mem_alloc_array_noclear(wchar_t, path_length, allocator);
-	wcscpy(path_wide_heap, path_wide_stack);
 
 	struct rjd_path_enumerator_state state = {0};
 	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)&state;
 	state_win32->allocator = allocator;
 	state_win32->nextpath = NULL;
-	state_win32->root = path_wide_heap;
+	state_win32->root = path_wide;
 	state_win32->handle = INVALID_HANDLE_VALUE;
+	state_win32->is_recursive = (RJD_PATH_ENUMERATE_MODE_RECURSIVE == mode);
 
 	return state;
 }
@@ -232,16 +240,9 @@ const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
 
 	if (success)
 	{
-		char* path_narrow_stack = NULL;
-		{
-			const size_t path_length = wcslen(find_data.cFileName);
-			path_narrow_stack = _alloca(sizeof(char) * (path_length + 1));
-			wcstombs(path_narrow_stack, find_data.cFileName, INT_MAX);
-		}
-
-		size_t path_length = strlen(path_narrow_stack) + 1;
-		state_win32->nextpath = rjd_mem_alloc_array_noclear(char, path_length, state_win32->allocator);
-		strcpy(state_win32->nextpath, path_narrow_stack);
+		const size_t path_length = wcstombs(NULL, find_data.cFileName, INT_MAX);
+		state_win32->nextpath = rjd_mem_alloc_array_noclear(char, path_length + 1, state_win32->allocator);
+		wcstombs(state_win32->nextpath, find_data.cFileName, INT_MAX);
 	}
 
 	return state_win32->nextpath;
@@ -273,24 +274,26 @@ struct rjd_path_enumerator_state_osx
 {
 	NSDirectoryEnumerator<NSString*>* enumerator;
 	NSString* next;
+	bool no_recursion;
 };
-RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_osx) <= sizeof(rjd_path_enumerator_state));
+RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_osx) <= sizeof(struct rjd_path_enumerator_state));
 
-struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path)
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, , struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode)
 {
 	RJD_ASSERT(path);
+	RJD_UNUSED_PARAM(allocator);
 
 	NSFileManager* manager = [NSFileManager defaultManager];
 	NSString* startingPath = [NSString stringWithUTF8String:path];
 
 	// NSFileManager:enumeratorAtPath is threadsafe
 	NSDirectoryEnumerator<NSString*>* enumerator = [manager enumeratorAtPath:startingPath];
-	[enumerator skipDescendants];
 
 	struct rjd_path_enumerator_state state = {0};
 	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)&state;
 	state_osx->enumerator = enumerator;
 	state_osx->next = nil;
+	state_osx->no_recursion = (mode == RJD_PATH_ENUMERATE_MODE_FLAT);
 
 	return state;
 }
@@ -300,9 +303,16 @@ const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
 	RJD_ASSERT(state);
 
 	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)state;
+	if (state_osx->no_recursion) {
+		[state_osx->enumerator skipDescendants];
+	}
 	state_osx->next = (NSString*) [state_osx->enumerator nextObject];
-	
-	return state_osx->next.UTF8String;
+
+	const char* next_dir = NULL;
+	if (state_osx->next) {
+		next_dir = state_osx->next.UTF8String;
+	}
+	return next_dir;
 }
 
 void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
