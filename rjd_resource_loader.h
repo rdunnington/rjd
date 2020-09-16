@@ -124,8 +124,11 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 			rjd_array_push(impl->type_mappings, desc.filesystem.type_mappings[i]);
 		}
 
-		struct rjd_path_enumerator_state path_enumerator = rjd_path_enumerate_create(desc.filesystem.root);
-		for (const char* path = rjd_path_enumerate_next(&path_enumerator); path != NULL; path = rjd_path_enumerate_next(&path_enumerator))
+		struct rjd_path_enumerator_state path_enumerator = 
+			rjd_path_enumerate_create(desc.filesystem.root, RJD_PATH_ENUMERATE_MODE_RECURSIVE);
+		for (const char* path = rjd_path_enumerate_next(&path_enumerator); 
+			path != NULL; 
+			path = rjd_path_enumerate_next(&path_enumerator))
 		{
 			const char* extension = rjd_path_extension_str(path);
 			if (extension)

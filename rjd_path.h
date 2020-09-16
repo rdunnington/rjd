@@ -14,7 +14,13 @@ struct rjd_path
 
 struct rjd_path_enumerator_state
 {
-	char impl[16];
+	char impl[24];
+};
+
+enum RJD_PATH_ENUMERATE_MODE
+{
+	RJD_PATH_ENUMERATE_MODE_RECURSIVE,
+	RJD_PATH_ENUMERATE_MODE_FLAT,
 };
 
 struct rjd_path rjd_path_create(void);
@@ -26,7 +32,7 @@ void rjd_path_clear(struct rjd_path* path);
 const char* rjd_path_extension(const struct rjd_path* path);
 const char* rjd_path_extension_str(const char* path);
 
-struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path);
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, enum RJD_PATH_ENUMERATE_MODE mode);
 const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state);
 void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state);
 
@@ -169,9 +175,11 @@ struct rjd_path_enumerator_state_osx
 {
 	NSDirectoryEnumerator<NSString*>* enumerator;
 	NSString* next;
+	bool no_recursion;
 };
+RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_osx) <= sizeof(struct rjd_path_enumerator_state));
 
-struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path)
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, enum RJD_PATH_ENUMERATE_MODE mode)
 {
 	RJD_ASSERT(path);
 
@@ -180,12 +188,12 @@ struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path)
 
 	// NSFileManager:enumeratorAtPath is threadsafe
 	NSDirectoryEnumerator<NSString*>* enumerator = [manager enumeratorAtPath:startingPath];
-	[enumerator skipDescendants];
 
 	struct rjd_path_enumerator_state state = {0};
 	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)&state;
 	state_osx->enumerator = enumerator;
 	state_osx->next = nil;
+	state_osx->no_recursion = (mode == RJD_PATH_ENUMERATE_MODE_FLAT);
 
 	return state;
 }
@@ -195,9 +203,16 @@ const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
 	RJD_ASSERT(state);
 
 	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)state;
+	if (state_osx->no_recursion) {
+		[state_osx->enumerator skipDescendants];
+	}
 	state_osx->next = (NSString*) [state_osx->enumerator nextObject];
-	
-	return state_osx->next.UTF8String;
+
+	const char* next_dir = NULL;
+	if (state_osx->next) {
+		next_dir = state_osx->next.UTF8String;
+	}
+	return next_dir;
 }
 
 void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
