@@ -153,9 +153,9 @@ struct rjd_result rjd_fio_mkdir(const char* path)
 
 static struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path);
 
-#define RJD_FIO_UTF8_TO_UTF16(utf8, out_utf16_name)							\
-	const size_t length_utf16 = mbstowcs(NULL, utf8, INT_MAX);				\
-	wchar_t* out_utf16_name = _alloca(sizeof(wchar_t) * (length_utf16 + 1));\
+#define RJD_FIO_UTF8_TO_UTF16(utf8, out_utf16_name)											\
+	const size_t length_utf16 = mbstowcs(NULL, utf8, INT_MAX);								\
+	wchar_t* out_utf16_name = rjd_mem_alloc_stack_array_noclear(wchar_t, length_utf16 + 1);	\
 	mbstowcs(out_utf16_name, utf8, INT_MAX);
 
 struct rjd_result rjd_fio_delete(const char* path)
@@ -224,8 +224,8 @@ struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path)
 	wchar_t* path_with_search_spec = NULL;
 	const size_t path_length = wcslen(directory_path);
 	{
-		const wchar_t search_spec[] = L"\\*";
-		path_with_search_spec = _alloca((sizeof(wchar_t) * (path_length + 1)) + sizeof(search_spec));
+		const wchar_t search_spec[] = L"/*";
+		path_with_search_spec = rjd_mem_alloc_stack_array_noclear(wchar_t, path_length + rjd_countof(search_spec) + 1);
 		wcscpy(path_with_search_spec, directory_path);
 		wcscpy(path_with_search_spec + path_length, search_spec);
 	}
