@@ -1973,6 +1973,7 @@ void test_atomic()
 	ATOMIC_TEST(uint8)
 
 	#undef ATOMIC_TEST
+
 }
 
 void test_strpool()
@@ -2372,14 +2373,15 @@ void test_stream()
 
 struct test
 {
-	int8_t i8;
-	int16_t i16;
-	int32_t i32;
 	int64_t i64;
-	uint8_t u8;
-	uint16_t u16;
-	uint32_t u32;
 	uint64_t u64;
+	uint32_t u32;
+	int32_t i32;
+	int16_t i16;
+	uint16_t u16;
+	int8_t i8;
+	uint8_t u8;
+	char pad[2]; // explicit to ensure the pad bytes get initialized as well
 };
 
 void test_struct_readwrite(struct rjd_binrw_state* state, struct test* data)
