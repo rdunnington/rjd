@@ -321,21 +321,20 @@ struct rjd_result rjd_lock_create(struct rjd_lock* lock)
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 
 	DWORD SPIN_COUNT = 0;
-	DWORD FLAGS = 0; // maybe use CRITICAL_SECTION_NO_DEBUG_INFO in release?
+	DWORD FLAGS = 0; // TODO maybe use CRITICAL_SECTION_NO_DEBUG_INFO in release?
 
 	lock_win32->owning_thread = RJD_THREAD_ID_INVALID;
 	if (InitializeCriticalSectionEx(&lock_win32->cs, SPIN_COUNT, FLAGS)) {
 		return RJD_RESULT_OK();
 	}
 
-	// posix mutex is non-rentrant but win32 critical section is. need to assert
-	// that owning thread locking the CS isn't the current thread
 	return RJD_RESULT("Win32 API call failed. Call GetLastError() for more info.");
 }
 
 struct rjd_result rjd_lock_destroy(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
+
 	if (RJD_THREAD_ID_INVALID.id != lock_win32->owning_thread.id) {
 		return RJD_RESULT("The lock is still in use by a thread");
 	}
@@ -348,6 +347,13 @@ struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 	const struct rjd_thread_id current_thread = rjd_thread_current();
+
+	// posix mutex is non-reentrant but win32 critical section is. To keep functionality the same,
+	// we ensure this CS is non-recursive as well.
+	if (lock_win32->owning_thread.id == current_thread.id) {
+		return RJD_RESULT("Lock recursion detected.");
+	}
+
 	EnterCriticalSection(&lock_win32->cs);
 	lock_win32->owning_thread = current_thread;
 	return RJD_RESULT_OK();
@@ -357,6 +363,13 @@ struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 	const struct rjd_thread_id current_thread = rjd_thread_current();
+
+	// posix mutex is non-reentrant but win32 critical section is. To keep functionality the same,
+	// we ensure this CS is non-recursive as well.
+	if (lock_win32->owning_thread.id == current_thread.id) {
+		return RJD_RESULT("Lock recursion detected.");
+	}
+
 	if (!TryEnterCriticalSection(&lock_win32->cs)) {
 		return RJD_RESULT("Lock in use");
 	}
