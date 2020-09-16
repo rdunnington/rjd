@@ -2,22 +2,22 @@
 
 #define RJD_MEM_H 1
 
-struct rjd_mem_allocator_stats
+struct rjd_mem_allocator_stats // TODO use atomics
 {
-	uint32_t total_size;
+	struct rjd_atomic_uint64 total_size;
 	struct {
-		uint64_t used;
-		uint64_t overhead;
-		uint64_t peak;
-		uint64_t unused;
-		uint64_t allocs;
-		uint64_t frees;
+		struct rjd_atomic_uint64 used;
+		struct rjd_atomic_uint64 overhead;
+		struct rjd_atomic_uint64 peak;
+		struct rjd_atomic_uint64 unused;
+		struct rjd_atomic_uint64 allocs;
+		struct rjd_atomic_uint64 frees;
 	} current;
 	struct {
-		uint64_t peak;
-		uint64_t allocs;
-		uint64_t frees;
-		uint64_t resets;
+		struct rjd_atomic_uint64 peak;
+		struct rjd_atomic_uint64 allocs;
+		struct rjd_atomic_uint64 frees;
+		struct rjd_atomic_uint64 resets;
 	} lifetime;
 };
 
@@ -110,14 +110,11 @@ struct rjd_mem_allocator rjd_mem_allocator_init_default()
 		.free_func = NULL,
 		.reset_func = NULL,
 		.optional_heap = NULL,
-		.stats = {
-			.total_size = RJD_MEM_STATS_UNKNOWN_UPPERBOUND,
-			.current = {
-				.unused = RJD_MEM_STATS_UNKNOWN_UPPERBOUND,
-			},
-		},
 		.debug_sentinel = RJD_MEM_DEBUG_DEFAULT_SENTINEL32,
 	};
+
+	rjd_atomic_uint64_set(&allocator.stats.total_size, RJD_MEM_STATS_UNKNOWN_UPPERBOUND);
+	rjd_atomic_uint64_set(&allocator.stats.current.unused, RJD_MEM_STATS_UNKNOWN_UPPERBOUND);
 
 	// MSVC has a slightly different signature for malloc/free so to avoid platform-specific
 	// code, we just wrap them for all platforms here
@@ -156,14 +153,11 @@ struct rjd_mem_allocator rjd_mem_allocator_init_linear(void* memblock, size_t si
 		.free_func = NULL,
 		.reset_func = rjd_mem_allocator_linear_reset,
 		.optional_heap = heap,
-		.stats = {
-			.total_size = usable_size,
-			.current = {
-				.unused = usable_size,
-			},
-		},
 		.debug_sentinel = RJD_MEM_DEBUG_LINEAR_SENTINEL32,
 	};
+
+	rjd_atomic_uint64_set(&allocator.stats.total_size, usable_size);
+	rjd_atomic_uint64_set(&allocator.stats.current.unused, usable_size);
 
 	return allocator;
 }
@@ -178,17 +172,16 @@ bool rjd_mem_allocator_reset(struct rjd_mem_allocator* allocator)
 {
 	RJD_ASSERT(allocator);
 
-	allocator->stats.current.used = 0;
-	allocator->stats.current.overhead = 0;
-	allocator->stats.current.peak = 0;
-	allocator->stats.current.unused = allocator->stats.total_size;
-	allocator->stats.current.allocs = 0;
-	allocator->stats.current.frees = 0;
-	++allocator->stats.lifetime.resets;
+	rjd_atomic_uint64_set(&allocator->stats.current.used, 0);
+	rjd_atomic_uint64_set(&allocator->stats.current.overhead, 0);
+	rjd_atomic_uint64_set(&allocator->stats.current.peak, 0);
+	rjd_atomic_uint64_set(&allocator->stats.current.unused, rjd_atomic_uint64_get(&allocator->stats.total_size));
+	rjd_atomic_uint64_set(&allocator->stats.current.allocs, 0);
+	rjd_atomic_uint64_set(&allocator->stats.current.frees, 0);
+	rjd_atomic_uint64_inc(&allocator->stats.lifetime.resets);
 
 	if (allocator->reset_func) {
 		allocator->reset_func(allocator->optional_heap);
-
 		return true;
 	}
 	return false;
@@ -233,20 +226,39 @@ void* rjd_mem_alloc_impl(size_t size, struct rjd_mem_allocator* allocator, uint3
     header->offset_to_block_begin_from_user = (uint16_t)offset_to_block_begin_from_user;
 	header->debug_sentinel = allocator->debug_sentinel;
 
+	// stats tracking
 	{
-		uint64_t* current_used = &allocator->stats.current.used;
-		uint64_t* current_peak = &allocator->stats.current.peak;
-		uint64_t* lifetime_peak = &allocator->stats.lifetime.peak;
-		*current_used += total_size;
-		allocator->stats.current.overhead += total_size - size;
-		*current_peak = (*current_peak < *current_used) ? *current_used : *current_peak;
-		*lifetime_peak = (*lifetime_peak < *current_used) ? *current_used : *lifetime_peak;
-		if (allocator->stats.current.unused != RJD_MEM_STATS_UNKNOWN_UPPERBOUND) {
-			RJD_ASSERT(allocator->stats.current.unused >= total_size);
-			allocator->stats.current.unused -= total_size;
+		rjd_atomic_uint64_add(&allocator->stats.current.used, total_size);
+		rjd_atomic_uint64_add(&allocator->stats.current.overhead, total_size - size);
+
+		while (true) {
+			uint64_t old_peak = rjd_atomic_uint64_get(&allocator->stats.current.peak);
+			uint64_t new_peak = rjd_atomic_uint64_get(&allocator->stats.current.used);
+
+			if (new_peak <= old_peak || 
+				rjd_atomic_uint64_compare_exchange(&allocator->stats.current.peak, &old_peak, new_peak)) {
+				break;
+			}
 		}
-		++allocator->stats.current.allocs;
-		++allocator->stats.lifetime.allocs;
+
+		while (true) {
+			uint64_t old_peak = rjd_atomic_uint64_get(&allocator->stats.lifetime.peak);
+			uint64_t new_peak = rjd_atomic_uint64_get(&allocator->stats.current.used);
+
+			if (new_peak <= old_peak || 
+				rjd_atomic_uint64_compare_exchange(&allocator->stats.lifetime.peak,  &old_peak, new_peak)) {
+				break;
+			}
+		}
+
+		uint64_t unused = rjd_atomic_uint64_get(&allocator->stats.current.unused);
+		if (unused != RJD_MEM_STATS_UNKNOWN_UPPERBOUND) {
+			RJD_ASSERT(unused >= total_size);
+			rjd_atomic_uint64_sub(&allocator->stats.current.unused, total_size);
+		}
+
+		rjd_atomic_uint64_inc(&allocator->stats.current.allocs);
+		rjd_atomic_uint64_inc(&allocator->stats.lifetime.allocs);
 	}
 
 	return (void*)aligned_user;
@@ -265,13 +277,17 @@ void rjd_mem_free(const void* mem)
 	RJD_ASSERTMSG(header->debug_sentinel == allocator->debug_sentinel, "This memory was not allocated with rjd_mem_alloc.");
 
 	if (allocator->free_func) {
-		RJD_ASSERT(allocator->stats.current.used >= header->total_blocksize);
-		allocator->stats.current.used -= header->total_blocksize;
-		if (allocator->stats.current.unused != RJD_MEM_STATS_UNKNOWN_UPPERBOUND) {
-			allocator->stats.current.unused += header->total_blocksize;
+		{
+			uint64_t used = rjd_atomic_uint64_get(&allocator->stats.current.used);
+			RJD_ASSERTMSG(used >= header->total_blocksize, "Allocator used (%llu) must be >= block size (%llu)", used, header->total_blocksize);
 		}
-		++allocator->stats.current.frees;
-		++allocator->stats.lifetime.frees;
+		rjd_atomic_uint64_sub(&allocator->stats.current.used, header->total_blocksize);
+
+		if (rjd_atomic_uint64_get(&allocator->stats.current.unused) != RJD_MEM_STATS_UNKNOWN_UPPERBOUND) {
+			rjd_atomic_uint64_add(&allocator->stats.current.unused, header->total_blocksize);
+		}
+		rjd_atomic_uint64_inc(&allocator->stats.current.frees);
+		rjd_atomic_uint64_inc(&allocator->stats.lifetime.frees);
         
         char* begin = raw - header->offset_to_block_begin_from_user;
         allocator->free_func(begin);

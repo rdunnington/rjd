@@ -109,7 +109,7 @@ void expect_path(const char* expected, struct rjd_path path)
 void expect_no_leaks(const struct rjd_mem_allocator* allocator)
 {
 	struct rjd_mem_allocator_stats stats = rjd_mem_allocator_getstats(allocator);
-	RJD_ASSERTMSG(stats.current.used == 0, "Found some leaks");
+	RJD_ASSERTMSG(rjd_atomic_uint64_get(&stats.current.used) == 0, "Found some leaks");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -437,41 +437,41 @@ void test_mem()
 		expect_true(rjd_mem_alloc_array(char, 256, &allocator) != NULL);
 		expect_true(rjd_mem_alloc_array(char, 256, &allocator) != NULL);
 
-		expect_true(allocator.stats.total_size <= sizeof(stackmem));
+		expect_true(rjd_atomic_uint64_get(&allocator.stats.total_size) <= sizeof(stackmem));
 		{
-			const uint32_t total = allocator.stats.total_size;
-			expect_uint64(allocator.stats.current.used - allocator.stats.current.overhead, 256 * 3);
-			expect_uint64(allocator.stats.current.peak, allocator.stats.current.used);
-			expect_uint64(allocator.stats.current.unused, total - ((256 * 3) + allocator.stats.current.overhead));
-			expect_uint64(allocator.stats.current.allocs, 3);
-			expect_uint64(allocator.stats.current.frees, 0);
+			const uint64_t total = rjd_atomic_uint64_get(&allocator.stats.total_size);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.used) - rjd_atomic_uint64_get(&allocator.stats.current.overhead), 256 * 3);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.peak), rjd_atomic_uint64_get(&allocator.stats.current.used));
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.unused), total - ((256 * 3) + rjd_atomic_uint64_get(&allocator.stats.current.overhead)));
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.allocs), 3);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.frees), 0);
 
-			expect_uint64(allocator.stats.lifetime.peak, allocator.stats.current.peak);
-			expect_uint64(allocator.stats.lifetime.allocs, 3);
-			expect_uint64(allocator.stats.lifetime.frees, 0);
-			expect_uint64(allocator.stats.lifetime.resets, 0);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.peak), rjd_atomic_uint64_get(&allocator.stats.current.peak));
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.allocs), 3);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.frees), 0);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.resets), 0);
 		}
 
-        const uint64_t old_peak = allocator.stats.lifetime.peak;
+        const uint64_t old_peak = rjd_atomic_uint64_get(&allocator.stats.lifetime.peak);
 		expect_true(rjd_mem_allocator_reset(&allocator));
 
 		expect_true(rjd_mem_alloc_array(char, 512, &allocator) != NULL);
 		{
-			const uint32_t total = allocator.stats.total_size;
-			expect_uint64(allocator.stats.current.used - allocator.stats.current.overhead, 512);
-			expect_uint64(allocator.stats.current.peak, allocator.stats.current.used);
-			expect_uint64(allocator.stats.current.unused, total - (512 + allocator.stats.current.overhead));
-			expect_uint64(allocator.stats.current.allocs, 1);
-			expect_uint64(allocator.stats.current.frees, 0);
+			const uint64_t total = rjd_atomic_uint64_get(&allocator.stats.total_size);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.used) - rjd_atomic_uint64_get(&allocator.stats.current.overhead), 512);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.peak), rjd_atomic_uint64_get(&allocator.stats.current.used));
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.unused), total - (512 + rjd_atomic_uint64_get(&allocator.stats.current.overhead)));
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.allocs), 1);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.frees), 0);
 
-			expect_uint64(allocator.stats.lifetime.peak, old_peak);
-			expect_uint64(allocator.stats.lifetime.allocs, 4);
-			expect_uint64(allocator.stats.lifetime.frees, 0);
-			expect_uint64(allocator.stats.lifetime.resets, 1);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.peak), old_peak);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.allocs), 4);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.frees), 0);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.resets), 1);
 		}
 
 		expect_true(rjd_mem_allocator_reset(&allocator));
-		expect_uint64(allocator.stats.lifetime.resets, 2);
+		expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.resets), 2);
 	}
 
 	// mem_swap
