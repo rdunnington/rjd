@@ -27,9 +27,11 @@ struct rjd_result rjd_utf8_bom_write(char* buffer, size_t size)
 		return RJD_RESULT("Buffer must be at least 3 characters long.");
 	}
 
-	*(buffer + 0) = 0xEF;
-	*(buffer + 1) = 0xBB;
-	*(buffer + 2) = 0xBF;
+	uint8_t* aliased = (uint8_t*)buffer;
+
+	*(aliased + 0) = 0xEF;
+	*(aliased + 1) = 0xBB;
+	*(aliased + 2) = 0xBF;
 
 	return RJD_RESULT_OK();
 }

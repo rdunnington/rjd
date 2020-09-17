@@ -155,8 +155,8 @@ float* rjd_procgeo_circle(float radius, uint32_t tesselation, float* out, uint32
 		float p2_radians = arc_radians * (arc_segment + 1);
 
 		out[i++] = 0;							out[i++] = 0;							out[i++] = 0; i += stride;
-		out[i++] = cos(p1_radians) * radius;	out[i++] = sin(p1_radians) * radius;	out[i++] = 0; i += stride;
-		out[i++] = cos(p2_radians) * radius;	out[i++] = sin(p2_radians) * radius;	out[i++] = 0; i += stride;
+		out[i++] = cosf(p1_radians) * radius;	out[i++] = sinf(p1_radians) * radius;	out[i++] = 0; i += stride;
+		out[i++] = cosf(p2_radians) * radius;	out[i++] = sinf(p2_radians) * radius;	out[i++] = 0; i += stride;
 	}
 
 	return out + num_verts * floats_per_vert;
@@ -245,10 +245,10 @@ float* rjd_procgeo_cone(float height, float radius, uint32_t tesselation, float*
 		float p1_radians = arc_radians * arc_segment;
 		float p2_radians = arc_radians * (arc_segment + 1);
 
-		float cos_1 = cos(p1_radians) * radius; 
-		float sin_1 = sin(p1_radians) * radius;
-		float cos_2 = cos(p2_radians) * radius; 
-		float sin_2 = sin(p2_radians) * radius;
+		float cos_1 = cosf(p1_radians) * radius; 
+		float sin_1 = sinf(p1_radians) * radius;
+		float cos_2 = cosf(p2_radians) * radius; 
+		float sin_2 = sinf(p2_radians) * radius;
 
 		uint32_t bot_index = i;
 		uint32_t top_index = i + top_begin_offset;
@@ -284,10 +284,10 @@ float* rjd_procgeo_cylinder(float radius, float height, uint32_t tesselation, fl
 		float p1_radians = arc_radians * arc_segment;
 		float p2_radians = arc_radians * (arc_segment + 1);
 
-		float cos_1 = cos(p1_radians) * radius; 
-		float sin_1 = sin(p1_radians) * radius;
-		float cos_2 = cos(p2_radians) * radius; 
-		float sin_2 = sin(p2_radians) * radius;
+		float cos_1 = cosf(p1_radians) * radius; 
+		float sin_1 = sinf(p1_radians) * radius;
+		float cos_2 = cosf(p2_radians) * radius; 
+		float sin_2 = sinf(p2_radians) * radius;
 
 		uint32_t bot_index = v * floats_per_vert;
 		out[bot_index++] = 0;		out[bot_index++] = -y; out[bot_index++] = 0;		bot_index += stride;
@@ -331,22 +331,22 @@ float* rjd_procgeo_sphere(float radius, uint32_t tesselation, float* out, uint32
 		float y_arc1 = (float)y_arc / final_tesselation;
 		float y_arc2 = (float)(y_arc + 1) / final_tesselation;
 
-		float cos_2pi_y_arc1 = cos(2 * pi * y_arc1);
-		float cos_2pi_y_arc2 = cos(2 * pi * y_arc2);
+		float cos_2pi_y_arc1 = cosf(2 * pi * y_arc1);
+		float cos_2pi_y_arc2 = cosf(2 * pi * y_arc2);
 
-		float sin_2pi_y_arc1 = sin(2 * pi * y_arc1);
-		float sin_2pi_y_arc2 = sin(2 * pi * y_arc2);
+		float sin_2pi_y_arc1 = sinf(2 * pi * y_arc1);
+		float sin_2pi_y_arc2 = sinf(2 * pi * y_arc2);
 
 		for (uint32_t xz_arc = 0; xz_arc < final_tesselation; ++xz_arc) {
 
 			float xz_arc1 = (float)xz_arc / final_tesselation;
 			float xz_arc2 = (float)(xz_arc + 1) / final_tesselation;
 
-			float sin_pi_xz_arc1 = sin(pi * xz_arc1);
-			float cos_pi_xz_arc1 = cos(pi * xz_arc1);
+			float sin_pi_xz_arc1 = sinf(pi * xz_arc1);
+			float cos_pi_xz_arc1 = cosf(pi * xz_arc1);
 
-			float sin_pi_xz_arc2 = sin(pi * xz_arc2);
-			float cos_pi_xz_arc2 = cos(pi * xz_arc2);
+			float sin_pi_xz_arc2 = sinf(pi * xz_arc2);
+			float cos_pi_xz_arc2 = cosf(pi * xz_arc2);
 
 			float x1 = sin_pi_xz_arc1 * cos_2pi_y_arc1 * radius;
 			float y1 = cos_pi_xz_arc1 * radius;

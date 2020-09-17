@@ -1,5 +1,5 @@
 ifeq ($(OS), Windows_NT)
-	PLATFORM_FLAGS :=
+	PLATFORM_FLAGS := -D WINVER=_WIN32_WINNT_WIN10 -D _WIN32_WINNT=_WIN32_WINNT_WIN10 -D WDK_NTDDI_VERSION=NTDDI_WIN10_RS1
 	PLATFORM_FILES := tests_rjd.c
 else
 	#SHELL_NAME := $(shell uname -s)
@@ -13,8 +13,8 @@ else
 endif
 
 all:
-	# -Wno-unused-local-typedefs to suppress locally defined typedefs coming from RJD_STATIC_ASSERT
-	gcc --std=c11 -pedantic -Wall -Wextra -g -march=native -Wno-unused-local-typedefs $(PLATFORM_FLAGS) tests.c $(PLATFORM_FILES) 
+	@# -Wno-unused-local-typedefs to suppress locally defined typedefs coming from RJD_STATIC_ASSERT
+	gcc --std=c11 -pedantic -Wall -Wextra -g -march=native -Wno-unused-local-typedefs -Wno-missing-braces $(PLATFORM_FLAGS) tests.c $(PLATFORM_FILES) 
 
 tags:
 	ctags -f tags *
@@ -27,3 +27,5 @@ clean:
 	rm -r Debug
 	rm *.stackdump
 
+check:
+	./a.exe

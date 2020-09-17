@@ -149,7 +149,7 @@ void rjd_cmd_usage(const struct rjd_cmd* cmd)
 	}
 	reqString[offset] = 0;
 
-	printf("Usage: %s [%s] %s\n", cmd->argv[0], optString, reqString);
+	RJD_LOG("Usage: %s [%s] %s", cmd->argv[0], optString, reqString);
 }
 
 void rjd_cmd_help(const struct rjd_cmd* cmd) 
@@ -157,15 +157,15 @@ void rjd_cmd_help(const struct rjd_cmd* cmd)
 	rjd_cmd_usage(cmd);
 
 	for (size_t i = 0; i < rjd_array_count(cmd->reqs); ++i) {
-		printf("%s\n\t%s\n", cmd->reqs[i].argname, cmd->reqs[i].description);
+		RJD_LOG("%s\n\t%s", cmd->reqs[i].argname, cmd->reqs[i].description);
 	}
 
 	for (size_t i = 0; i < rjd_array_count(cmd->opts); ++i) {
 		const struct rjd_cmd_argv* arg = cmd->opts + i;
 		if (arg->argname) {
-			printf("%s %s, %s=%s\n\t%s\n", arg->shortname, arg->argname, arg->longname, arg->argname, arg->description);
+			RJD_LOG("%s %s, %s=%s\n\t%s", arg->shortname, arg->argname, arg->longname, arg->argname, arg->description);
 		} else {
-			printf("%s, %s\n\t%s\n", arg->shortname, arg->longname, arg->description);
+			RJD_LOG("%s, %s\n\t%s", arg->shortname, arg->longname, arg->description);
 		}
 	}
 }

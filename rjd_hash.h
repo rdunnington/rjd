@@ -17,8 +17,8 @@ enum
 	RJD_HASH_NULLTERMINATED_BUFFER = -1,
 };
 
-const extern struct rjd_hash32 RJD_HASH32_INVALID;
-const extern struct rjd_hash64 RJD_HASH64_INVALID;
+extern const struct rjd_hash32 RJD_HASH32_INVALID;
+extern const struct rjd_hash64 RJD_HASH64_INVALID;
 
 // You can pass -1 as the length to indicate a NULL-terminated buffer (e.g. c-style string)
 struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length);
@@ -66,8 +66,8 @@ struct rjd_hash32 rjd_hash32_data(const uint8_t* key, int length)
 		return hash;
 	}
 
-	const uint64_t PRIME = 16777619;
-	const uint64_t SEED  = 2166136261;
+	const uint32_t PRIME = 16777619;
+	const uint32_t SEED  = 2166136261;
 
 	struct rjd_hash32 hash = { SEED };
 	if (length == -1) {

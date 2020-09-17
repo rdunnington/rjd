@@ -14,7 +14,7 @@ struct rjd_path
 
 struct rjd_path_enumerator_state
 {
-	char impl[24];
+	char impl[40];
 };
 
 enum RJD_PATH_ENUMERATE_MODE
@@ -32,7 +32,7 @@ void rjd_path_clear(struct rjd_path* path);
 const char* rjd_path_extension(const struct rjd_path* path);
 const char* rjd_path_extension_str(const char* path);
 
-struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, enum RJD_PATH_ENUMERATE_MODE mode);
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode);
 const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state);
 void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state);
 
@@ -57,11 +57,13 @@ struct rjd_path rjd_path_create()
 struct rjd_path rjd_path_create_with(const char* initial_contents)
 {
 	struct rjd_path path;
-	char* end = stpncpy(path.str, initial_contents, RJD_PATH_BUFFER_LENGTH - 1);
-	*end = '\0';
-	path.length = (uint32_t)(end - path.str);
-	RJD_ASSERT(path.length <= RJD_PATH_BUFFER_LENGTH);
+	path.length = (uint32_t)strlen(initial_contents);
+	RJD_ASSERTMSG(path.length < RJD_PATH_BUFFER_LENGTH, 
+				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the passed string (%u).",
+				RJD_PATH_BUFFER_LENGTH, path.length);
 
+	strncpy(path.str, initial_contents, path.length);
+	path.str[path.length] = 0;
 	path.length = rjd_path_normalize_slashes(path.str, path.length);
 	return path;
 }
@@ -75,12 +77,17 @@ void rjd_path_append(struct rjd_path* path, const char* str)
 	if (start > 0 && start < max_length && path->str[start - 1] != slash && str[0] != slash) {
 		path->str[start] = slash;
 		++start;
+		++path->length;
 	}
 
-	char* end = stpncpy(path->str + start, str, max_length - start);
-    uint32_t length = (uint32_t)(end - path->str);
-
-	path->length = rjd_path_normalize_slashes(path->str, length);
+	size_t append_length = strlen(str);
+	size_t new_length = append_length + path->length;
+	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH, 
+				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u).",
+				RJD_PATH_BUFFER_LENGTH, new_length);
+	strncpy(path->str + path->length, str, append_length);
+	path->str[new_length] = 0;
+	path->length = rjd_path_normalize_slashes(path->str, (uint32_t)new_length);
 }
 
 void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2)
@@ -163,6 +170,143 @@ static uint32_t rjd_path_normalize_slashes(char* path, uint32_t length)
 }
 
 #if RJD_PLATFORM_WINDOWS
+
+#include <wchar.h>
+#include <shellapi.h>
+#include <limits.h> // INT_MAX
+
+struct rjd_path_enumerator_state_win32
+{
+	struct rjd_mem_allocator* allocator;
+	char* nextpath;
+	wchar_t** root_dirs;
+	HANDLE handle;
+	bool is_recursive;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_win32) <= sizeof(struct rjd_path_enumerator_state));
+
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode)
+{
+	RJD_ASSERT(path);
+	RJD_ASSERT(allocator);
+
+	struct rjd_path_enumerator_state state = {0};
+	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)&state;
+	state_win32->allocator = allocator;
+	state_win32->nextpath = NULL;
+	state_win32->root_dirs = rjd_array_alloc(wchar_t*, 16, allocator);
+	state_win32->handle = INVALID_HANDLE_VALUE;
+	state_win32->is_recursive = (RJD_PATH_ENUMERATE_MODE_RECURSIVE == mode);
+
+	wchar_t* path_wide = NULL;
+	{
+		const size_t path_length = mbstowcs(NULL, path, INT_MAX);
+		path_wide = rjd_mem_alloc_array_noclear(wchar_t, path_length + 1, allocator);
+		mbstowcs(path_wide, path, INT_MAX);
+	}
+	rjd_array_push(state_win32->root_dirs, path_wide);
+
+	return state;
+}
+
+static wchar_t* rjd_path_enumerate_concat_paths(const wchar_t* a, const wchar_t* b, struct rjd_mem_allocator* allocator)
+{
+	const wchar_t path_separator[] = L"/";
+
+	size_t length_a = wcslen(a);
+	size_t length_b = wcslen(b);
+	size_t length_separator = wcslen(path_separator);
+
+	size_t length_total = length_a + length_separator + length_b;
+
+	wchar_t* concat = rjd_mem_alloc_array_noclear(wchar_t, length_total + 1, allocator);
+	wcscpy(concat, a);
+	wcscpy(concat + length_a, path_separator);
+	wcscpy(concat + length_a + length_separator, b);
+	return concat;
+}
+
+const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
+{
+	RJD_ASSERT(state);
+
+	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)state;
+
+	if (state_win32->nextpath) {
+		rjd_mem_free(state_win32->nextpath);
+		state_win32->nextpath = NULL;
+	}
+
+	WIN32_FIND_DATAW find_data = {0};
+	while (!*find_data.cFileName && rjd_array_count(state_win32->root_dirs) > 0) {
+
+		if (state_win32->handle == INVALID_HANDLE_VALUE) {
+			wchar_t* root_with_search_spec = rjd_path_enumerate_concat_paths(state_win32->root_dirs[0], L"*", state_win32->allocator);
+			state_win32->handle = FindFirstFileW(root_with_search_spec, &find_data);
+			rjd_mem_free(root_with_search_spec);
+
+			if (state_win32->handle == INVALID_HANDLE_VALUE) {
+				find_data.cFileName[0] = '\0';
+				rjd_mem_free(state_win32->root_dirs[0]);
+				rjd_array_erase_unordered(state_win32->root_dirs, 0);
+			}
+		}
+
+		if (state_win32->handle != INVALID_HANDLE_VALUE) {
+			bool success = true;
+			if (!*find_data.cFileName) {
+				success = FindNextFileW(state_win32->handle, &find_data);
+			}
+
+			while (success && (!wcscmp(find_data.cFileName, L".") || !wcscmp(find_data.cFileName, L".."))) {
+				success = FindNextFileW(state_win32->handle, &find_data);
+			}
+
+			if (!success) {
+				find_data.cFileName[0] = '\0';
+				state_win32->handle = INVALID_HANDLE_VALUE;
+				rjd_mem_free(state_win32->root_dirs[0]);
+				rjd_array_erase_unordered(state_win32->root_dirs, 0);
+			}
+		}
+
+		if (*find_data.cFileName && state_win32->is_recursive) {
+			if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+				wchar_t* new_root = rjd_path_enumerate_concat_paths(state_win32->root_dirs[0], find_data.cFileName, state_win32->allocator);
+				rjd_array_push(state_win32->root_dirs, new_root);
+			}
+		}
+	}
+
+	if (*find_data.cFileName)
+	{
+		wchar_t* path = rjd_path_enumerate_concat_paths(state_win32->root_dirs[0], find_data.cFileName, state_win32->allocator);
+
+		const size_t path_length = wcstombs(NULL, path, INT_MAX);
+		state_win32->nextpath = rjd_mem_alloc_array_noclear(char, path_length + 1, state_win32->allocator);
+		wcstombs(state_win32->nextpath, path, INT_MAX);
+
+		rjd_mem_free(path);
+	}
+
+	return state_win32->nextpath;
+}
+
+void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
+{
+	RJD_ASSERT(state);
+
+	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)state;
+
+	for (uint32_t i = 0; i < rjd_array_count(state_win32->root_dirs); ++i) {
+		rjd_mem_free(state_win32->root_dirs + i);
+	}
+	rjd_array_free(state_win32->root_dirs);
+	rjd_mem_free(state_win32->nextpath);
+
+	FindClose(state_win32->handle);
+}
+
 #elif RJD_PLATFORM_OSX
 
 #if !RJD_LANG_OBJC
@@ -179,9 +323,10 @@ struct rjd_path_enumerator_state_osx
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_osx) <= sizeof(struct rjd_path_enumerator_state));
 
-struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, enum RJD_PATH_ENUMERATE_MODE mode)
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, , struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode)
 {
 	RJD_ASSERT(path);
+	RJD_UNUSED_PARAM(allocator);
 
 	NSFileManager* manager = [NSFileManager defaultManager];
 	NSString* startingPath = [NSString stringWithUTF8String:path];

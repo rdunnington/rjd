@@ -12,11 +12,9 @@ void rjd_timer_reset(struct rjd_timer* timer);
 double rjd_timer_elapsed(const struct rjd_timer* timer);
 double rjd_timer_global(void);
 
-#define RJD_PROFILE_SCOPE(name, scope) {									\
-		struct rjd_timer _timer##name = rjd_timer_init(); 					\
-		{scope}																\
-		RJD_LOG("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&_timer##name));	\
-	}
+#define RJD_PROFILE_SCOPE_BEGIN(name) struct rjd_timer timer_##name = rjd_timer_init();
+#define RJD_PROFILE_SCOPE_END_WITHLOG(name, log_function) log_function("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&timer_##name));
+#define RJD_PROFILE_SCOPE_END(name)	RJD_PROFILE_SCOPE_END_WITHLOG(name, RJD_LOG)
 
 #if RJD_IMPL
 

@@ -18,10 +18,7 @@ bool rjd_fio_exists(const char* path);
 
 #if RJD_IMPL
 
-#if RJD_PLATFORM_OSX
-#include <sys/stat.h>
-#include <ftw.h>
-#endif
+static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername);
 
 struct rjd_result rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* allocator)
 {
@@ -100,30 +97,197 @@ struct rjd_result rjd_fio_size(const char* path, size_t* out_size)
 	return RJD_RESULT_OK();
 }
 
-#if RJD_PLATFORM_WINDOWS
-struct rjd_result rjd_fio_delete(const char* path)
-{
-	return RJD_RESULT("not implmented");
-}
-
 struct rjd_result rjd_fio_mkdir(const char* path)
 {
-	return RJD_RESULT("not implmented");
+    RJD_ASSERT(path);
+    RJD_ASSERT(*path);
+    
+    struct rjd_result result = RJD_RESULT_OK();
+    
+    const char* next = path;
+    const char* end = next;
+	do
+    {
+		end = strstr(end, "/");
+        // skip directory separator
+        if (end) {
+            ++end;
+        }
+        
+        char stackbuffer[256];
+        const char* subpath = NULL;
+
+		if (end) {
+			size_t length = end - next;
+            RJD_ASSERT(length < (ptrdiff_t)sizeof(stackbuffer));
+			memcpy(stackbuffer, next, length);
+			stackbuffer[length] = '\0';
+			if (stackbuffer[length - 1] == '/') {
+				stackbuffer[length - 1] = '\0';
+			}
+            subpath = stackbuffer;
+		} else {
+			subpath = next;
+		}
+
+		if (rjd_fio_exists(subpath)) {
+			result = RJD_RESULT("Path already exists");
+		} else {
+			result = rjd_fio_mkdir_platform(subpath);
+			if (!rjd_result_isok(result)) {
+				break;
+			}
+		}
+    } while (end != NULL);
+    
+    return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+#if RJD_COMPILER_MSVC
+
+#include <shellapi.h>
+
+static struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path);
+
+#define RJD_FIO_UTF8_TO_UTF16(utf8, out_utf16_name)											\
+	const size_t length_utf16 = mbstowcs(NULL, utf8, INT_MAX);								\
+	wchar_t* out_utf16_name = rjd_mem_alloc_stack_array_noclear(wchar_t, length_utf16 + 1);	\
+	mbstowcs(out_utf16_name, utf8, INT_MAX);
+
+struct rjd_result rjd_fio_delete(const char* path)
+{
+	RJD_ASSERT(path && *path);
+	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
+
+	DWORD attributes = GetFileAttributesW(path_wide);
+	if (attributes == INVALID_FILE_ATTRIBUTES)
+	{
+		return RJD_RESULT("Failed getting path attributes. Check permissions and verify the path exists.");
+	}
+
+	if (attributes & FILE_ATTRIBUTE_READONLY) {
+		return RJD_RESULT("Path is read-only");
+	}
+
+	if (attributes & FILE_ATTRIBUTE_DIRECTORY) {
+		return rjd_fio_delete_folder_recursive(path_wide);
+	}
+
+	if (!DeleteFileW(path_wide)) {
+		return RJD_RESULT("Failed to delete file. Check GetLastError() for more info.");
+	}
+
+	return RJD_RESULT_OK();
 }
 
 bool rjd_fio_exists(const char* path)
 {
-	return false;
+	RJD_ASSERT(path);
+	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
+
+	DWORD attributes = GetFileAttributesW(path_wide);
+	if (attributes == INVALID_FILE_ATTRIBUTES) {
+		DWORD err = GetLastError();
+		return err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND;
+	}
+
+	return true;
 }
 
-#elif RJD_PLATFORM_OSX
-static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+////////////////////////////////////////////////////////////////////////////////
+
+static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
 {
-	RJD_UNUSED_PARAM(sb);
-	RJD_UNUSED_PARAM(typeflag);
-	RJD_UNUSED_PARAM(ftwbuf);
-	return remove(path);
+	RJD_FIO_UTF8_TO_UTF16(foldername, foldername_wide);
+
+	struct rjd_result result = RJD_RESULT_OK();
+	SECURITY_ATTRIBUTES security = { .nLength = sizeof(SECURITY_ATTRIBUTES) };
+	if (!CreateDirectoryW(foldername_wide, &security)) {
+		const int error = GetLastError();
+		RJD_ASSERTMSG(error != ERROR_PATH_NOT_FOUND, "The rjd_fio_mkdir() code should handle this case.");
+		switch (GetLastError())
+		{
+			case ERROR_ALREADY_EXISTS: result = RJD_RESULT("Folder already exists"); break;
+			default: result = RJD_RESULT("Unknown error creating subfolder"); break;
+		}
+	}
+
+	return result;
 }
+
+struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path)
+{
+	wchar_t* path_with_search_spec = NULL;
+	const size_t path_length = wcslen(directory_path);
+	{
+		const wchar_t search_spec[] = L"/*";
+		path_with_search_spec = rjd_mem_alloc_stack_array_noclear(wchar_t, path_length + rjd_countof(search_spec) + 1);
+		wcscpy(path_with_search_spec, directory_path);
+		wcscpy(path_with_search_spec + path_length, search_spec);
+	}
+
+	WIN32_FIND_DATAW find_data = {0};
+	const HANDLE find_handle = FindFirstFileW(path_with_search_spec, &find_data);
+	if (find_handle == INVALID_HANDLE_VALUE) {
+		const DWORD err = GetLastError();
+		if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) {
+			return RJD_RESULT("Directory not found");
+		}
+		return RJD_RESULT("Failed while enumerating directory contents. Check GetLastError() for more info");
+	}
+
+	do
+	{
+		if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+			if (wcscmp(find_data.cFileName, L".") != 0 &&
+				wcscmp(find_data.cFileName, L"..") != 0) {
+
+				size_t nested_path_length = wcslen(find_data.cFileName);
+				wchar_t* nested_path = _alloca((path_length + nested_path_length + 2) * sizeof(wchar_t)); // +2 for null and path separator
+				wcscpy(nested_path, directory_path);
+				wcscpy(nested_path + path_length, L"/");
+				wcscpy(nested_path + path_length + 1, find_data.cFileName);
+
+				struct rjd_result result = rjd_fio_delete_folder_recursive(nested_path);
+				if (!rjd_result_isok(result)) {
+					return result;
+				}
+			}
+		} else {
+			if (!DeleteFileW(find_data.cFileName)) {
+				FindClose(find_handle);
+				return RJD_RESULT("Failed to delete file. Check GetLastError() for more info.");
+			}
+		}
+	} while (FindNextFileW(find_handle, &find_data));
+
+	FindClose(find_handle);
+
+	if (GetLastError() != ERROR_NO_MORE_FILES) {
+		return RJD_RESULT("Failed while enumerating directory contents. Check GetLastError() for more info");
+	}
+
+	if (!RemoveDirectoryW(directory_path)) {
+		return RJD_RESULT("Failed to delete the directory. Check GetLastError() for more info");
+	}
+
+	return RJD_RESULT_OK();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+#elif RJD_COMPILER_GCC || RJD_COMPILER_CLANG
+
+#include <sys/stat.h>
+#include <ftw.h>
+
+static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf);
 
 struct rjd_result rjd_fio_delete(const char* path)
 {
@@ -142,47 +306,44 @@ bool rjd_fio_exists(const char* path)
     return !stat(path, &unused);
 }
 
-struct rjd_result rjd_fio_mkdir(const char* path)
+////////////////////////////////////////////////////////////////////////////////
+
+static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
 {
-    RJD_ASSERT(path);
-    RJD_ASSERT(*path);
-    
-    bool created_directory = false;
-    
-    const char* next = path;
-    const char* end = next;
-	do
-    {
-		end = strstr(end, "/");
-        // skip directory separator
-        if (end) {
-            ++end;
-        }
-        
-        char stackbuffer[256];
-        const char* subpath = NULL;
-
-		if (end) {
-            RJD_ASSERT(end - next < (ptrdiff_t)sizeof(stackbuffer));
-			memcpy(stackbuffer, next, end - next);
-			stackbuffer[end - next] = '\0';
-            subpath = stackbuffer;
-		} else {
-			subpath = next;
-		}
-
-		const mode_t mode = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
-		if (mkdir(subpath, mode) == 0) {
-            created_directory = true;
-        } else if (created_directory == true) {
-            // there was an error creating a nested folder
-            created_directory = false;
-            break;
-        }
-    } while (end != NULL);
-    
-    return created_directory ? RJD_RESULT_OK() : RJD_RESULT("error creating directory");
+	RJD_UNUSED_PARAM(sb);
+	RJD_UNUSED_PARAM(typeflag);
+	RJD_UNUSED_PARAM(ftwbuf);
+	return remove(path);
 }
+
+static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
+{
+	const mode_t mode = S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH;
+	const int error = mkdir(foldername, mode);
+
+	struct rjd_result result = RJD_RESULT_OK();
+	switch (error)
+	{
+		case 0: break;
+		case EACCES: result = RJD_RESULT("The parent directory does not allow write permission to the process, or one of the directories in pathname did not allow search permission."); break;
+		case EDQUOT: result = RJD_RESULT("The user's quota of disk blocks or inodes on the file system has been exhausted."); break;
+		case EEXIST: result = RJD_RESULT("pathname already exists (not necessarily as a directory). This includes the case where pathname is a symbolic link, dangling or not."); break;
+		case EFAULT: result = RJD_RESULT("pathname points outside your accessible address space."); break;
+		case ELOOP: result = RJD_RESULT("Too many symbolic links were encountered in resolving pathname."); break;
+		case EMLINK: result = RJD_RESULT("The number of links to the parent directory would exceed LINK_MAX."); break;
+		case ENAMETOOLONG: result = RJD_RESULT("pathname was too long."); break;
+		case ENOENT: result = RJD_RESULT("A directory component in pathname does not exist or is a dangling symbolic link."); break;
+		case ENOMEM: result = RJD_RESULT("Insufficient kernel memory was available."); break;
+		case ENOSPC: result = RJD_RESULT("The device has no room for the new directory (user's disk quota may be exhausted)."); break;
+		case ENOTDIR: result = RJD_RESULT("A component used as a directory in pathname is not, in fact, a directory."); break;
+		case EPERM: result = RJD_RESULT("The file system containing pathname does not support the creation of directories."); break;
+		case EROFS: result = RJD_RESULT("pathname refers to a file on a read-only file system."); break; 
+		default: result = RJD_RESULT("Unknown error creating subpath"); break;
+	}
+
+	return result;
+}
+
 #endif
 
 #endif // RJD_IMPL

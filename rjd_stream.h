@@ -35,7 +35,7 @@ struct rjd_ostream_memory
 {
 	uint8_t* buffer;
 	uint32_t size;
-	uint32_t cursor;
+	uint64_t cursor;
 };
 
 struct rjd_ostream_file
@@ -61,14 +61,14 @@ enum rjd_ostream_mode
 struct rjd_mem_allocator;
 
 struct rjd_istream rjd_istream_from_zeroes(void);
-struct rjd_istream rjd_istream_from_memory(const void* buffer, uint32_t size);
-struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_allocator* allocator, uint32_t buffer_size);
-struct rjd_result rjd_istream_read(struct rjd_istream* stream, void* buffer, uint32_t size); 
+struct rjd_istream rjd_istream_from_memory(const void* buffer, size_t size);
+struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_allocator* allocator, size_t buffer_size);
+struct rjd_result rjd_istream_read(struct rjd_istream* stream, void* buffer, size_t size); 
 void rjd_istream_close(struct rjd_istream* stream);
 
-struct rjd_ostream rjd_ostream_from_memory(void* buffer, uint32_t size);
+struct rjd_ostream rjd_ostream_from_memory(void* buffer, size_t size);
 struct rjd_ostream rjd_ostream_from_file(const char* filepath, enum rjd_ostream_mode);
-struct rjd_result rjd_ostream_write(struct rjd_ostream* stream, const void* buffer, uint32_t size);
+struct rjd_result rjd_ostream_write(struct rjd_ostream* stream, const void* buffer, size_t size);
 void rjd_ostream_close(struct rjd_ostream* stream);
 
 #if RJD_IMPL
@@ -95,7 +95,7 @@ struct rjd_istream rjd_istream_from_zeroes()
 	return stream;
 }
 
-struct rjd_istream rjd_istream_from_memory(const void* buffer, uint32_t size)
+struct rjd_istream rjd_istream_from_memory(const void* buffer, size_t size)
 {
 	const uint8_t* cbuffer = buffer;
 
@@ -112,7 +112,7 @@ struct rjd_istream rjd_istream_from_memory(const void* buffer, uint32_t size)
 	return stream;
 }
 
-struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_allocator* allocator, uint32_t buffer_size)
+struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_allocator* allocator, size_t buffer_size)
 {
 	RJD_ASSERT(filepath);
 	RJD_ASSERT(allocator);
@@ -128,7 +128,7 @@ struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_al
 				long int length = ftell(file);
 				if (length >= 0) {
 					if (fseek(file, 0, SEEK_SET) == 0) {
-						buffer_size = (uint32_t)length;
+						buffer_size = (size_t)length;
 						result = RJD_RESULT_OK();
 					}
 				}
@@ -155,21 +155,21 @@ struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_al
 	return stream;
 }
 
-struct rjd_result rjd_istream_read(struct rjd_istream* stream, void* buffer, uint32_t size)
+struct rjd_result rjd_istream_read(struct rjd_istream* stream, void* buffer, size_t size)
 {
 	RJD_ASSERT(stream);
 	RJD_ASSERT(buffer);
 	RJD_ASSERT(size > 0);
 
     uint8_t* offset_buffer = buffer;
-	uint32_t bytes_remaining = size;
+	size_t bytes_remaining = size;
 	while (bytes_remaining > 0) {
 		if (stream->cursor == stream->end) {
 			stream->result = stream->refill(stream);
 		}
         RJD_ASSERT(stream->end >= stream->cursor)
 		ptrdiff_t buffersize = stream->end - stream->cursor;
-		uint32_t readsize = rjd_math_minu32((uint32_t)buffersize, bytes_remaining);
+		size_t readsize = (size_t)rjd_math_minu64((size_t)buffersize, bytes_remaining);
 
 		memcpy(offset_buffer, stream->cursor, readsize);
         
@@ -190,13 +190,13 @@ void rjd_istream_close(struct rjd_istream* stream)
 	}
 }
 
-struct rjd_ostream rjd_ostream_from_memory(void* buffer, uint32_t size)
+struct rjd_ostream rjd_ostream_from_memory(void* buffer, size_t size)
 {
 	struct rjd_ostream stream = 
 	{
 		.type = RJD_OSTREAM_TYPE_MEMORY,
 		.state = {
-			.memory = { buffer, size, 0 },
+			.memory = { buffer, (uint32_t)size, 0 },
 		},
 	};
 	return stream;
@@ -223,13 +223,13 @@ struct rjd_ostream rjd_ostream_from_file(const char* filepath, enum rjd_ostream_
 	return stream;
 }
 
-struct rjd_result rjd_ostream_write(struct rjd_ostream* stream, const void* buffer, uint32_t size)
+struct rjd_result rjd_ostream_write(struct rjd_ostream* stream, const void* buffer, size_t size)
 {
 	if (stream->type == RJD_OSTREAM_TYPE_MEMORY) {
 		struct rjd_ostream_memory* state = &stream->state.memory;
 		RJD_ASSERT(state->size >= state->cursor);
 
-		const uint32_t bytes_remaining = state->size - state->cursor;
+		const size_t bytes_remaining = state->size - state->cursor;
 		if (size > bytes_remaining) {
 			return RJD_RESULT("attempted to write more data than the buffer can hold");
 		}

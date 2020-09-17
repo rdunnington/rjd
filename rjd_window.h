@@ -5,15 +5,18 @@
 struct rjd_window;
 struct rjd_window_environment;
 
-typedef void (*rjd_window_environment_init_func)(const struct rjd_window_environment* env);
-typedef void (*rjd_window_on_init_func)(struct rjd_window* window, const struct rjd_window_environment* env);
-typedef void (*rjd_window_on_update_func)(struct rjd_window* window, const struct rjd_window_environment* env);
-typedef void (*rjd_window_on_close_func)(struct rjd_window* window, const struct rjd_window_environment* env);
+typedef void rjd_window_environment_init_func(const struct rjd_window_environment* env);
+typedef void rjd_window_on_init_func(struct rjd_window* window, const struct rjd_window_environment* env);
+typedef void rjd_window_on_update_func(struct rjd_window* window, const struct rjd_window_environment* env);
+typedef void rjd_window_on_close_func(struct rjd_window* window, const struct rjd_window_environment* env);
+
+// Note that we use void* instead of the win32 types HINSTANCE and HWND to avoid taking a dependency 
+// on a windows header.
 
 struct rjd_window_data_win32
 {
 #if RJD_PLATFORM_WINDOWS
-	HINSTANCE handle_instance
+	void* hinstance; // HINSTANCE
 #else
 	char unused;
 #endif
@@ -40,26 +43,24 @@ struct rjd_window_desc
 	struct rjd_window_size requested_size;
     struct rjd_window_environment env;
     
-    rjd_window_on_init_func init_func;
-    rjd_window_on_update_func update_func;
-    rjd_window_on_close_func close_func;
-    
-    struct rjd_window_data_win32 win32;
+    rjd_window_on_init_func* init_func;
+    rjd_window_on_update_func* update_func;
+    rjd_window_on_close_func* close_func;
 };
 
 struct rjd_window
 {
-	char impl[40];
+	char impl[64];
 };
 
-void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func init_func);
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func);
 struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_desc desc);
 void rjd_window_runloop(struct rjd_window* window);
 struct rjd_window_size rjd_window_size_get(const struct rjd_window* window);
 void rjd_window_close(struct rjd_window* window);
 
 #if RJD_PLATFORM_WINDOWS
-	HWND rjd_window_win32_get_hwnd(const struct rjd_window* window);
+	void* rjd_window_win32_get_hwnd(const struct rjd_window* window);
 #elif RJD_PLATFORM_OSX
 	#if RJD_LANG_OBJC
 		@class MTKView;
@@ -86,23 +87,24 @@ void rjd_window_close(struct rjd_window* window);
 
 #if RJD_PLATFORM_WINDOWS
 
-static uint32_t global_window_count = 0;
+static uint32_t global_window_count = 0; // TODO atomic
 
 struct rjd_window_win32
 {
-	rjd_window_on_init_func init_func;
-	rjd_window_on_update_func update_func;
-	rjd_window_on_close_func close_func;
-	HWND handle;
+	struct rjd_window_environment env;
+	rjd_window_on_init_func* init_func;
+	rjd_window_on_update_func* update_func;
+	rjd_window_on_close_func* close_func;
+	void* hwnd; // HWND
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_win32));
 
 static LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM lparam);
 
-void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func init_func)
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func)
 {
 	if (init_func) {
-		init_func(env);
+		init_func(&env);
 	}
 
 	while (global_window_count > 0)
@@ -122,7 +124,7 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 	window_class.cbSize = sizeof(WNDCLASSEX);
 	window_class.style = CS_HREDRAW | CS_VREDRAW;
 	window_class.lpfnWndProc = WindowProc;
-	window_class.hInstance = handle_instance;
+	window_class.hInstance = desc.env.win32.hinstance;
 	window_class.lpszClassName = "EngineWindowClass";
 	window_class.hCursor = LoadCursor(NULL, IDC_ARROW);
 	//window_class.hIcon = LoadImage(NULL, IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
@@ -132,13 +134,13 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 	}
 
 	const DWORD window_style = WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_SYSMENU;
-	RECT window_rect = {0, 0, desc.width, desc.height};
+	RECT window_rect = {0, 0, desc.requested_size.width, desc.requested_size.height};
 	if (!AdjustWindowRect(&window_rect, window_style, FALSE))
 	{
 		return RJD_RESULT("Failed to adjust window rect");
 	} 
 
-	HWND window_handle = CreateWindowEx(0,
+	HWND hwnd = CreateWindowEx(0,
 		"EngineWindowClass",
 		desc.title,
 		window_style, 
@@ -146,35 +148,37 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 		window_rect.right - window_rect.left, window_rect.bottom - window_rect.top,
 		NULL,
 		NULL,
-		handle_instance,
+		desc.env.win32.hinstance,
 		NULL);
-	if (!window_handle)
+	if (!hwnd)
 	{
 		return RJD_RESULT("Failed to create window from class");
 	}
 
 	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)out;
-	window_win32->handle = window_handle;
+	window_win32->env = desc.env;
+	window_win32->init_func = desc.init_func;
+	window_win32->update_func = desc.update_func;
+	window_win32->close_func = desc.close_func;
+	window_win32->hwnd = hwnd;	
 
-	if (desc.init_func) {
-		desc.init_func(out, env);
-	}
-
-	++global_window_count;
+	return RJD_RESULT_OK();
 }
 
-void rjd_window_runloop(struct rjd_window* window, struct rjd_window_environment env)
+void rjd_window_runloop(struct rjd_window* window)
 {
+	++global_window_count;
+
 	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
 	if (window_win32->init_func) {
-		window_win32->init_func(env);
+		window_win32->init_func(window, &window_win32->env);
 	}
 
 	bool running = true;
 	while (running)
 	{
 		MSG msg = {0};
-		while (PeekMessage(&msg, window_win32->handle, 0, 0, PM_REMOVE))
+		while (PeekMessage(&msg, window_win32->hwnd, 0, 0, PM_REMOVE))
 		{
 			// TODO support running multiple windows in the same thread?
 			if (msg.message == WM_DESTROY)
@@ -189,29 +193,48 @@ void rjd_window_runloop(struct rjd_window* window, struct rjd_window_environment
 		}
 
 		if (running && window_win32->update_func) {
-			window_win32->update_func(window, env);
+			window_win32->update_func(window, &window_win32->env);
 		}
 	}
 
 	if (window_win32->close_func) {
-		window_win32->close_func(window, env);
+		window_win32->close_func(window, &window_win32->env);
 	}
+
+	--global_window_count;
 }
 
 struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
 {
-	#error Unimplemented
+	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
+
+	RECT rect = {0};
+	GetWindowRect(window_win32->hwnd, &rect);
+
+	uint32_t width = rect.right - rect.left;
+	uint32_t height = rect.bottom - rect.top;
+
+	RJD_ASSERT(width <= UINT16_MAX);
+	RJD_ASSERT(height <= UINT16_MAX);
+
+	struct rjd_window_size size = 
+	{
+		.width = (uint16_t)width,
+		.height = (uint16_t)height,
+	};
+	return size;
 }
 
 void rjd_window_close(struct rjd_window* window)
 {
 	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
-	DestroyWindow(window->handle);
+	DestroyWindow(window_win32->hwnd);
 }
 
-HWND rjd_window_win32_get_hwnd(const struct rjd_window* window)
+void* rjd_window_win32_get_hwnd(const struct rjd_window* window)
 {
-	return window->handle;
+	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
+	return window_win32->hwnd;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -258,15 +281,15 @@ struct rjd_window_osx
     NSWindow* nswindow;
     MTKView* view;
     
-    rjd_window_on_init_func init_func;
-    rjd_window_on_update_func update_func;
-    rjd_window_on_close_func close_func;
+    rjd_window_on_init_func* init_func;
+    rjd_window_on_update_func* update_func;
+    rjd_window_on_close_func* close_func;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_osx));
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 @property (retain) NSWindow *window;
--(instancetype)initWithEnvFunc:(rjd_window_environment_init_func)func env:(struct rjd_window_environment)env;
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)func env:(struct rjd_window_environment)env;
 @end
 
 @interface CustomViewController : NSViewController
@@ -373,11 +396,11 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 
 @implementation AppDelegate
 {
-    rjd_window_environment_init_func init_func;
+    rjd_window_environment_init_func* init_func;
 	struct rjd_window_environment env;
 }
 
--(instancetype)initWithEnvFunc:(rjd_window_environment_init_func)func env:(struct rjd_window_environment)_env
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)func env:(struct rjd_window_environment)_env
 {
     if (self = [super init]) {
         self->init_func = func;

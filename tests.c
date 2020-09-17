@@ -8,6 +8,10 @@
 #define expect_true(condition) if (!(condition)) { RJD_ASSERTFAIL("Expected \"%s\" to be true, but got false\n", #condition); }
 #define expect_false(condition) if (condition) { RJD_ASSERTFAIL("Expected \"%s\" to be false, but got true\n", #condition); }
 
+// #define expect_str(expected, actual) 
+// 	if (expected != actual && (expected == NULL || actual == NULL || strcmp(expected, actual))) { 
+// 		RJD_ASSERTFAIL("Expected:\n%s\nbut got:\n%s\n", expected ? expected : "", actual ? actual : ""); }
+
 void expect_str(const char* expected, const char* actual)
 {
 	if (expected != actual && (expected == NULL || actual == NULL || strcmp(expected, actual))) {
@@ -29,13 +33,31 @@ void expect_bool(bool expected, bool actual)
 	}
 }
 
+void expect_int64(int64_t expected, int64_t actual) {
+	if (expected != actual) {
+		RJD_ASSERTFAIL("Expected: %lld, but got: %lld\n", expected, actual);
+	}
+}
+
 void expect_int32(int32_t expected, int32_t actual) {
 	if (expected != actual) {
 		RJD_ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
 	}
 }
 
-void expect_int64(int64_t expected, int64_t actual) {
+void expect_int16(int16_t expected, int16_t actual) {
+	if (expected != actual) {
+		RJD_ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
+	}
+}
+
+void expect_int8(int8_t expected, int8_t actual) {
+	if (expected != actual) {
+		RJD_ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
+	}
+}
+
+void expect_uint64(uint64_t expected, uint64_t actual) {
 	if (expected != actual) {
 		RJD_ASSERTFAIL("Expected: %lld, but got: %lld\n", expected, actual);
 	}
@@ -43,15 +65,22 @@ void expect_int64(int64_t expected, int64_t actual) {
 
 void expect_uint32(uint32_t expected, uint32_t actual) {
 	if (expected != actual) {
-		RJD_ASSERTFAIL("Expected: %u, but got: %u\n", expected, actual);
+		RJD_ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
 	}
 }
 
-void expect_uint64(uint64_t expected, uint64_t actual) {
+void expect_uint16(uint16_t expected, uint16_t actual) {
 	if (expected != actual) {
-		RJD_ASSERTFAIL("Expected: %llu, but got: %llu\n", expected, actual);
+		RJD_ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
 	}
 }
+
+void expect_uint8(uint8_t expected, uint8_t actual) {
+	if (expected != actual) {
+		RJD_ASSERTFAIL("Expected: %d, but got: %d\n", expected, actual);
+	}
+}
+	
 
 void expect_pointer(const void* expected, const void* actual) {
 	if (expected != actual) {
@@ -64,25 +93,28 @@ void expect_path(const char* expected, struct rjd_path path)
 	expect_str(expected, rjd_path_get(&path));
 }
 
-void expect_result_ok(struct rjd_result actual)
-{
-	RJD_ASSERTMSG(actual.error == NULL, "Expected OK result, but got error '%s'", actual.error);
-}
+#define expect_result_ok(actual) RJD_ASSERTMSG(actual.error == NULL, "Expected OK result, but got error '%s'", actual.error)
 
-void expect_result_notok(struct rjd_result actual)
-{
-	RJD_ASSERTMSG(actual.error != NULL, "Expected bad result, but got OK");
-}
+#define expect_result_notok(actual) RJD_ASSERTMSG(actual.error != NULL, "Expected bad result, but got OK")
+// void expect_result_ok(struct rjd_result actual)
+// {
+// 	RJD_ASSERTMSG(actual.error == NULL, "Expected OK result, but got error '%s'", actual.error);
+// }
+
+// void expect_result_notok(struct rjd_result actual)
+// {
+// 	RJD_ASSERTMSG(actual.error != NULL, "Expected bad result, but got OK");
+// }
 
 void expect_no_leaks(const struct rjd_mem_allocator* allocator)
 {
 	struct rjd_mem_allocator_stats stats = rjd_mem_allocator_getstats(allocator);
-	RJD_ASSERTMSG(stats.current.used == 0, "Found some leaks");
+	RJD_ASSERTMSG(rjd_atomic_uint64_get(&stats.current.used) == 0, "Found some leaks");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static int compare_int32(const void* a, const void* b)
+static int RJD_COMPILER_MSVC_ONLY(__cdecl) compare_int32(const void* a, const void* b)
 {
 	int32_t aa = *(int32_t*)a;
 	int32_t bb = *(int32_t*)b;
@@ -96,7 +128,7 @@ static int compare_int32(const void* a, const void* b)
 	}
 }
 
-static int compare_int32_c(void* context, const void* a, const void* b)
+static int RJD_COMPILER_MSVC_ONLY(__cdecl) compare_int32_c(void* context, const void* a, const void* b)
 {
 	RJD_ASSERT(context);
 	return compare_int32(a, b);
@@ -110,13 +142,33 @@ RJD_STATIC_ASSERT(sizeof(uint32_t) == sizeof(char) * 4);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-char logbuffer[1024 * 128];
-size_t logbuffer_pos = 0;
+char g_logbuffer[1024 * 128];
+size_t g_logbuffer_pos = 0;
 void test_log_hook(const char* msg, size_t length)
 {
-	strncpy(logbuffer + logbuffer_pos, msg, sizeof(logbuffer) - logbuffer_pos);
-	logbuffer_pos += length;
+	strncpy(g_logbuffer + g_logbuffer_pos, msg, sizeof(g_logbuffer) - g_logbuffer_pos);
+	g_logbuffer_pos += length;
 }
+
+void test_logging_redirect_to_logbuffer(void)
+{
+	static struct rjd_logchannel local = {
+		.name = "Test Channel",
+		.enabled = true,
+		.hook = test_log_hook,
+		.verbosity = RJD_LOG_VERBOSITY_MED,
+	};
+	g_rjd_global_logchannel = &local;
+}
+
+void test_logging_reset(void)
+{
+	g_logbuffer_pos = 0;
+	g_logbuffer[0] = 0;
+	rjd_log_resetglobal();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 void test_logging()
 {
@@ -196,10 +248,9 @@ void test_logging()
 		filename, line_test_begin + 24,
 		filename, line_test_begin + 36);
 
-	expect_str(expected, logbuffer);
+	expect_str(expected, g_logbuffer);
 	
-	// reset global logger for future tests
-	rjd_log_resetglobal();
+	test_logging_reset();
 }
 
 struct rjd_result check_result(bool condition) {
@@ -405,41 +456,69 @@ void test_mem()
 		expect_true(rjd_mem_alloc_array(char, 256, &allocator) != NULL);
 		expect_true(rjd_mem_alloc_array(char, 256, &allocator) != NULL);
 
-		expect_true(allocator.stats.total_size <= sizeof(stackmem));
+		expect_true(rjd_atomic_uint64_get(&allocator.stats.total_size) <= sizeof(stackmem));
 		{
-			const uint32_t total = allocator.stats.total_size;
-			expect_uint32(allocator.stats.current.used - allocator.stats.current.overhead, 256 * 3);
-			expect_uint32(allocator.stats.current.peak, allocator.stats.current.used);
-			expect_uint32(allocator.stats.current.unused, total - ((256 * 3) + allocator.stats.current.overhead));
-			expect_uint32(allocator.stats.current.allocs, 3);
-			expect_uint32(allocator.stats.current.frees, 0);
+			const uint64_t total = rjd_atomic_uint64_get(&allocator.stats.total_size);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.used) - rjd_atomic_uint64_get(&allocator.stats.current.overhead), 256 * 3);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.peak), rjd_atomic_uint64_get(&allocator.stats.current.used));
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.unused), total - ((256 * 3) + rjd_atomic_uint64_get(&allocator.stats.current.overhead)));
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.allocs), 3);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.frees), 0);
 
-			expect_uint32(allocator.stats.lifetime.peak, allocator.stats.current.peak);
-			expect_uint32(allocator.stats.lifetime.allocs, 3);
-			expect_uint32(allocator.stats.lifetime.frees, 0);
-			expect_uint32(allocator.stats.lifetime.resets, 0);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.peak), rjd_atomic_uint64_get(&allocator.stats.current.peak));
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.allocs), 3);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.frees), 0);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.resets), 0);
 		}
 
-        const uint32_t old_peak = allocator.stats.lifetime.peak;
+        const uint64_t old_peak = rjd_atomic_uint64_get(&allocator.stats.lifetime.peak);
 		expect_true(rjd_mem_allocator_reset(&allocator));
 
 		expect_true(rjd_mem_alloc_array(char, 512, &allocator) != NULL);
 		{
-			const uint32_t total = allocator.stats.total_size;
-			expect_uint32(allocator.stats.current.used - allocator.stats.current.overhead, 512);
-			expect_uint32(allocator.stats.current.peak, allocator.stats.current.used);
-			expect_uint32(allocator.stats.current.unused, total - (512 + allocator.stats.current.overhead));
-			expect_uint32(allocator.stats.current.allocs, 1);
-			expect_uint32(allocator.stats.current.frees, 0);
+			const uint64_t total = rjd_atomic_uint64_get(&allocator.stats.total_size);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.used) - rjd_atomic_uint64_get(&allocator.stats.current.overhead), 512);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.peak), rjd_atomic_uint64_get(&allocator.stats.current.used));
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.unused), total - (512 + rjd_atomic_uint64_get(&allocator.stats.current.overhead)));
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.allocs), 1);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.current.frees), 0);
 
-			expect_uint32(allocator.stats.lifetime.peak, old_peak);
-			expect_uint32(allocator.stats.lifetime.allocs, 4);
-			expect_uint32(allocator.stats.lifetime.frees, 0);
-			expect_uint32(allocator.stats.lifetime.resets, 1);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.peak), old_peak);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.allocs), 4);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.frees), 0);
+			expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.resets), 1);
 		}
 
 		expect_true(rjd_mem_allocator_reset(&allocator));
-		expect_uint32(allocator.stats.lifetime.resets, 2);
+		expect_uint64(rjd_atomic_uint64_get(&allocator.stats.lifetime.resets), 2);
+	}
+
+	// stack allocations
+	{
+		const uint32_t SENTINEL = 0xFFFFFFFF;
+		{
+			uint32_t before = SENTINEL;
+			uint32_t* single = rjd_mem_alloc_stack_noclear(uint32_t);
+			uint32_t after = SENTINEL;
+
+			*single = 0;
+			expect_uint32(SENTINEL, before);
+			expect_uint32(SENTINEL, after);
+		}
+
+		{
+			uint32_t before = SENTINEL;
+			const size_t count = 9;
+			uint32_t* array = rjd_mem_alloc_stack_array_noclear(uint32_t, 9);
+			uint32_t after = SENTINEL;
+
+			for (size_t i = 0; i < count; ++i) {
+				array[i] = 0;
+			}
+			expect_uint32(SENTINEL, before);
+			expect_uint32(SENTINEL, after);
+		}
+
 	}
 
 	// mem_swap
@@ -951,9 +1030,9 @@ void test_math(void)
 		char a3, a4;
 		rjd_math_mat4 m1 = rjd_math_mat4_identity();;
 
-		expect_uint32(0, (uint32_t)(&v1) & 0xF);
-		expect_uint32(0, (uint32_t)(&v2) & 0xF);
-		expect_uint32(0, (uint32_t)(&m1) & 0xF);
+		expect_uint64(0, (uint64_t)(&v1) & 0xF);
+		expect_uint64(0, (uint64_t)(&v2) & 0xF);
+		expect_uint64(0, (uint64_t)(&m1) & 0xF);
 
 		RJD_UNUSED_PARAM(a1);
 		RJD_UNUSED_PARAM(a2);
@@ -1008,11 +1087,11 @@ void test_math(void)
 	expect_vec4(rjd_math_vec4_xyzw(1,0,0,0), rjd_math_vec4_normalize(rjd_math_vec4_xyzw(7368,0,0,0)));
 	expect_vec4(rjd_math_vec4_xyzw(1,1,0,FLT_MAX), rjd_math_vec4_abs(rjd_math_vec4_xyzw(1, -1, -0, -FLT_MAX)));
 	expect_vec4(rjd_math_vec4_xyzw(-1,1,-0,FLT_MAX), rjd_math_vec4_neg(rjd_math_vec4_xyzw(1, -1, 0, -FLT_MAX)));
-	expect_vec4(rjd_math_vec4_xyzw(0,0,0,-1), rjd_math_vec4_floor(rjd_math_vec4_xyzw(0, .5, .99, -0.1)));
-	expect_vec4(rjd_math_vec4_xyzw(0,1,1,-.0), rjd_math_vec4_ceil(rjd_math_vec4_xyzw(0, .5, .01, -0.9)));
-	expect_vec4(rjd_math_vec4_xyzw(0,0,0,1), rjd_math_vec4_round(rjd_math_vec4_xyzw(0, .1, .5, .9)));
-	expect_vec4(rjd_math_vec4_xyzw(1,0,0,-1), rjd_math_vec4_round(rjd_math_vec4_xyzw(1, -.1, -.5, -.9)));
-	expect_vec4(rjd_math_vec4_xyzw(-1,-2,2,0), rjd_math_vec4_round(rjd_math_vec4_xyzw(-1, -1.5, 1.5, 0)));
+	expect_vec4(rjd_math_vec4_xyzw(0,0,0,-1), rjd_math_vec4_floor(rjd_math_vec4_xyzw(0, .5f, .99f, -0.1f)));
+	expect_vec4(rjd_math_vec4_xyzw(0,1,1,-.0), rjd_math_vec4_ceil(rjd_math_vec4_xyzw(0, .5f, .01f, -0.9f)));
+	expect_vec4(rjd_math_vec4_xyzw(0,0,0,1), rjd_math_vec4_round(rjd_math_vec4_xyzw(0, .1f, .5f, .9f)));
+	expect_vec4(rjd_math_vec4_xyzw(1,0,0,-1), rjd_math_vec4_round(rjd_math_vec4_xyzw(1, -.1f, -.5f, -.9f)));
+	expect_vec4(rjd_math_vec4_xyzw(-1,-2,2,0), rjd_math_vec4_round(rjd_math_vec4_xyzw(-1, -1.5f, 1.5f, 0)));
 	expect_vec4(rjd_math_vec4_xyzw(26, 60, 44, 6), rjd_math_vec4_scale(rjd_math_vec4_xyzw(13, 30, 22, 3), 2));
 	expect_vec4(rjd_math_vec4_xyzw(3,3,3,3), rjd_math_vec4_add(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(2,2,2,2)));
 	expect_vec4(rjd_math_vec4_xyzw(-1,-1,-1,-1), rjd_math_vec4_sub(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(2,2,2,2)));
@@ -1021,8 +1100,8 @@ void test_math(void)
 	expect_vec4(rjd_math_vec4_xyzw(23,45,21,5), rjd_math_vec4_min(rjd_math_vec4_xyzw(23,45,72,5), rjd_math_vec4_xyzw(43,75,21,6)));
 	expect_vec4(rjd_math_vec4_xyzw(43,75,72,6), rjd_math_vec4_max(rjd_math_vec4_xyzw(23,45,72,5), rjd_math_vec4_xyzw(43,75,21,6)));
 	expect_vec4(rjd_math_vec4_xyzw(1,0,0,0), rjd_math_vec4_project(rjd_math_vec4_xyzw(1,1,1,1), rjd_math_vec4_xyzw(1,0,0,0)));
-	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5));
-	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5));
+	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5f));
+	expect_vec4(rjd_math_vec4_xyzw(1,2,4,8), rjd_math_vec4_lerp(rjd_math_vec4_zero(), rjd_math_vec4_xyzw(2, 4, 8, 16), .5f));
 
 	// vec3
 	expect_true(rjd_math_vec3_eq(rjd_math_vec3_left(), rjd_math_vec3_left()));
@@ -1421,17 +1500,29 @@ void test_strbuf(void)
 
 void test_profiler(void)
 {
-	RJD_PROFILE_SCOPE(Test1, {
+	test_logging_redirect_to_logbuffer();
+
+	{
+		RJD_PROFILE_SCOPE_BEGIN(test1);
+
 		double d = 1;
 		for (size_t i = 0; i < 1000; ++i) {
 			d += d;
 		}
 		expect_true(d > 0);
-	});
+
+		RJD_PROFILE_SCOPE_END(test1);
+	}
+
+	expect_true(strstr(g_logbuffer, "Elapsed test1") != NULL);
+
+	test_logging_reset();
 }
 
 void test_cmd()
 {
+	test_logging_redirect_to_logbuffer();
+
 	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 	
 	const char* argv0[] = { "test.exe", NULL };
@@ -1485,11 +1576,18 @@ void test_cmd()
 	expect_str("file.txt", rjd_cmd_str(&cmd, "FILE"));
 
 	rjd_cmd_usage(&cmd);
+	expect_true(strstr(g_logbuffer, "Usage: a.exe [-h -c -w -z] PATTERN FILE") != NULL);
+	g_logbuffer_pos = 0;
+
 	rjd_cmd_help(&cmd);
+	expect_true(strstr(g_logbuffer, "Usage: a.exe [-h -c -w -z] PATTERN FILE") != NULL);
+	expect_true(strstr(g_logbuffer, "The regex pattern to search for.") != NULL);
 
 	rjd_cmd_free(&cmd);
 
 	expect_no_leaks(&allocator);
+
+	test_logging_reset();
 }
 
 void test_rng()
@@ -1652,57 +1750,82 @@ struct test_thread_data
 	enum test_thread_stage stage;
 };
 
+void step_thread_main(struct test_thread_data* data)
+{
+	struct rjd_result result = rjd_condvar_lock(&data->goto_next_main);
+	expect_result_ok(result);
+	result = rjd_condvar_signal_all(&data->goto_next_main);
+	expect_result_ok(result);
+	result = rjd_condvar_unlock(&data->goto_next_main);
+	expect_result_ok(result);
+
+	result = rjd_condvar_wait(&data->goto_next_thread);
+	expect_result_ok(result);
+}
+
+void step_thread_test(struct test_thread_data* data)
+{
+	const uint32_t TIMEOUT = 1;
+
+	struct rjd_result result = rjd_condvar_lock(&data->goto_next_thread);
+	expect_result_ok(result);
+	result = rjd_condvar_signal_single(&data->goto_next_thread);
+	expect_result_ok(result);
+	result = rjd_condvar_unlock(&data->goto_next_thread);
+	expect_result_ok(result);
+
+	result = rjd_condvar_wait_timed(&data->goto_next_main, TIMEOUT);
+	expect_result_ok(result);
+}
+
 void test_thread_entrypoint(void* userdata)
 {
 	struct test_thread_data* data = (struct test_thread_data*)userdata;
 	struct rjd_result result = RJD_RESULT_OK();
 
-	data->stage = TEST_THREAD_STAGE_STARTED;
-    result = rjd_condvar_lock(&data->goto_next_thread);
-    expect_result_ok(result);
-	result = rjd_condvar_signal_single(&data->goto_next_main);
-    expect_result_ok(result);
-	result = rjd_condvar_wait(&data->goto_next_thread);
+	result = rjd_condvar_lock(&data->goto_next_thread);
 	expect_result_ok(result);
+
+	data->stage = TEST_THREAD_STAGE_STARTED;
+	step_thread_main(data);
     
     data->stage = TEST_THREAD_STAGE_ACQUIRE_LOCK;
 	result = rjd_lock_acquire(&data->lock);
 	expect_result_ok(result);
-    result = rjd_condvar_signal_single(&data->goto_next_main);
-    expect_result_ok(result);
-	result = rjd_condvar_wait(&data->goto_next_thread);
-	expect_result_ok(result);
+	step_thread_main(data);
     
     data->stage = TEST_THREAD_STAGE_ACQUIRE_READ_LOCK;
 	result = rjd_lock_release(&data->lock);
 	expect_result_ok(result);
     result = rjd_rwlock_acquire_reader(&data->rwlock);
     expect_result_ok(result);
-    result = rjd_condvar_signal_single(&data->goto_next_main);
-    expect_result_ok(result);
-	result = rjd_condvar_wait(&data->goto_next_thread);
-	expect_result_ok(result);
+	step_thread_main(data);
     
     // promote reader to writer lock
     data->stage = TEST_THREAD_STAGE_ACQUIRE_WRITE_LOCK;
     result = rjd_rwlock_try_acquire_writer(&data->rwlock);
     expect_result_notok(result);
-    result = rjd_rwlock_release(&data->rwlock);
-    expect_result_ok(result);
-    result = rjd_rwlock_acquire_writer(&data->rwlock);
-    expect_result_ok(result);
-    result = rjd_condvar_signal_single(&data->goto_next_main);
-    expect_result_ok(result);
-    result = rjd_condvar_wait(&data->goto_next_thread);
-    expect_result_ok(result);
+    result = rjd_rwlock_release_writer(&data->rwlock);
+    expect_result_notok(result);
+	result = rjd_rwlock_release_reader(&data->rwlock);
+	expect_result_ok(result);
+	result = rjd_rwlock_try_acquire_writer(&data->rwlock);
+	expect_result_ok(result);
+	step_thread_main(data);
 
 	data->stage = TEST_THREAD_STAGE_FINISHED;
-    result = rjd_rwlock_release(&data->rwlock);
+    result = rjd_rwlock_release_writer(&data->rwlock);
     expect_result_ok(result);
-    result = rjd_condvar_signal_all(&data->goto_next_main); // testing signal_all
-    expect_result_ok(result);
-    result = rjd_condvar_unlock(&data->goto_next_thread);
-    expect_result_ok(result);
+
+	result = rjd_condvar_unlock(&data->goto_next_thread);
+	expect_result_ok(result);
+
+	result = rjd_condvar_lock(&data->goto_next_main);
+	expect_result_ok(result);
+	result = rjd_condvar_signal_single(&data->goto_next_main);
+	expect_result_ok(result);
+	result = rjd_condvar_unlock(&data->goto_next_main);
+	expect_result_ok(result);
 }
 
 void test_thread()
@@ -1716,7 +1839,7 @@ void test_thread()
 		.entrypoint_func = test_thread_entrypoint,
 		.allocator = &allocator,
 		.userdata = &thread_data,
-        .name = "my_cool_thread!" // 16 bytes including null terminator
+        .optional_name = "my_cool_thread!" // 16 bytes including null terminator
 	};
 
 	result = rjd_condvar_create(&thread_data.goto_next_main);
@@ -1740,26 +1863,19 @@ void test_thread()
 	result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
 	expect_result_ok(result);
     
-	expect_uint32(TEST_THREAD_STAGE_STARTED, thread_data.stage);
-    // now the main and child threads are in lockstep
+	expect_uint32(TEST_THREAD_STAGE_STARTED, thread_data.stage); // now the main and child threads are in lockstep
     {
         char outname[32] = {0};
         result = rjd_thread_getname(&thread, sizeof(outname), outname);
         expect_result_ok(result);
         expect_str("my_cool_thread!", outname);
     }
-	result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
-	expect_result_ok(result);
-	result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
-	expect_result_ok(result);
+	step_thread_test(&thread_data);
     
 	expect_uint32(TEST_THREAD_STAGE_ACQUIRE_LOCK, thread_data.stage);
     result = rjd_lock_try_acquire(&thread_data.lock);
     expect_result_notok(result); // thread should have the lock
-	result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
-	expect_result_ok(result);
-	result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
-	expect_result_ok(result);
+	step_thread_test(&thread_data);
     
     expect_uint32(TEST_THREAD_STAGE_ACQUIRE_READ_LOCK, thread_data.stage);
     result = rjd_lock_try_acquire(&thread_data.lock);
@@ -1768,31 +1884,23 @@ void test_thread()
     expect_result_ok(result);
     result = rjd_rwlock_try_acquire_reader(&thread_data.rwlock);
     expect_result_ok(result);
-    result = rjd_rwlock_release(&thread_data.rwlock);
+    result = rjd_rwlock_release_reader(&thread_data.rwlock);
     expect_result_ok(result);
-    result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
-    expect_result_ok(result);
-    result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
-    expect_result_ok(result);
+	step_thread_test(&thread_data);
     
     expect_uint32(TEST_THREAD_STAGE_ACQUIRE_WRITE_LOCK, thread_data.stage);
     result = rjd_rwlock_try_acquire_writer(&thread_data.rwlock);
     expect_result_notok(result);
-    result = rjd_condvar_signal_single(&thread_data.goto_next_thread);
-    expect_result_ok(result);
-    result = rjd_condvar_wait_timed(&thread_data.goto_next_main, TIMEOUT);
-    expect_result_ok(result);
+	step_thread_test(&thread_data);
     
     expect_uint32(TEST_THREAD_STAGE_FINISHED, thread_data.stage);
     result = rjd_rwlock_try_acquire_writer(&thread_data.rwlock);
     expect_result_ok(result);
-    result = rjd_rwlock_release(&thread_data.rwlock);
+    result = rjd_rwlock_release_writer(&thread_data.rwlock);
     expect_result_ok(result);
     
+	// cleanup
     result = rjd_thread_join(&thread);
-    expect_result_ok(result);
-    
-    result = rjd_condvar_unlock(&thread_data.goto_next_main);
     expect_result_ok(result);
 
 	result = rjd_condvar_destroy(&thread_data.goto_next_main);
@@ -1803,44 +1911,135 @@ void test_thread()
 	expect_result_ok(result);
 	result = rjd_rwlock_destroy(&thread_data.rwlock);
 	expect_result_ok(result);
+
+    result = rjd_condvar_unlock(&thread_data.goto_next_main);
+    expect_result_ok(result);
 	
 	expect_no_leaks(&allocator);
 }
 
+enum test_atomic_type
+{
+	test_atomic_type_int64,
+	test_atomic_type_int32,
+	test_atomic_type_int16,
+	test_atomic_type_int8,
+	test_atomic_type_uint64,
+	test_atomic_type_uint32,
+	test_atomic_type_uint16,
+	test_atomic_type_uint8,
+};
+
+struct test_atomic_thread_data
+{
+	enum test_atomic_type test_type;
+	void* atomic;
+};
+
+void test_atomic_thread_entrypoint(void* userdata)
+{
+	struct test_atomic_thread_data* data = userdata;
+
+	// total delta is 20 - 10 + 10 - 15 - 5 = 0
+	#define ATOMIC_THREAD_TEST(type)						\
+		for (int i = 0; i < 20; ++i)						\
+			rjd_atomic_ ## type ## _inc(data->atomic);		\
+		for (int i = 0; i < 10; ++i)						\
+			rjd_atomic_ ## type ## _dec(data->atomic);		\
+		for (int i = 0; i < 5; ++i)							\
+			rjd_atomic_ ## type ## _add(data->atomic, 2);	\
+		for (int i = 0; i < 5; ++i)							\
+			rjd_atomic_ ## type ## _sub(data->atomic, 3);	\
+		for (int i = 0; i < 5; ++i)							\
+			rjd_atomic_ ## type ## _dec(data->atomic);
+
+	switch (data->test_type)
+	{
+	case test_atomic_type_int64:
+		ATOMIC_THREAD_TEST(int64);
+		break;
+	case test_atomic_type_int32:
+		ATOMIC_THREAD_TEST(int32);
+		break;
+	case test_atomic_type_int16:
+		ATOMIC_THREAD_TEST(int16);
+		break;
+	case test_atomic_type_int8:
+		ATOMIC_THREAD_TEST(int8);
+		break;
+	case test_atomic_type_uint64:
+		ATOMIC_THREAD_TEST(uint64);
+		break;
+	case test_atomic_type_uint32:
+		ATOMIC_THREAD_TEST(uint32);
+		break;
+	case test_atomic_type_uint16:
+		ATOMIC_THREAD_TEST(uint16);
+		break;
+	case test_atomic_type_uint8:
+		ATOMIC_THREAD_TEST(uint8);
+		break;
+	}
+
+	#undef ATOMIC_THREAD_TEST
+}
+
 void test_atomic()
 {
-	struct rjd_atomic_int64 atomic_i64 = rjd_atomic_int64_init(INT64_MAX);
-	expect_int64(INT64_MAX, rjd_atomic_int64_get(&atomic_i64));
-	rjd_atomic_int64_set(&atomic_i64, 0);
-	expect_int64(0, rjd_atomic_int64_get(&atomic_i64));
-	expect_int64(0, rjd_atomic_int64_inc(&atomic_i64));
-    expect_int64(1, rjd_atomic_int64_get(&atomic_i64));
-	expect_int64(1, rjd_atomic_int64_add(&atomic_i64, 10));
-    expect_int64(11, rjd_atomic_int64_get(&atomic_i64));
-	expect_int64(11, rjd_atomic_int64_dec(&atomic_i64));
-    expect_int64(10, rjd_atomic_int64_get(&atomic_i64));
-	expect_int64(10, rjd_atomic_int64_sub(&atomic_i64, 5));
-    expect_int64(5, rjd_atomic_int64_get(&atomic_i64));
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 
-	const uint32_t max_iterations = 1000;
-	uint32_t iterations = 0;
-	int64_t expected = 0;
-	while (!rjd_atomic_int64_compare_exchange_weak(&atomic_i64, &expected, 0)) {
-		rjd_atomic_int64_dec(&atomic_i64);
-		if (++iterations > max_iterations) {
-			break;
+	#define ATOMIC_TEST(type) \
+		{	\
+			struct rjd_atomic_ ## type value = rjd_atomic_ ## type ## _init(0);	\
+			expect_ ## type(10, rjd_atomic_ ## type ## _add(&value, 10));	\
+			expect_ ## type(5, rjd_atomic_ ## type ## _sub(&value, 5));	\
+			expect_ ## type(6, rjd_atomic_ ## type ## _inc(&value));	\
+			expect_ ## type(5, rjd_atomic_ ## type ## _dec(&value));	\
+			expect_ ## type(1, rjd_atomic_ ## type ## _set(&value, 1));	\
+			expect_ ## type(1, rjd_atomic_ ## type ## _get(&value));	\
+			const uint32_t max_iterations = 1000;	\
+			uint32_t iterations = 0;	\
+			type ## _t expected = 1;	\
+			while (!rjd_atomic_ ## type ## _compare_exchange(&value, &expected, 0)) {	\
+				rjd_atomic_ ## type ## _dec(&value);	\
+				if (++iterations > max_iterations) {	\
+					break;	\
+				}	\
+			}	\
+			expect_true(iterations <= max_iterations);	\
+			struct test_atomic_thread_data thread_data = {	\
+				.test_type = test_atomic_type_ ## type,	\
+				.atomic = &value,	\
+			};	\
+			struct rjd_thread_desc desc = {	\
+				.entrypoint_func = test_atomic_thread_entrypoint,	\
+				.allocator = &allocator,	\
+				.userdata = &thread_data,	\
+				.optional_name = "atomic_test"	\
+			};	\
+			struct rjd_thread thread[10] = { 0 };	\
+			for (size_t i = 0; i < rjd_countof(thread); ++i) {	\
+				struct rjd_result result = rjd_thread_create(thread + i, desc);	\
+				expect_result_ok(result);	\
+			}	\
+			for (size_t i = 0; i < rjd_countof(thread); ++i) {	\
+				struct rjd_result result = rjd_thread_join(thread + i);	\
+				expect_result_ok(result);	\
+			}	\
+			expect_ ## type(0, rjd_atomic_ ## type ## _get(&value));	\
 		}
-	}
 
-	rjd_atomic_int64_set(&atomic_i64, 5);
+	ATOMIC_TEST(int64)
+	ATOMIC_TEST(int32)
+	ATOMIC_TEST(int16)
+	ATOMIC_TEST(int8)
+	ATOMIC_TEST(uint64)
+	ATOMIC_TEST(uint32)
+	ATOMIC_TEST(uint16)
+	ATOMIC_TEST(uint8)
 
-	iterations = 0;
-	while (!rjd_atomic_int64_compare_exchange_weak(&atomic_i64, &expected, 0)) {
-		rjd_atomic_int64_dec(&atomic_i64);
-		if (++iterations > max_iterations) {
-			break;
-		}
-	}
+	#undef ATOMIC_TEST
+
 }
 
 void test_strpool()
@@ -1959,14 +2158,14 @@ void test_utf8(void)
 {
 	// rjd_utf8_bom_skip
 	{
-		const char buffer_with_bom[] = { 0xEF, 0xBB, 0xBF, 0 };
-		const char buffer_no_bom[] = "hey this is a normal string";
+		const uint8_t buffer_with_bom[] = { 0xEF, 0xBB, 0xBF, 0 };
+		const uint8_t buffer_no_bom[] = "hey this is a normal string";
 
-		const char* expected_with_bom = buffer_with_bom + 3;
-		const char* expected_no_bom = buffer_no_bom;
+		const uint8_t* expected_with_bom = buffer_with_bom + 3;
+		const uint8_t* expected_no_bom = buffer_no_bom;
 
-		expect_pointer(expected_with_bom, rjd_utf8_bom_skip(buffer_with_bom));
-		expect_pointer(expected_no_bom, rjd_utf8_bom_skip(buffer_no_bom));
+		expect_pointer(expected_with_bom, rjd_utf8_bom_skip((char*)buffer_with_bom));
+		expect_pointer(expected_no_bom, rjd_utf8_bom_skip((char*)buffer_no_bom));
 	}
 
 	// rjd_utf8_bom_write
@@ -1990,7 +2189,7 @@ void test_utf8(void)
 		const char ascii[] = "12345";
 		const char utf8[] = "aæ࠳ab߉නc𐤈𐤀";
         //const char invalid_utf8[] = { 0b11111100, 0b11111110, 0b11111001, 0 };
-        const char invalid_utf8[] = { 0xFB, 0xFE, 0xF9, 0 };
+        const uint8_t invalid_utf8[] = { 0xFB, 0xFE, 0xF9, 0 };
 
 		const char* p = NULL;
 
@@ -2033,11 +2232,11 @@ void test_utf8(void)
 		p = rjd_utf8_next(utf8 + 2+1+1);
 		expect_pointer(utf8 + 1+2+3, p);
 
-		p = rjd_utf8_next(invalid_utf8 + 0);
+		p = rjd_utf8_next((char*)invalid_utf8 + 0);
 		expect_pointer(NULL, p);
-        p = rjd_utf8_next(invalid_utf8 + 1);
+        p = rjd_utf8_next((char*)invalid_utf8 + 1);
         expect_pointer(NULL, p);
-        p = rjd_utf8_next(invalid_utf8 + 2);
+        p = rjd_utf8_next((char*)invalid_utf8 + 2);
         expect_pointer(NULL, p);
 	}
 }
@@ -2154,7 +2353,7 @@ void test_stream()
 		char file_expected[500] = {0};
 		for (size_t i = 0; i < sizeof(file_expected); ++i) {
 			int range = 'z' - 'a';
-			file_expected[i] = 'a' + (i % range);
+			file_expected[i] = 'a' + (char)(i % range);
 		}
 
 		struct rjd_result result = rjd_fio_write("test.txt", file_expected, sizeof(file_expected), RJD_FIO_WRITEMODE_REPLACE);
@@ -2211,7 +2410,7 @@ void test_stream()
         char file_expected[500] = {0};
         for (size_t i = 0; i < sizeof(file_expected); ++i) {
             int range = 'z' - 'a';
-            file_expected[i] = 'a' + (i % range);
+            file_expected[i] = 'a' + (char)(i % range);
         }
         
         const size_t chunksize = sizeof(file_expected) / 2;
@@ -2240,14 +2439,15 @@ void test_stream()
 
 struct test
 {
-	int8_t i8;
-	int16_t i16;
-	int32_t i32;
 	int64_t i64;
-	uint8_t u8;
-	uint16_t u16;
-	uint32_t u32;
 	uint64_t u64;
+	uint32_t u32;
+	int32_t i32;
+	int16_t i16;
+	uint16_t u16;
+	int8_t i8;
+	uint8_t u8;
+	char pad[2]; // explicit to ensure the pad bytes get initialized as well
 };
 
 void test_struct_readwrite(struct rjd_binrw_state* state, struct test* data)
@@ -2595,8 +2795,10 @@ void test_resource()
         };
 
         struct rjd_resource_loader loader;
-        struct rjd_result result = rjd_resource_loader_create(&loader, desc);
-        expect_result_ok(result);
+        {
+	        struct rjd_result result = rjd_resource_loader_create(&loader, desc);
+	        expect_result_ok(result);
+	    }
 
         struct expected_resource_data
         {
@@ -2606,14 +2808,14 @@ void test_resource()
         };
 
         const struct expected_resource_data expected_data[] = {
-            { rjd_resource_id_from_str("init.cfg"),                    0,    "some init data is in here\n" },
-            { rjd_resource_id_from_str("bootstrap.lvl"),            1,    "bootstrap level\n" },
-            { rjd_resource_id_from_str("levels/mainmenu.lvl"),        1,    "the main menu and ui\n" },
-            { rjd_resource_id_from_str("levels/dungeon.lvl"),        1,    "first dungeon level\n" },
-            { rjd_resource_id_from_str("gfx/quad.shader"),            2,    "shader code here\n" },
-            { rjd_resource_id_from_str("gfx/invalid.bmp"),            3,    "placeholder bitmap\n" },
-            { rjd_resource_id_from_str("does_not_exist.bmp"),        -1, NULL },
-            { rjd_resource_id_from_str("unregistered_type.txt"),    -1, NULL },
+			{ rjd_resource_id_from_str("bootstrap.lvl"),			1, "bootstrap level\n" },
+			{ rjd_resource_id_from_str("gfx/invalid.bmp"),			3, "placeholder bitmap\n" },
+			{ rjd_resource_id_from_str("gfx/quad.shader"),			2, "shader code here\n" },
+			{ rjd_resource_id_from_str("init.cfg"),					0, "some init data is in here\n" },
+			{ rjd_resource_id_from_str("levels/mainmenu.lvl"),		1, "the main menu and ui\n" },
+			{ rjd_resource_id_from_str("levels/dungeon.lvl"),		1, "first dungeon level\n" },
+			{ rjd_resource_id_from_str("does_not_exist.bmp"),		-1, NULL },
+			{ rjd_resource_id_from_str("unregistered_type.txt"),	-1, NULL },
         };
 
         {
@@ -2639,7 +2841,7 @@ void test_resource()
 
                     uint64_t length = stream.end - stream.start;
                     expect_int64(strlen(expected_str), length);
-                    expect_int32(0, memcmp(expected_str, stream.start, length));
+                    expect_int32(0, memcmp(expected_str, stream.start, (size_t)length));
                 }
                 rjd_istream_close(&stream);
             }
@@ -2660,18 +2862,18 @@ void test_resource()
             type_texture,
         };
 
-        const struct rjd_resource_loader_desc desc = {
-            .type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
-            .allocator = &allocator,
-            .filesystem = {
-                .root = "test_data/resource/lib",
-                .type_mappings = type_mappings,
-                .type_mappings_count = rjd_countof(type_mappings),
-            },
-        };
-
         struct rjd_resource_loader loader;
         {
+	        const struct rjd_resource_loader_desc desc = {
+	            .type = RJD_RESOURCE_LOADER_TYPE_FILESYSTEM,
+	            .allocator = &allocator,
+	            .filesystem = {
+	                .root = "test_data/resource/lib",
+	                .type_mappings = type_mappings,
+	                .type_mappings_count = rjd_countof(type_mappings),
+	            },
+	        };
+
             struct rjd_result result = rjd_resource_loader_create(&loader, desc);
             expect_result_ok(result);
         }
@@ -2872,4 +3074,3 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 
 	return 0;
 }
-
