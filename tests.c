@@ -142,13 +142,33 @@ RJD_STATIC_ASSERT(sizeof(uint32_t) == sizeof(char) * 4);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-char logbuffer[1024 * 128];
-size_t logbuffer_pos = 0;
+char g_logbuffer[1024 * 128];
+size_t g_logbuffer_pos = 0;
 void test_log_hook(const char* msg, size_t length)
 {
-	strncpy(logbuffer + logbuffer_pos, msg, sizeof(logbuffer) - logbuffer_pos);
-	logbuffer_pos += length;
+	strncpy(g_logbuffer + g_logbuffer_pos, msg, sizeof(g_logbuffer) - g_logbuffer_pos);
+	g_logbuffer_pos += length;
 }
+
+void test_logging_redirect_to_logbuffer(void)
+{
+	static struct rjd_logchannel local = {
+		.name = "Test Channel",
+		.enabled = true,
+		.hook = test_log_hook,
+		.verbosity = RJD_LOG_VERBOSITY_MED,
+	};
+	g_rjd_global_logchannel = &local;
+}
+
+void test_logging_reset(void)
+{
+	g_logbuffer_pos = 0;
+	g_logbuffer[0] = 0;
+	rjd_log_resetglobal();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 void test_logging()
 {
@@ -228,10 +248,9 @@ void test_logging()
 		filename, line_test_begin + 24,
 		filename, line_test_begin + 36);
 
-	expect_str(expected, logbuffer);
+	expect_str(expected, g_logbuffer);
 	
-	// reset global logger for future tests
-	rjd_log_resetglobal();
+	test_logging_reset();
 }
 
 struct rjd_result check_result(bool condition) {
@@ -1481,17 +1500,29 @@ void test_strbuf(void)
 
 void test_profiler(void)
 {
-	RJD_PROFILE_SCOPE(Test1, {
+	test_logging_redirect_to_logbuffer();
+
+	{
+		RJD_PROFILE_SCOPE_BEGIN(test1);
+
 		double d = 1;
 		for (size_t i = 0; i < 1000; ++i) {
 			d += d;
 		}
 		expect_true(d > 0);
-	});
+
+		RJD_PROFILE_SCOPE_END(test1);
+	}
+
+	expect_true(strstr(g_logbuffer, "Elapsed test1") != NULL);
+
+	test_logging_reset();
 }
 
 void test_cmd()
 {
+	test_logging_redirect_to_logbuffer();
+
 	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 	
 	const char* argv0[] = { "test.exe", NULL };
@@ -1545,11 +1576,18 @@ void test_cmd()
 	expect_str("file.txt", rjd_cmd_str(&cmd, "FILE"));
 
 	rjd_cmd_usage(&cmd);
+	expect_true(strstr(g_logbuffer, "Usage: a.exe [-h -c -w -z] PATTERN FILE") != NULL);
+	g_logbuffer_pos = 0;
+
 	rjd_cmd_help(&cmd);
+	expect_true(strstr(g_logbuffer, "Usage: a.exe [-h -c -w -z] PATTERN FILE") != NULL);
+	expect_true(strstr(g_logbuffer, "The regex pattern to search for.") != NULL);
 
 	rjd_cmd_free(&cmd);
 
 	expect_no_leaks(&allocator);
+
+	test_logging_reset();
 }
 
 void test_rng()
@@ -3036,4 +3074,3 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 
 	return 0;
 }
-

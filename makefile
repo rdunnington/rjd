@@ -27,3 +27,5 @@ clean:
 	rm -r Debug
 	rm *.stackdump
 
+check:
+	./a.exe
