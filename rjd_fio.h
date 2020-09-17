@@ -324,6 +324,7 @@ static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
 	struct rjd_result result = RJD_RESULT_OK();
 	switch (error)
 	{
+		case 0: break;
 		case EACCES: result = RJD_RESULT("The parent directory does not allow write permission to the process, or one of the directories in pathname did not allow search permission."); break;
 		case EDQUOT: result = RJD_RESULT("The user's quota of disk blocks or inodes on the file system has been exhausted."); break;
 		case EEXIST: result = RJD_RESULT("pathname already exists (not necessarily as a directory). This includes the case where pathname is a symbolic link, dangling or not."); break;
