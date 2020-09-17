@@ -179,7 +179,7 @@ struct rjd_path_enumerator_state_win32
 {
 	struct rjd_mem_allocator* allocator;
 	char* nextpath;
-	const wchar_t* root;
+	wchar_t** root_dirs;
 	HANDLE handle;
 	bool is_recursive;
 };
@@ -190,24 +190,40 @@ struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, str
 	RJD_ASSERT(path);
 	RJD_ASSERT(allocator);
 
-	wchar_t* path_wide = NULL;
-	{
-		const size_t path_length = mbstowcs(NULL, path, INT_MAX);
-		const wchar_t search_spec[] = L"/*";
-		path_wide = rjd_mem_alloc_array_noclear(wchar_t, path_length + rjd_countof(search_spec) + 1, allocator);
-		mbstowcs(path_wide, path, INT_MAX);
-		wcscpy(path_wide + path_length, search_spec);
-	}
-
 	struct rjd_path_enumerator_state state = {0};
 	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)&state;
 	state_win32->allocator = allocator;
 	state_win32->nextpath = NULL;
-	state_win32->root = path_wide;
+	state_win32->root_dirs = rjd_array_alloc(wchar_t*, 16, allocator);
 	state_win32->handle = INVALID_HANDLE_VALUE;
 	state_win32->is_recursive = (RJD_PATH_ENUMERATE_MODE_RECURSIVE == mode);
 
+	wchar_t* path_wide = NULL;
+	{
+		const size_t path_length = mbstowcs(NULL, path, INT_MAX);
+		path_wide = rjd_mem_alloc_array_noclear(wchar_t, path_length + 1, allocator);
+		mbstowcs(path_wide, path, INT_MAX);
+	}
+	rjd_array_push(state_win32->root_dirs, path_wide);
+
 	return state;
+}
+
+static wchar_t* rjd_path_enumerate_concat_paths(const wchar_t* a, const wchar_t* b, struct rjd_mem_allocator* allocator)
+{
+	const wchar_t path_separator[] = L"/";
+
+	size_t length_a = wcslen(a);
+	size_t length_b = wcslen(b);
+	size_t length_separator = wcslen(path_separator);
+
+	size_t length_total = length_a + length_separator + length_b;
+
+	wchar_t* concat = rjd_mem_alloc_array_noclear(wchar_t, length_total + 1, allocator);
+	wcscpy(concat, a);
+	wcscpy(concat + length_a, path_separator);
+	wcscpy(concat + length_a + length_separator, b);
+	return concat;
 }
 
 const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
@@ -222,27 +238,55 @@ const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
 	}
 
 	WIN32_FIND_DATAW find_data = {0};
+	while (!*find_data.cFileName && rjd_array_count(state_win32->root_dirs) > 0) {
 
-	bool success = false;
-	if (state_win32->handle == INVALID_HANDLE_VALUE) {
-		if (state_win32->root) {
-			state_win32->handle = FindFirstFileW(state_win32->root, &find_data);
-			success = state_win32->handle != INVALID_HANDLE_VALUE;
-			state_win32->root = NULL;
+		if (state_win32->handle == INVALID_HANDLE_VALUE) {
+			wchar_t* root_with_search_spec = rjd_path_enumerate_concat_paths(state_win32->root_dirs[0], L"*", state_win32->allocator);
+			state_win32->handle = FindFirstFileW(root_with_search_spec, &find_data);
+			rjd_mem_free(root_with_search_spec);
+
+			if (state_win32->handle == INVALID_HANDLE_VALUE) {
+				find_data.cFileName[0] = '\0';
+				rjd_mem_free(state_win32->root_dirs[0]);
+				rjd_array_erase_unordered(state_win32->root_dirs, 0);
+			}
 		}
-	} else {
-		success = FindNextFileW(state_win32->handle, &find_data);
-	}
-	
-	while (!wcscmp(find_data.cFileName, L".") || !wcscmp(find_data.cFileName, L"..")) {
-		success = FindNextFileW(state_win32->handle, &find_data);
+
+		if (state_win32->handle != INVALID_HANDLE_VALUE) {
+			bool success = true;
+			if (!*find_data.cFileName) {
+				success = FindNextFileW(state_win32->handle, &find_data);
+			}
+
+			while (success && (!wcscmp(find_data.cFileName, L".") || !wcscmp(find_data.cFileName, L".."))) {
+				success = FindNextFileW(state_win32->handle, &find_data);
+			}
+
+			if (!success) {
+				find_data.cFileName[0] = '\0';
+				state_win32->handle = INVALID_HANDLE_VALUE;
+				rjd_mem_free(state_win32->root_dirs[0]);
+				rjd_array_erase_unordered(state_win32->root_dirs, 0);
+			}
+		}
+
+		if (*find_data.cFileName && state_win32->is_recursive) {
+			if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+				wchar_t* new_root = rjd_path_enumerate_concat_paths(state_win32->root_dirs[0], find_data.cFileName, state_win32->allocator);
+				rjd_array_push(state_win32->root_dirs, new_root);
+			}
+		}
 	}
 
-	if (success)
+	if (*find_data.cFileName)
 	{
-		const size_t path_length = wcstombs(NULL, find_data.cFileName, INT_MAX);
+		wchar_t* path = rjd_path_enumerate_concat_paths(state_win32->root_dirs[0], find_data.cFileName, state_win32->allocator);
+
+		const size_t path_length = wcstombs(NULL, path, INT_MAX);
 		state_win32->nextpath = rjd_mem_alloc_array_noclear(char, path_length + 1, state_win32->allocator);
-		wcstombs(state_win32->nextpath, find_data.cFileName, INT_MAX);
+		wcstombs(state_win32->nextpath, path, INT_MAX);
+
+		rjd_mem_free(path);
 	}
 
 	return state_win32->nextpath;
@@ -254,10 +298,11 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
 
 	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)state;
 
-	rjd_mem_free(state_win32->root);
-	if (state_win32->nextpath) {
-		rjd_mem_free(state_win32->nextpath);
+	for (uint32_t i = 0; i < rjd_array_count(state_win32->root_dirs); ++i) {
+		rjd_mem_free(state_win32->root_dirs + i);
 	}
+	rjd_array_free(state_win32->root_dirs);
+	rjd_mem_free(state_win32->nextpath);
 
 	FindClose(state_win32->handle);
 }

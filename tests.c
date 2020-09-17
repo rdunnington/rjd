@@ -2770,14 +2770,14 @@ void test_resource()
         };
 
         const struct expected_resource_data expected_data[] = {
-            { rjd_resource_id_from_str("init.cfg"),                    0,    "some init data is in here\n" },
-            { rjd_resource_id_from_str("bootstrap.lvl"),            1,    "bootstrap level\n" },
-            { rjd_resource_id_from_str("levels/mainmenu.lvl"),        1,    "the main menu and ui\n" },
-            { rjd_resource_id_from_str("levels/dungeon.lvl"),        1,    "first dungeon level\n" },
-            { rjd_resource_id_from_str("gfx/quad.shader"),            2,    "shader code here\n" },
-            { rjd_resource_id_from_str("gfx/invalid.bmp"),            3,    "placeholder bitmap\n" },
-            { rjd_resource_id_from_str("does_not_exist.bmp"),        -1, NULL },
-            { rjd_resource_id_from_str("unregistered_type.txt"),    -1, NULL },
+			{ rjd_resource_id_from_str("bootstrap.lvl"),			1, "bootstrap level\n" },
+			{ rjd_resource_id_from_str("gfx/invalid.bmp"),			3, "placeholder bitmap\n" },
+			{ rjd_resource_id_from_str("gfx/quad.shader"),			2, "shader code here\n" },
+			{ rjd_resource_id_from_str("init.cfg"),					0, "some init data is in here\n" },
+			{ rjd_resource_id_from_str("levels/mainmenu.lvl"),		1, "the main menu and ui\n" },
+			{ rjd_resource_id_from_str("levels/dungeon.lvl"),		1, "first dungeon level\n" },
+			{ rjd_resource_id_from_str("does_not_exist.bmp"),		-1, NULL },
+			{ rjd_resource_id_from_str("unregistered_type.txt"),	-1, NULL },
         };
 
         {

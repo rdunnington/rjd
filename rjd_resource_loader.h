@@ -97,6 +97,7 @@ struct rjd_resource_loader_filesystem
 
 // static helpers
 
+static int32_t RJD_COMPILER_MSVC_ONLY(__cdecl) rjd_resource_loader_manifest_entry_comparer(const void* a, const void* b);
 static struct rjd_resource_loader_filesystem* rjd_resource_loader_to_filesystem_loader(struct rjd_resource_loader* loader);
 static void rjd_resource_loader_filesystem_destroy(struct rjd_resource_loader* loader);
 static struct rjd_result rjd_resource_loader_filesystem_get_type(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
@@ -124,10 +125,12 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 			rjd_array_push(impl->type_mappings, desc.filesystem.type_mappings[i]);
 		}
 
+		const size_t length_root_path = strlen(desc.filesystem.root) + 1; // +1 to skip path separator
 		struct rjd_path_enumerator_state path_enumerator = rjd_path_enumerate_create(desc.filesystem.root, desc.allocator, RJD_PATH_ENUMERATE_MODE_RECURSIVE);
 		for (const char* path = rjd_path_enumerate_next(&path_enumerator); path != NULL; path = rjd_path_enumerate_next(&path_enumerator))
 		{
-			const char* extension = rjd_path_extension_str(path);
+			const char* relative_path = path + length_root_path;
+			const char* extension = rjd_path_extension_str(relative_path);
 			if (extension)
 			{
 				struct rjd_resource_type_id type = {0};
@@ -141,9 +144,9 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 
 				if (type.hash.hash.value != 0)
 				{
-					struct rjd_strref* pathref = rjd_strpool_add(&impl->strpool, path);
+					struct rjd_strref* pathref = rjd_strpool_add(&impl->strpool, relative_path);
 					struct rjd_resource_manifest_entry_filesystem entry = {
-						.id = rjd_strhash_init(path),
+						.id = rjd_strhash_init(relative_path),
 						.type = type,
 						.path = pathref,
 					};
@@ -153,6 +156,10 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 		}
 
 		rjd_path_enumerate_destroy(&path_enumerator);
+
+		// since the enumerator doesn't return entries in a sorted manner, make sure the manifest order
+		// is deterministic
+		rjd_array_sort(impl->manifest_entries, rjd_resource_loader_manifest_entry_comparer);
 
 		impl_any = impl;
 	}
@@ -173,6 +180,17 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 }
 
 // private implementation
+
+static int32_t RJD_COMPILER_MSVC_ONLY(__cdecl) rjd_resource_loader_manifest_entry_comparer(const void* a, const void* b)
+{
+	const struct rjd_resource_manifest_entry_filesystem* aa = a;
+	const struct rjd_resource_manifest_entry_filesystem* bb = b;
+
+	const char* path_a = rjd_strref_str(aa->path);
+	const char* path_b = rjd_strref_str(bb->path);
+
+	return strcmp(path_a, path_b);
+}
 
 static struct rjd_resource_loader_filesystem* rjd_resource_loader_to_filesystem_loader(struct rjd_resource_loader* loader)
 {
