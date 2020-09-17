@@ -323,7 +323,7 @@ struct rjd_path_enumerator_state_osx
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_osx) <= sizeof(struct rjd_path_enumerator_state));
 
-struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, , struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode)
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode)
 {
 	RJD_ASSERT(path);
 	RJD_UNUSED_PARAM(allocator);

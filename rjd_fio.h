@@ -286,6 +286,7 @@ struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path)
 
 #include <sys/stat.h>
 #include <ftw.h>
+#include <errno.h>
 
 static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf);
 
