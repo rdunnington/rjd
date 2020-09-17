@@ -16,12 +16,14 @@ jobs:
         run: make
       - name: make check
         run: make check
+        timeout-minutes: 1
   build_win32:
     name: Windows Build & Test
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
-      - name: make
-        run: make
+      - name: build
+        run: cmd /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        run: build.bat
       - name: make check
-        run: make check
+        run: tests.exe
