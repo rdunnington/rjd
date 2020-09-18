@@ -21,7 +21,11 @@ jobs:
     name: Windows Build & Test
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
-      - run: cmd /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-      - run: .\build.bat
-      - run: .\tests.exe
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: build
+        run: |
+          cmd /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          .\build.bat
+      - name: run tests
+        run: .\tests.exe
