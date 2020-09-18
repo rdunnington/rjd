@@ -392,6 +392,7 @@ struct rjd_gfx_context
 
 // backend
 static inline int32_t rjd_gfx_backend_ismetal(void);
+static inline int32_t rjd_gfx_backend_isd3d11(void);
 
 // context
 // NOTE: all functions that deal with a context are not threadsafe for simplicity. If you are making a multithreaded
@@ -424,7 +425,6 @@ struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rj
 void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh);
 
 // format
-struct rjd_gfx_format_value rjd_gfx_format_value_from_u32(enum rjd_gfx_format, uint32_t value);
 uint32_t rjd_gfx_format_bytesize(enum rjd_gfx_format format);
 bool rjd_gfx_format_iscolor(enum rjd_gfx_format format);
 bool rjd_gfx_format_isdepthstencil(enum rjd_gfx_format format);
@@ -443,6 +443,11 @@ extern const struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER;
 static inline int32_t rjd_gfx_backend_ismetal(void)
 {
 	return RJD_GFX_BACKEND_METAL;
+}
+
+static inline int32_t rjd_gfx_backend_isd3d11(void)
+{
+	return RJD_GFX_BACKEND_D3D11;
 }
 
 static inline struct rjd_gfx_format_value rjd_gfx_format_make_color_u8_rgba(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
