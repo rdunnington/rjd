@@ -117,6 +117,8 @@ struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_al
 	RJD_ASSERT(filepath);
 	RJD_ASSERT(allocator);
 
+	printf("rjd_istream_from_file: %s\n", filepath);
+
 	uint8_t* buffer = NULL;
 	struct rjd_result result = RJD_RESULT_OK();
 	FILE* file = fopen(filepath, "rb");
@@ -132,7 +134,6 @@ struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_al
 						result = RJD_RESULT_OK();
 					}
 				}
-				printf("\trjd_istream_from_file (%s): file length: %d", filepath, (int)length);
 			}
 		}
 	} else {
@@ -298,6 +299,10 @@ static struct rjd_result rjd_istream_refill_file(struct rjd_istream* stream)
 	void* writable_buffer = (void*)stream->start;
 	ptrdiff_t bytes_wanted = stream->end - stream->start;
 	int32_t bytes_read = (int32_t)fread(writable_buffer, 1, bytes_wanted, file);
+
+	printf("rjd_istream_refill_file\n");
+	printf("\tbytes bytes_wanted: %d\n", (int)bytes_wanted);
+	printf("\tbytes read: %d\n", bytes_read);
 
     RJD_ASSERT(bytes_read <= bytes_wanted);
     
