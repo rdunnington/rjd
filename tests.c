@@ -1805,8 +1805,17 @@ void test_thread_entrypoint(void* userdata)
     data->stage = TEST_THREAD_STAGE_ACQUIRE_WRITE_LOCK;
     result = rjd_rwlock_try_acquire_writer(&data->rwlock);
     expect_result_notok(result);
-    result = rjd_rwlock_release_writer(&data->rwlock);
-    expect_result_notok(result);
+    
+    #if RJD_PLATFORM_WINDOWS
+        // unfortunately the windows and posix rwlock functionality for unlocking is different.
+        // Windows will fail on attempting to unlock a writer when the thread already has a
+        // read lock. But there is only 1 posix unlock function so it will always succeed.
+        // Not sure the best way to unify behavior across the 2 platforms yet so I'll settle for
+        // this for now.
+        result = rjd_rwlock_release_writer(&data->rwlock);
+        expect_result_notok(result);
+    #endif
+
 	result = rjd_rwlock_release_reader(&data->rwlock);
 	expect_result_ok(result);
 	result = rjd_rwlock_try_acquire_writer(&data->rwlock);
@@ -1830,6 +1839,13 @@ void test_thread_entrypoint(void* userdata)
 
 void test_thread()
 {
+    {
+        struct rjd_thread_id id1 = rjd_thread_id_current();
+        struct rjd_thread_id id2 = rjd_thread_id_current();
+        expect_true(rjd_thread_id_equals(id1, id1));
+        expect_true(rjd_thread_id_equals(id1, id2));
+    }
+    
 	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
 
     struct rjd_result result = RJD_RESULT_OK();
@@ -1902,6 +1918,9 @@ void test_thread()
 	// cleanup
     result = rjd_thread_join(&thread);
     expect_result_ok(result);
+    
+    result = rjd_condvar_unlock(&thread_data.goto_next_main);
+    expect_result_ok(result);
 
 	result = rjd_condvar_destroy(&thread_data.goto_next_main);
 	expect_result_ok(result);
@@ -1911,9 +1930,6 @@ void test_thread()
 	expect_result_ok(result);
 	result = rjd_rwlock_destroy(&thread_data.rwlock);
 	expect_result_ok(result);
-
-    result = rjd_condvar_unlock(&thread_data.goto_next_main);
-    expect_result_ok(result);
 	
 	expect_no_leaks(&allocator);
 }
