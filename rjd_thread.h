@@ -21,7 +21,7 @@ struct rjd_thread_desc
 
 struct rjd_thread_id
 {
-	uint64_t id;
+	char platform_impl[8];
 };
 
 struct rjd_thread_platform
@@ -50,7 +50,8 @@ struct rjd_rwlock
 	char platform_impl[256];
 };
 
-struct rjd_thread_id rjd_thread_current(void);
+struct rjd_thread_id rjd_thread_id_current(void);
+bool rjd_thread_id_equals(const struct rjd_thread_id a, const struct rjd_thread_id b);
 
 struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc);
 struct rjd_result rjd_thread_join(struct rjd_thread* thread);
@@ -90,6 +91,11 @@ struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock);
 
 const struct rjd_thread_id RJD_THREAD_ID_INVALID = { 0 };
 
+struct rjd_thread_id_win32
+{
+	uint64_t id;
+};
+
 struct rjd_thread_win32
 {
 	HANDLE handle;
@@ -120,8 +126,8 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_lock_win32) <= sizeof(struct rjd_lock));
 
 struct rjd_rwlock_win32
 {
-	struct rjd_thread_id exclusive_owning_thread;
 	SRWLOCK lock;
+	struct rjd_thread_id exclusive_owning_thread;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_rwlock_win32) <= sizeof(struct rjd_rwlock));
 
@@ -157,10 +163,19 @@ DWORD WINAPI rjd_thread_entrypoint_win32(LPVOID lpParameter);
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
 
-struct rjd_thread_id rjd_thread_current(void)
+struct rjd_thread_id rjd_thread_id_current(void)
 {
-	struct rjd_thread_id id = { .id = GetCurrentThreadId() };
+	struct rjd_thread_id id = {0};
+	struct rjd_thread_id_win32* id_win32 = (struct rjd_thread_id_win32*)&id;
+	id_win32->id GetCurrentThreadId();
 	return id;
+}
+
+bool rjd_thread_id_equals(const rjd_thread_id a, const rjd_thread_id b)
+{
+	struct rjd_thread_id_win32* a_win32 = (struct rjd_thread_id_win32*)&a;
+	struct rjd_thread_id_win32* b_win32 = (struct rjd_thread_id_win32*)&b;
+	return a_win32->id == b_win32->id;
 }
 
 struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc)
@@ -310,7 +325,7 @@ struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t s
 		}
 	}
 
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 	lock_win32->exclusive_owning_thread = current_thread;
 
 	return RJD_RESULT_OK(); 
@@ -346,11 +361,11 @@ struct rjd_result rjd_lock_destroy(struct rjd_lock* lock)
 struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 
 	// posix mutex is non-reentrant but win32 critical section is. To keep functionality the same,
 	// we ensure this CS is non-recursive as well.
-	if (lock_win32->owning_thread.id == current_thread.id) {
+	if (rjd_thread_id_equals(lock_win32->owning_thread, current_thread.id)) {
 		return RJD_RESULT("Lock recursion detected.");
 	}
 
@@ -362,11 +377,11 @@ struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
 struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 
 	// posix mutex is non-reentrant but win32 critical section is. To keep functionality the same,
 	// we ensure this CS is non-recursive as well.
-	if (lock_win32->owning_thread.id == current_thread.id) {
+	if (rjd_thread_id_equals(lock_win32->owning_thread, current_thread.id)) {
 		return RJD_RESULT("Lock recursion detected.");
 	}
 
@@ -380,7 +395,7 @@ struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
 struct rjd_result rjd_lock_release(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 
 	if (current_thread.id != lock_win32->owning_thread.id) {
 		return RJD_RESULT("This thread does not own this lock.");
@@ -414,7 +429,7 @@ struct rjd_result rjd_rwlock_acquire_reader(struct rjd_rwlock* lock)
 struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 	AcquireSRWLockExclusive(&lock_win32->lock);
 	lock_win32->exclusive_owning_thread = current_thread;
 	return RJD_RESULT_OK();
@@ -432,7 +447,7 @@ struct rjd_result rjd_rwlock_try_acquire_reader(struct rjd_rwlock* lock)
 struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 	if (!TryAcquireSRWLockExclusive(&lock_win32->lock)) {
 		return RJD_RESULT("Lock in use");
 	}
@@ -450,7 +465,7 @@ struct rjd_result rjd_rwlock_release_reader(struct rjd_rwlock* lock)
 struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 	if (lock_win32->exclusive_owning_thread.id != current_thread.id) {
 		return RJD_RESULT("This thread does not own this lock.");
 	}
@@ -483,13 +498,18 @@ DWORD WINAPI rjd_thread_entrypoint_win32(LPVOID lpParameter)
 #include <sys/errno.h>
 #include <sys/time.h> // gettimeofday
 
+struct rjd_thread_id_osx
+{
+	pthread_t handle;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_thread_id_osx) <= sizeof(struct rjd_thread_id));
+
 struct rjd_thread_osx
 {
 	pthread_t handle;
 	void* stack;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_thread_osx) <= sizeof(struct rjd_thread_platform));
-RJD_STATIC_ASSERT(sizeof(pthread_t) <= sizeof(uint64_t));
 
 struct rjd_thread_params
 {
@@ -514,11 +534,14 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_lock_osx) <= sizeof(struct rjd_lock));
 struct rjd_rwlock_osx
 {
 	pthread_rwlock_t lock;
+	struct rjd_thread_id exclusive_owning_thread;
+	bool is_exclusively_locked;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_rwlock_osx) <= sizeof(struct rjd_rwlock));
 
 RJD_STATIC_ASSERT(RJD_THREAD_STACKSIZE_DEFAULT >= PTHREAD_STACK_MIN);
 
+static inline struct rjd_thread_id rjd_thread_id_from_pthread(pthread_t handle);
 static inline struct rjd_thread_osx* rjd_thread_get_osx(struct rjd_thread* thread);
 static inline struct rjd_condvar_osx* rjd_condvar_get_osx(struct rjd_condvar* condvar);
 static inline struct rjd_lock_osx* rjd_lock_get_osx(struct rjd_lock* lock);
@@ -529,6 +552,21 @@ static void* rjd_thread_entrypoint_osx(void* userdata);
 
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
+
+struct rjd_thread_id rjd_thread_id_current(void)
+{
+	struct rjd_thread_id id = {0};
+	struct rjd_thread_id_osx* id_osx = (struct rjd_thread_id_osx*)&id;
+	id_osx->handle = pthread_self();
+	return id;
+}
+
+bool rjd_thread_id_equals(const struct rjd_thread_id a, const struct rjd_thread_id b)
+{
+	struct rjd_thread_id_osx* a_osx = (struct rjd_thread_id_osx*)&a;
+	struct rjd_thread_id_osx* b_osx = (struct rjd_thread_id_osx*)&b;
+	return pthread_equal(a_osx->handle, b_osx->handle);
+}
 
 struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc)
 {
@@ -567,7 +605,7 @@ struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread
 			error = pthread_create(&thread_osx->handle, &attributes, rjd_thread_entrypoint_osx, params);
 			result = rjd_error_to_result(error);
 			if (rjd_result_isok(result)) {
-				thread->id.id = (uint64_t)thread_osx->handle;
+                thread->id = rjd_thread_id_from_pthread(thread_osx->handle);
 				thread_osx->stack = stack;
 			}
 		}
@@ -658,25 +696,17 @@ struct rjd_result rjd_condvar_signal_single(struct rjd_condvar* condvar)
 {
 	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
 
-	struct rjd_result result = rjd_lock_acquire(&condvar_osx->lock);
-	if (rjd_result_isok(result)) {
-		int error = pthread_cond_signal(&condvar_osx->condition_variable);
-		result = rjd_error_to_result(error);
-		rjd_lock_release(&condvar_osx->lock);
-	}
+    int error = pthread_cond_signal(&condvar_osx->condition_variable);
+    struct rjd_result result = rjd_error_to_result(error);
 	return result;
 }
 
 struct rjd_result rjd_condvar_signal_all(struct rjd_condvar* condvar)
 {
 	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
-	
-	struct rjd_result result = rjd_lock_acquire(&condvar_osx->lock);
-	if (rjd_result_isok(result)) {
-		int error = pthread_cond_broadcast(&condvar_osx->condition_variable);
-		result = rjd_error_to_result(error);
-		rjd_lock_release(&condvar_osx->lock);
-	}
+
+    int error = pthread_cond_broadcast(&condvar_osx->condition_variable);
+    struct rjd_result result = rjd_error_to_result(error);
 	return result;
 }
 
@@ -786,6 +816,10 @@ struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock)
 	
 	int error = pthread_rwlock_wrlock(&lock_osx->lock);
 	struct rjd_result result = rjd_error_to_result(error);
+	if (rjd_result_isok(result)) {
+		lock_osx->is_exclusively_locked = true;
+		lock_osx->exclusive_owning_thread = rjd_thread_id_current();
+	}
 	return result;
 }
 
@@ -804,18 +838,42 @@ struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock)
 	
 	int error = pthread_rwlock_trywrlock(&lock_osx->lock);
 	struct rjd_result result = rjd_error_to_result(error);
+	if (rjd_result_isok(result)) {
+		lock_osx->is_exclusively_locked = true;
+		lock_osx->exclusive_owning_thread = rjd_thread_id_current();
+	}
 	return result;
 }
 
 struct rjd_result rjd_rwlock_release_reader(struct rjd_rwlock* lock)
 {
-	// posix doesn't have a distinction for releasing a particular mode, unlike windows
-	return rjd_rwlock_release_writer(lock);
+	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+
+    if (lock_osx->is_exclusively_locked) {
+        const struct rjd_thread_id current_thread = rjd_thread_id_current();
+        if (rjd_thread_id_equals(current_thread, lock_osx->exclusive_owning_thread)) {
+			return RJD_RESULT("This is under a writer lock. Release via writer instead.");
+		} else {
+            return RJD_RESULT("This thread does not own this lock");
+        }
+    }
+    
+	int error = pthread_rwlock_unlock(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
 }
 
 struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+	if (lock_osx->is_exclusively_locked) {
+		const struct rjd_thread_id current_thread = rjd_thread_id_current();
+		if (!rjd_thread_id_equals(current_thread, lock_osx->exclusive_owning_thread)) {
+			return RJD_RESULT("This thread does not own this lock");
+		}
+	}
+    
+    lock_osx->is_exclusively_locked = false;
 	
 	int error = pthread_rwlock_unlock(&lock_osx->lock);
 	struct rjd_result result = rjd_error_to_result(error);
@@ -825,6 +883,14 @@ struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
 ////////////////////////////////////////////////////////////////////////////////
 // Local helper implementation
 
+static inline struct rjd_thread_id rjd_thread_id_from_pthread(pthread_t handle)
+{
+    struct rjd_thread_id thread_id = {0};
+    struct rjd_thread_id_osx* id_osx = (struct rjd_thread_id_osx*)&thread_id;
+    id_osx->handle = handle;
+    return thread_id;
+}
+                  
 static inline struct rjd_thread_osx* rjd_thread_get_osx(struct rjd_thread* thread)
 {
 	RJD_ASSERT(thread);

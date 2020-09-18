@@ -107,7 +107,7 @@ const char* rjd_path_extension(const struct rjd_path* path)
 
 const char* rjd_path_extension_str(const char* path)
 {
-    if (!path) {
+    if (!path || !*path) {
         return NULL;
     }
 
@@ -318,7 +318,9 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
 struct rjd_path_enumerator_state_osx
 {
 	NSDirectoryEnumerator<NSString*>* enumerator;
-	NSString* next;
+	struct rjd_mem_allocator* allocator;
+    const char* root;
+	const char* next;
 	bool no_recursion;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_osx) <= sizeof(struct rjd_path_enumerator_state));
@@ -326,10 +328,17 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_osx) <= sizeof(struct 
 struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode)
 {
 	RJD_ASSERT(path);
-	RJD_UNUSED_PARAM(allocator);
+	RJD_ASSERT(allocator);
 
 	NSFileManager* manager = [NSFileManager defaultManager];
 	NSString* startingPath = [NSString stringWithUTF8String:path];
+
+	char* path_copy = NULL;
+	{
+		size_t len = strlen(path);
+		path_copy = rjd_mem_alloc_array_noclear(char, len + 1, allocator);
+		strcpy(path_copy, path);
+	}
 
 	// NSFileManager:enumeratorAtPath is threadsafe
 	NSDirectoryEnumerator<NSString*>* enumerator = [manager enumeratorAtPath:startingPath];
@@ -337,7 +346,9 @@ struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, str
 	struct rjd_path_enumerator_state state = {0};
 	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)&state;
 	state_osx->enumerator = enumerator;
-	state_osx->next = nil;
+	state_osx->allocator = allocator;
+	state_osx->root = path_copy;
+	state_osx->next = NULL;
 	state_osx->no_recursion = (mode == RJD_PATH_ENUMERATE_MODE_FLAT);
 
 	return state;
@@ -346,18 +357,34 @@ struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, str
 const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
 {
 	RJD_ASSERT(state);
-
 	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)state;
+
+	rjd_mem_free(state_osx->next);
+	state_osx->next = NULL;
+
 	if (state_osx->no_recursion) {
 		[state_osx->enumerator skipDescendants];
 	}
-	state_osx->next = (NSString*) [state_osx->enumerator nextObject];
 
-	const char* next_dir = NULL;
-	if (state_osx->next) {
-		next_dir = state_osx->next.UTF8String;
+	NSString* next = (NSString*) [state_osx->enumerator nextObject];
+	if (next) {
+		const char* relative = next.UTF8String;
+		const char path_separator[] = "/";
+
+		size_t length_root = strlen(state_osx->root);
+		size_t length_relative = strlen(relative);
+		size_t length_separator = strlen(path_separator);
+
+		size_t length_total = length_root + length_separator + length_relative;
+
+		char* next_path = rjd_mem_alloc_array_noclear(char, length_total + 1, state_osx->allocator);
+		strcpy(next_path, state_osx->root);
+		strcpy(next_path + length_root, path_separator);
+		strcpy(next_path + length_root + length_separator, relative);
+        state_osx->next = next_path;
 	}
-	return next_dir;
+
+	return state_osx->next;
 }
 
 void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
@@ -366,7 +393,9 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
 
 	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)state;
 	state_osx->enumerator = nil;
-	state_osx->next = nil;
+	
+    rjd_mem_free(state_osx->root);
+    rjd_mem_free(state_osx->next);
 }
 
 #endif // RJD_PLATFORM_OSX && RJD_LANG_OBJC
