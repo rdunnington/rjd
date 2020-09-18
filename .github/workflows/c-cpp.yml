@@ -25,6 +25,6 @@ jobs:
       - name: setup build env
         run: cmd /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
       - name: build
-        run: build.bat
+        run: .\build.bat
       - name: make check
         run: tests.exe
