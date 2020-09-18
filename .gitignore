@@ -10,3 +10,5 @@ tags
 .DS_Store
 *.out*
 rjd.xcodeproj/
+tests
+*.dSYM

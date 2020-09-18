@@ -16,7 +16,7 @@ jobs:
       - name: build
         run: make
       - name: run tests
-        run: make check
+        run: make test 
         timeout-minutes: 1
   build_win32:
     name: Windows Build & Test

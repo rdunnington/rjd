@@ -28,6 +28,8 @@ clean:
 	rm *.pdb
 	rm -r Debug
 	rm *.stackdump
+	rm tests
+	rm -r tests.dSYM
 
-check:
+test:
 	./$(OUTPUT_FILE)

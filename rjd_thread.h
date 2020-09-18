@@ -167,7 +167,7 @@ struct rjd_thread_id rjd_thread_id_current(void)
 {
 	struct rjd_thread_id id = {0};
 	struct rjd_thread_id_win32* id_win32 = (struct rjd_thread_id_win32*)&id;
-	id_win32->id GetCurrentThreadId();
+	id_win32->id = GetCurrentThreadId();
 	return id;
 }
 
@@ -310,7 +310,7 @@ struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t s
 {
 	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)&condvar_win32->lock;
-	RJD_ASSERTMSG(!rjd_thread_id_equals(lock_win32->exclusive_owning_thread, RJD_THREAD_ID_INVALID.id),
+	RJD_ASSERTMSG(!rjd_thread_id_equals(lock_win32->exclusive_owning_thread, RJD_THREAD_ID_INVALID),
 		"You must lock the condvar before waiting on it.");
 
 	uint32_t ms = (seconds == INFINITE) ? INFINITE : seconds * 1000;
