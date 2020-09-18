@@ -4667,11 +4667,9 @@ void rjd_timer_reset(struct rjd_timer* timer);
 double rjd_timer_elapsed(const struct rjd_timer* timer);
 double rjd_timer_global(void);
 
-#define RJD_PROFILE_SCOPE(name, scope) {									\
-		struct rjd_timer _timer##name = rjd_timer_init(); 					\
-		{scope}																\
-		RJD_LOG("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&_timer##name));	\
-	}
+#define RJD_PROFILE_SCOPE_BEGIN(name) struct rjd_timer timer_##name = rjd_timer_init();
+#define RJD_PROFILE_SCOPE_END_WITHLOG(name, log_function) log_function("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&timer_##name));
+#define RJD_PROFILE_SCOPE_END(name)	RJD_PROFILE_SCOPE_END_WITHLOG(name, RJD_LOG)
 
 #if RJD_IMPL
 
@@ -4892,7 +4890,7 @@ void rjd_cmd_usage(const struct rjd_cmd* cmd)
 	}
 	reqString[offset] = 0;
 
-	printf("Usage: %s [%s] %s\n", cmd->argv[0], optString, reqString);
+	RJD_LOG("Usage: %s [%s] %s", cmd->argv[0], optString, reqString);
 }
 
 void rjd_cmd_help(const struct rjd_cmd* cmd) 
@@ -4900,15 +4898,15 @@ void rjd_cmd_help(const struct rjd_cmd* cmd)
 	rjd_cmd_usage(cmd);
 
 	for (size_t i = 0; i < rjd_array_count(cmd->reqs); ++i) {
-		printf("%s\n\t%s\n", cmd->reqs[i].argname, cmd->reqs[i].description);
+		RJD_LOG("%s\n\t%s", cmd->reqs[i].argname, cmd->reqs[i].description);
 	}
 
 	for (size_t i = 0; i < rjd_array_count(cmd->opts); ++i) {
 		const struct rjd_cmd_argv* arg = cmd->opts + i;
 		if (arg->argname) {
-			printf("%s %s, %s=%s\n\t%s\n", arg->shortname, arg->argname, arg->longname, arg->argname, arg->description);
+			RJD_LOG("%s %s, %s=%s\n\t%s", arg->shortname, arg->argname, arg->longname, arg->argname, arg->description);
 		} else {
-			printf("%s, %s\n\t%s\n", arg->shortname, arg->longname, arg->description);
+			RJD_LOG("%s, %s\n\t%s", arg->shortname, arg->longname, arg->description);
 		}
 	}
 }
@@ -5564,6 +5562,7 @@ struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path)
 
 #include <sys/stat.h>
 #include <ftw.h>
+#include <errno.h>
 
 static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf);
 
@@ -5602,6 +5601,7 @@ static inline struct rjd_result rjd_fio_mkdir_platform(const char* foldername)
 	struct rjd_result result = RJD_RESULT_OK();
 	switch (error)
 	{
+		case 0: break;
 		case EACCES: result = RJD_RESULT("The parent directory does not allow write permission to the process, or one of the directories in pathname did not allow search permission."); break;
 		case EDQUOT: result = RJD_RESULT("The user's quota of disk blocks or inodes on the file system has been exhausted."); break;
 		case EEXIST: result = RJD_RESULT("pathname already exists (not necessarily as a directory). This includes the case where pathname is a symbolic link, dangling or not."); break;
@@ -5653,7 +5653,7 @@ struct rjd_thread_desc
 
 struct rjd_thread_id
 {
-	uint64_t id;
+	char platform_impl[8];
 };
 
 struct rjd_thread_platform
@@ -5682,7 +5682,8 @@ struct rjd_rwlock
 	char platform_impl[256];
 };
 
-struct rjd_thread_id rjd_thread_current(void);
+struct rjd_thread_id rjd_thread_id_current(void);
+bool rjd_thread_id_equals(const struct rjd_thread_id a, const struct rjd_thread_id b);
 
 struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc);
 struct rjd_result rjd_thread_join(struct rjd_thread* thread);
@@ -5722,6 +5723,11 @@ struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock);
 
 const struct rjd_thread_id RJD_THREAD_ID_INVALID = { 0 };
 
+struct rjd_thread_id_win32
+{
+	uint64_t id;
+};
+
 struct rjd_thread_win32
 {
 	HANDLE handle;
@@ -5752,8 +5758,8 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_lock_win32) <= sizeof(struct rjd_lock));
 
 struct rjd_rwlock_win32
 {
-	struct rjd_thread_id exclusive_owning_thread;
 	SRWLOCK lock;
+	struct rjd_thread_id exclusive_owning_thread;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_rwlock_win32) <= sizeof(struct rjd_rwlock));
 
@@ -5789,10 +5795,19 @@ DWORD WINAPI rjd_thread_entrypoint_win32(LPVOID lpParameter);
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
 
-struct rjd_thread_id rjd_thread_current(void)
+struct rjd_thread_id rjd_thread_id_current(void)
 {
-	struct rjd_thread_id id = { .id = GetCurrentThreadId() };
+	struct rjd_thread_id id = {0};
+	struct rjd_thread_id_win32* id_win32 = (struct rjd_thread_id_win32*)&id;
+	id_win32->id = GetCurrentThreadId();
 	return id;
+}
+
+bool rjd_thread_id_equals(const struct rjd_thread_id a, const struct rjd_thread_id b)
+{
+	struct rjd_thread_id_win32* a_win32 = (struct rjd_thread_id_win32*)&a;
+	struct rjd_thread_id_win32* b_win32 = (struct rjd_thread_id_win32*)&b;
+	return a_win32->id == b_win32->id;
 }
 
 struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc)
@@ -5927,7 +5942,7 @@ struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t s
 {
 	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)&condvar_win32->lock;
-	RJD_ASSERTMSG(lock_win32->exclusive_owning_thread.id != RJD_THREAD_ID_INVALID.id, 
+	RJD_ASSERTMSG(!rjd_thread_id_equals(lock_win32->exclusive_owning_thread, RJD_THREAD_ID_INVALID),
 		"You must lock the condvar before waiting on it.");
 
 	uint32_t ms = (seconds == INFINITE) ? INFINITE : seconds * 1000;
@@ -5942,7 +5957,7 @@ struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t s
 		}
 	}
 
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 	lock_win32->exclusive_owning_thread = current_thread;
 
 	return RJD_RESULT_OK(); 
@@ -5967,7 +5982,7 @@ struct rjd_result rjd_lock_destroy(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 
-	if (RJD_THREAD_ID_INVALID.id != lock_win32->owning_thread.id) {
+	if (!rjd_thread_id_equals(RJD_THREAD_ID_INVALID, lock_win32->owning_thread)) {
 		return RJD_RESULT("The lock is still in use by a thread");
 	}
 
@@ -5978,11 +5993,11 @@ struct rjd_result rjd_lock_destroy(struct rjd_lock* lock)
 struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 
 	// posix mutex is non-reentrant but win32 critical section is. To keep functionality the same,
 	// we ensure this CS is non-recursive as well.
-	if (lock_win32->owning_thread.id == current_thread.id) {
+	if (rjd_thread_id_equals(lock_win32->owning_thread, current_thread)) {
 		return RJD_RESULT("Lock recursion detected.");
 	}
 
@@ -5994,11 +6009,11 @@ struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
 struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 
 	// posix mutex is non-reentrant but win32 critical section is. To keep functionality the same,
 	// we ensure this CS is non-recursive as well.
-	if (lock_win32->owning_thread.id == current_thread.id) {
+	if (rjd_thread_id_equals(lock_win32->owning_thread, current_thread)) {
 		return RJD_RESULT("Lock recursion detected.");
 	}
 
@@ -6012,9 +6027,9 @@ struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
 struct rjd_result rjd_lock_release(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 
-	if (current_thread.id != lock_win32->owning_thread.id) {
+	if (!rjd_thread_id_equals(lock_win32->owning_thread, current_thread)) {
 		return RJD_RESULT("This thread does not own this lock.");
 	}
 
@@ -6046,7 +6061,7 @@ struct rjd_result rjd_rwlock_acquire_reader(struct rjd_rwlock* lock)
 struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 	AcquireSRWLockExclusive(&lock_win32->lock);
 	lock_win32->exclusive_owning_thread = current_thread;
 	return RJD_RESULT_OK();
@@ -6064,7 +6079,7 @@ struct rjd_result rjd_rwlock_try_acquire_reader(struct rjd_rwlock* lock)
 struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 	if (!TryAcquireSRWLockExclusive(&lock_win32->lock)) {
 		return RJD_RESULT("Lock in use");
 	}
@@ -6082,8 +6097,9 @@ struct rjd_result rjd_rwlock_release_reader(struct rjd_rwlock* lock)
 struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
-	const struct rjd_thread_id current_thread = rjd_thread_current();
-	if (lock_win32->exclusive_owning_thread.id != current_thread.id) {
+	const struct rjd_thread_id current_thread = rjd_thread_id_current();
+
+	if (!rjd_thread_id_equals(lock_win32->exclusive_owning_thread, current_thread)) {
 		return RJD_RESULT("This thread does not own this lock.");
 	}
 	lock_win32->exclusive_owning_thread = RJD_THREAD_ID_INVALID;
@@ -6115,13 +6131,18 @@ DWORD WINAPI rjd_thread_entrypoint_win32(LPVOID lpParameter)
 #include <sys/errno.h>
 #include <sys/time.h> // gettimeofday
 
+struct rjd_thread_id_osx
+{
+	pthread_t handle;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_thread_id_osx) <= sizeof(struct rjd_thread_id));
+
 struct rjd_thread_osx
 {
 	pthread_t handle;
 	void* stack;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_thread_osx) <= sizeof(struct rjd_thread_platform));
-RJD_STATIC_ASSERT(sizeof(pthread_t) <= sizeof(uint64_t));
 
 struct rjd_thread_params
 {
@@ -6146,11 +6167,14 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_lock_osx) <= sizeof(struct rjd_lock));
 struct rjd_rwlock_osx
 {
 	pthread_rwlock_t lock;
+	struct rjd_thread_id exclusive_owning_thread;
+	bool is_exclusively_locked;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_rwlock_osx) <= sizeof(struct rjd_rwlock));
 
 RJD_STATIC_ASSERT(RJD_THREAD_STACKSIZE_DEFAULT >= PTHREAD_STACK_MIN);
 
+static inline struct rjd_thread_id rjd_thread_id_from_pthread(pthread_t handle);
 static inline struct rjd_thread_osx* rjd_thread_get_osx(struct rjd_thread* thread);
 static inline struct rjd_condvar_osx* rjd_condvar_get_osx(struct rjd_condvar* condvar);
 static inline struct rjd_lock_osx* rjd_lock_get_osx(struct rjd_lock* lock);
@@ -6161,6 +6185,21 @@ static void* rjd_thread_entrypoint_osx(void* userdata);
 
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
+
+struct rjd_thread_id rjd_thread_id_current(void)
+{
+	struct rjd_thread_id id = {0};
+	struct rjd_thread_id_osx* id_osx = (struct rjd_thread_id_osx*)&id;
+	id_osx->handle = pthread_self();
+	return id;
+}
+
+bool rjd_thread_id_equals(const struct rjd_thread_id a, const struct rjd_thread_id b)
+{
+	struct rjd_thread_id_osx* a_osx = (struct rjd_thread_id_osx*)&a;
+	struct rjd_thread_id_osx* b_osx = (struct rjd_thread_id_osx*)&b;
+	return pthread_equal(a_osx->handle, b_osx->handle);
+}
 
 struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread_desc desc)
 {
@@ -6199,7 +6238,7 @@ struct rjd_result rjd_thread_create(struct rjd_thread* thread, struct rjd_thread
 			error = pthread_create(&thread_osx->handle, &attributes, rjd_thread_entrypoint_osx, params);
 			result = rjd_error_to_result(error);
 			if (rjd_result_isok(result)) {
-				thread->id.id = (uint64_t)thread_osx->handle;
+                thread->id = rjd_thread_id_from_pthread(thread_osx->handle);
 				thread_osx->stack = stack;
 			}
 		}
@@ -6290,25 +6329,17 @@ struct rjd_result rjd_condvar_signal_single(struct rjd_condvar* condvar)
 {
 	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
 
-	struct rjd_result result = rjd_lock_acquire(&condvar_osx->lock);
-	if (rjd_result_isok(result)) {
-		int error = pthread_cond_signal(&condvar_osx->condition_variable);
-		result = rjd_error_to_result(error);
-		rjd_lock_release(&condvar_osx->lock);
-	}
+    int error = pthread_cond_signal(&condvar_osx->condition_variable);
+    struct rjd_result result = rjd_error_to_result(error);
 	return result;
 }
 
 struct rjd_result rjd_condvar_signal_all(struct rjd_condvar* condvar)
 {
 	struct rjd_condvar_osx* condvar_osx = rjd_condvar_get_osx(condvar);
-	
-	struct rjd_result result = rjd_lock_acquire(&condvar_osx->lock);
-	if (rjd_result_isok(result)) {
-		int error = pthread_cond_broadcast(&condvar_osx->condition_variable);
-		result = rjd_error_to_result(error);
-		rjd_lock_release(&condvar_osx->lock);
-	}
+
+    int error = pthread_cond_broadcast(&condvar_osx->condition_variable);
+    struct rjd_result result = rjd_error_to_result(error);
 	return result;
 }
 
@@ -6418,6 +6449,10 @@ struct rjd_result rjd_rwlock_acquire_writer(struct rjd_rwlock* lock)
 	
 	int error = pthread_rwlock_wrlock(&lock_osx->lock);
 	struct rjd_result result = rjd_error_to_result(error);
+	if (rjd_result_isok(result)) {
+		lock_osx->is_exclusively_locked = true;
+		lock_osx->exclusive_owning_thread = rjd_thread_id_current();
+	}
 	return result;
 }
 
@@ -6436,18 +6471,42 @@ struct rjd_result rjd_rwlock_try_acquire_writer(struct rjd_rwlock* lock)
 	
 	int error = pthread_rwlock_trywrlock(&lock_osx->lock);
 	struct rjd_result result = rjd_error_to_result(error);
+	if (rjd_result_isok(result)) {
+		lock_osx->is_exclusively_locked = true;
+		lock_osx->exclusive_owning_thread = rjd_thread_id_current();
+	}
 	return result;
 }
 
 struct rjd_result rjd_rwlock_release_reader(struct rjd_rwlock* lock)
 {
-	// posix doesn't have a distinction for releasing a particular mode, unlike windows
-	return rjd_rwlock_release_writer(lock);
+	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+
+    if (lock_osx->is_exclusively_locked) {
+        const struct rjd_thread_id current_thread = rjd_thread_id_current();
+        if (rjd_thread_id_equals(current_thread, lock_osx->exclusive_owning_thread)) {
+			return RJD_RESULT("This is under a writer lock. Release via writer instead.");
+		} else {
+            return RJD_RESULT("This thread does not own this lock");
+        }
+    }
+    
+	int error = pthread_rwlock_unlock(&lock_osx->lock);
+	struct rjd_result result = rjd_error_to_result(error);
+	return result;
 }
 
 struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_osx* lock_osx = rjd_rwlock_get_osx(lock);
+	if (lock_osx->is_exclusively_locked) {
+		const struct rjd_thread_id current_thread = rjd_thread_id_current();
+		if (!rjd_thread_id_equals(current_thread, lock_osx->exclusive_owning_thread)) {
+			return RJD_RESULT("This thread does not own this lock");
+		}
+	}
+    
+    lock_osx->is_exclusively_locked = false;
 	
 	int error = pthread_rwlock_unlock(&lock_osx->lock);
 	struct rjd_result result = rjd_error_to_result(error);
@@ -6457,6 +6516,14 @@ struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
 ////////////////////////////////////////////////////////////////////////////////
 // Local helper implementation
 
+static inline struct rjd_thread_id rjd_thread_id_from_pthread(pthread_t handle)
+{
+    struct rjd_thread_id thread_id = {0};
+    struct rjd_thread_id_osx* id_osx = (struct rjd_thread_id_osx*)&thread_id;
+    id_osx->handle = handle;
+    return thread_id;
+}
+                  
 static inline struct rjd_thread_osx* rjd_thread_get_osx(struct rjd_thread* thread)
 {
 	RJD_ASSERT(thread);
@@ -7118,7 +7185,7 @@ const char* rjd_path_extension(const struct rjd_path* path)
 
 const char* rjd_path_extension_str(const char* path)
 {
-    if (!path) {
+    if (!path || !*path) {
         return NULL;
     }
 
@@ -7190,7 +7257,7 @@ struct rjd_path_enumerator_state_win32
 {
 	struct rjd_mem_allocator* allocator;
 	char* nextpath;
-	const wchar_t* root;
+	wchar_t** root_dirs;
 	HANDLE handle;
 	bool is_recursive;
 };
@@ -7201,24 +7268,40 @@ struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, str
 	RJD_ASSERT(path);
 	RJD_ASSERT(allocator);
 
-	wchar_t* path_wide = NULL;
-	{
-		const size_t path_length = mbstowcs(NULL, path, INT_MAX);
-		const wchar_t search_spec[] = L"/*";
-		path_wide = rjd_mem_alloc_array_noclear(wchar_t, path_length + rjd_countof(search_spec) + 1, allocator);
-		mbstowcs(path_wide, path, INT_MAX);
-		wcscpy(path_wide + path_length, search_spec);
-	}
-
 	struct rjd_path_enumerator_state state = {0};
 	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)&state;
 	state_win32->allocator = allocator;
 	state_win32->nextpath = NULL;
-	state_win32->root = path_wide;
+	state_win32->root_dirs = rjd_array_alloc(wchar_t*, 16, allocator);
 	state_win32->handle = INVALID_HANDLE_VALUE;
 	state_win32->is_recursive = (RJD_PATH_ENUMERATE_MODE_RECURSIVE == mode);
 
+	wchar_t* path_wide = NULL;
+	{
+		const size_t path_length = mbstowcs(NULL, path, INT_MAX);
+		path_wide = rjd_mem_alloc_array_noclear(wchar_t, path_length + 1, allocator);
+		mbstowcs(path_wide, path, INT_MAX);
+	}
+	rjd_array_push(state_win32->root_dirs, path_wide);
+
 	return state;
+}
+
+static wchar_t* rjd_path_enumerate_concat_paths(const wchar_t* a, const wchar_t* b, struct rjd_mem_allocator* allocator)
+{
+	const wchar_t path_separator[] = L"/";
+
+	size_t length_a = wcslen(a);
+	size_t length_b = wcslen(b);
+	size_t length_separator = wcslen(path_separator);
+
+	size_t length_total = length_a + length_separator + length_b;
+
+	wchar_t* concat = rjd_mem_alloc_array_noclear(wchar_t, length_total + 1, allocator);
+	wcscpy(concat, a);
+	wcscpy(concat + length_a, path_separator);
+	wcscpy(concat + length_a + length_separator, b);
+	return concat;
 }
 
 const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
@@ -7233,27 +7316,55 @@ const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
 	}
 
 	WIN32_FIND_DATAW find_data = {0};
+	while (!*find_data.cFileName && rjd_array_count(state_win32->root_dirs) > 0) {
 
-	bool success = false;
-	if (state_win32->handle == INVALID_HANDLE_VALUE) {
-		if (state_win32->root) {
-			state_win32->handle = FindFirstFileW(state_win32->root, &find_data);
-			success = state_win32->handle != INVALID_HANDLE_VALUE;
-			state_win32->root = NULL;
+		if (state_win32->handle == INVALID_HANDLE_VALUE) {
+			wchar_t* root_with_search_spec = rjd_path_enumerate_concat_paths(state_win32->root_dirs[0], L"*", state_win32->allocator);
+			state_win32->handle = FindFirstFileW(root_with_search_spec, &find_data);
+			rjd_mem_free(root_with_search_spec);
+
+			if (state_win32->handle == INVALID_HANDLE_VALUE) {
+				find_data.cFileName[0] = '\0';
+				rjd_mem_free(state_win32->root_dirs[0]);
+				rjd_array_erase_unordered(state_win32->root_dirs, 0);
+			}
 		}
-	} else {
-		success = FindNextFileW(state_win32->handle, &find_data);
-	}
-	
-	while (!wcscmp(find_data.cFileName, L".") || !wcscmp(find_data.cFileName, L"..")) {
-		success = FindNextFileW(state_win32->handle, &find_data);
+
+		if (state_win32->handle != INVALID_HANDLE_VALUE) {
+			bool success = true;
+			if (!*find_data.cFileName) {
+				success = FindNextFileW(state_win32->handle, &find_data);
+			}
+
+			while (success && (!wcscmp(find_data.cFileName, L".") || !wcscmp(find_data.cFileName, L".."))) {
+				success = FindNextFileW(state_win32->handle, &find_data);
+			}
+
+			if (!success) {
+				find_data.cFileName[0] = '\0';
+				state_win32->handle = INVALID_HANDLE_VALUE;
+				rjd_mem_free(state_win32->root_dirs[0]);
+				rjd_array_erase_unordered(state_win32->root_dirs, 0);
+			}
+		}
+
+		if (*find_data.cFileName && state_win32->is_recursive) {
+			if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+				wchar_t* new_root = rjd_path_enumerate_concat_paths(state_win32->root_dirs[0], find_data.cFileName, state_win32->allocator);
+				rjd_array_push(state_win32->root_dirs, new_root);
+			}
+		}
 	}
 
-	if (success)
+	if (*find_data.cFileName)
 	{
-		const size_t path_length = wcstombs(NULL, find_data.cFileName, INT_MAX);
+		wchar_t* path = rjd_path_enumerate_concat_paths(state_win32->root_dirs[0], find_data.cFileName, state_win32->allocator);
+
+		const size_t path_length = wcstombs(NULL, path, INT_MAX);
 		state_win32->nextpath = rjd_mem_alloc_array_noclear(char, path_length + 1, state_win32->allocator);
-		wcstombs(state_win32->nextpath, find_data.cFileName, INT_MAX);
+		wcstombs(state_win32->nextpath, path, INT_MAX);
+
+		rjd_mem_free(path);
 	}
 
 	return state_win32->nextpath;
@@ -7265,10 +7376,11 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
 
 	struct rjd_path_enumerator_state_win32* state_win32 = (struct rjd_path_enumerator_state_win32*)state;
 
-	rjd_mem_free(state_win32->root);
-	if (state_win32->nextpath) {
-		rjd_mem_free(state_win32->nextpath);
+	for (uint32_t i = 0; i < rjd_array_count(state_win32->root_dirs); ++i) {
+		rjd_mem_free(state_win32->root_dirs + i);
 	}
+	rjd_array_free(state_win32->root_dirs);
+	rjd_mem_free(state_win32->nextpath);
 
 	FindClose(state_win32->handle);
 }
@@ -7284,18 +7396,27 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
 struct rjd_path_enumerator_state_osx
 {
 	NSDirectoryEnumerator<NSString*>* enumerator;
-	NSString* next;
+	struct rjd_mem_allocator* allocator;
+    const char* root;
+	const char* next;
 	bool no_recursion;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_path_enumerator_state_osx) <= sizeof(struct rjd_path_enumerator_state));
 
-struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, , struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode)
+struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode)
 {
 	RJD_ASSERT(path);
-	RJD_UNUSED_PARAM(allocator);
+	RJD_ASSERT(allocator);
 
 	NSFileManager* manager = [NSFileManager defaultManager];
 	NSString* startingPath = [NSString stringWithUTF8String:path];
+
+	char* path_copy = NULL;
+	{
+		size_t len = strlen(path);
+		path_copy = rjd_mem_alloc_array_noclear(char, len + 1, allocator);
+		strcpy(path_copy, path);
+	}
 
 	// NSFileManager:enumeratorAtPath is threadsafe
 	NSDirectoryEnumerator<NSString*>* enumerator = [manager enumeratorAtPath:startingPath];
@@ -7303,7 +7424,9 @@ struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, , s
 	struct rjd_path_enumerator_state state = {0};
 	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)&state;
 	state_osx->enumerator = enumerator;
-	state_osx->next = nil;
+	state_osx->allocator = allocator;
+	state_osx->root = path_copy;
+	state_osx->next = NULL;
 	state_osx->no_recursion = (mode == RJD_PATH_ENUMERATE_MODE_FLAT);
 
 	return state;
@@ -7312,18 +7435,34 @@ struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, , s
 const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state)
 {
 	RJD_ASSERT(state);
-
 	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)state;
+
+	rjd_mem_free(state_osx->next);
+	state_osx->next = NULL;
+
 	if (state_osx->no_recursion) {
 		[state_osx->enumerator skipDescendants];
 	}
-	state_osx->next = (NSString*) [state_osx->enumerator nextObject];
 
-	const char* next_dir = NULL;
-	if (state_osx->next) {
-		next_dir = state_osx->next.UTF8String;
+	NSString* next = (NSString*) [state_osx->enumerator nextObject];
+	if (next) {
+		const char* relative = next.UTF8String;
+		const char path_separator[] = "/";
+
+		size_t length_root = strlen(state_osx->root);
+		size_t length_relative = strlen(relative);
+		size_t length_separator = strlen(path_separator);
+
+		size_t length_total = length_root + length_separator + length_relative;
+
+		char* next_path = rjd_mem_alloc_array_noclear(char, length_total + 1, state_osx->allocator);
+		strcpy(next_path, state_osx->root);
+		strcpy(next_path + length_root, path_separator);
+		strcpy(next_path + length_root + length_separator, relative);
+        state_osx->next = next_path;
 	}
-	return next_dir;
+
+	return state_osx->next;
 }
 
 void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
@@ -7332,7 +7471,9 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state)
 
 	struct rjd_path_enumerator_state_osx* state_osx = (struct rjd_path_enumerator_state_osx*)state;
 	state_osx->enumerator = nil;
-	state_osx->next = nil;
+	
+    rjd_mem_free(state_osx->root);
+    rjd_mem_free(state_osx->next);
 }
 
 #endif // RJD_PLATFORM_OSX && RJD_LANG_OBJC
@@ -8065,6 +8206,7 @@ struct rjd_resource_loader_filesystem
 
 // static helpers
 
+static int32_t RJD_COMPILER_MSVC_ONLY(__cdecl) rjd_resource_loader_manifest_entry_comparer(const void* a, const void* b);
 static struct rjd_resource_loader_filesystem* rjd_resource_loader_to_filesystem_loader(struct rjd_resource_loader* loader);
 static void rjd_resource_loader_filesystem_destroy(struct rjd_resource_loader* loader);
 static struct rjd_result rjd_resource_loader_filesystem_get_type(struct rjd_resource_loader* loader, struct rjd_resource_id id, struct rjd_resource_type_id* out);
@@ -8092,10 +8234,12 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 			rjd_array_push(impl->type_mappings, desc.filesystem.type_mappings[i]);
 		}
 
+		const size_t length_root_path = strlen(desc.filesystem.root) + 1; // +1 to skip path separator
 		struct rjd_path_enumerator_state path_enumerator = rjd_path_enumerate_create(desc.filesystem.root, desc.allocator, RJD_PATH_ENUMERATE_MODE_RECURSIVE);
 		for (const char* path = rjd_path_enumerate_next(&path_enumerator); path != NULL; path = rjd_path_enumerate_next(&path_enumerator))
 		{
-			const char* extension = rjd_path_extension_str(path);
+			const char* relative_path = path + length_root_path;
+			const char* extension = rjd_path_extension_str(relative_path);
 			if (extension)
 			{
 				struct rjd_resource_type_id type = {0};
@@ -8109,9 +8253,9 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 
 				if (type.hash.hash.value != 0)
 				{
-					struct rjd_strref* pathref = rjd_strpool_add(&impl->strpool, path);
+					struct rjd_strref* pathref = rjd_strpool_add(&impl->strpool, relative_path);
 					struct rjd_resource_manifest_entry_filesystem entry = {
-						.id = rjd_strhash_init(path),
+						.id = rjd_strhash_init(relative_path),
 						.type = type,
 						.path = pathref,
 					};
@@ -8121,6 +8265,10 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 		}
 
 		rjd_path_enumerate_destroy(&path_enumerator);
+
+		// since the enumerator doesn't return entries in a sorted manner, make sure the manifest order
+		// is deterministic
+		rjd_array_sort(impl->manifest_entries, rjd_resource_loader_manifest_entry_comparer);
 
 		impl_any = impl;
 	}
@@ -8141,6 +8289,17 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 }
 
 // private implementation
+
+static int32_t RJD_COMPILER_MSVC_ONLY(__cdecl) rjd_resource_loader_manifest_entry_comparer(const void* a, const void* b)
+{
+	const struct rjd_resource_manifest_entry_filesystem* aa = a;
+	const struct rjd_resource_manifest_entry_filesystem* bb = b;
+
+	const char* path_a = rjd_strref_str(aa->path);
+	const char* path_b = rjd_strref_str(bb->path);
+
+	return strcmp(path_a, path_b);
+}
 
 static struct rjd_resource_loader_filesystem* rjd_resource_loader_to_filesystem_loader(struct rjd_resource_loader* loader)
 {
