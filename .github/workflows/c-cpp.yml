@@ -2,19 +2,20 @@ name: CI
 
 on:
   push:
-    branches: [ master, ci-test ]
+    branches: [ master ]
   pull_request:
-    branches: [ master, ci-test ]
+    branches: [ master ]
 
 jobs:
   build_osx:
     name: OSX Build & Test
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: checkout
+        uses: actions/checkout@v2
       - name: build
         run: make
-      - name: make check
+      - name: run tests
         run: make check
         timeout-minutes: 1
   build_win32:
@@ -24,8 +25,10 @@ jobs:
       - name: checkout
         uses: actions/checkout@v2
       - name: build
+        shell: cmd
         run: |
-          cmd /k "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          .\build.bat
+          call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          ./build.bat
       - name: run tests
         run: .\tests.exe
+        timeout-minutes: 1
