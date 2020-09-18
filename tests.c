@@ -2856,6 +2856,7 @@ void test_resource()
                     expect_result_ok(result);
 
                     uint64_t length = stream.end - stream.start;
+
                     expect_int64(strlen(expected_str), length);
                     expect_int32(0, memcmp(expected_str, stream.start, (size_t)length));
                 }

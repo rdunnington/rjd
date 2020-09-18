@@ -167,11 +167,11 @@ struct rjd_thread_id rjd_thread_id_current(void)
 {
 	struct rjd_thread_id id = {0};
 	struct rjd_thread_id_win32* id_win32 = (struct rjd_thread_id_win32*)&id;
-	id_win32->id GetCurrentThreadId();
+	id_win32->id = GetCurrentThreadId();
 	return id;
 }
 
-bool rjd_thread_id_equals(const rjd_thread_id a, const rjd_thread_id b)
+bool rjd_thread_id_equals(const struct rjd_thread_id a, const struct rjd_thread_id b)
 {
 	struct rjd_thread_id_win32* a_win32 = (struct rjd_thread_id_win32*)&a;
 	struct rjd_thread_id_win32* b_win32 = (struct rjd_thread_id_win32*)&b;
@@ -310,7 +310,7 @@ struct rjd_result rjd_condvar_wait_timed(struct rjd_condvar* condvar, uint32_t s
 {
 	struct rjd_condvar_win32* condvar_win32 = (struct rjd_condvar_win32*)condvar;
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)&condvar_win32->lock;
-	RJD_ASSERTMSG(lock_win32->exclusive_owning_thread.id != RJD_THREAD_ID_INVALID.id, 
+	RJD_ASSERTMSG(!rjd_thread_id_equals(lock_win32->exclusive_owning_thread, RJD_THREAD_ID_INVALID),
 		"You must lock the condvar before waiting on it.");
 
 	uint32_t ms = (seconds == INFINITE) ? INFINITE : seconds * 1000;
@@ -350,7 +350,7 @@ struct rjd_result rjd_lock_destroy(struct rjd_lock* lock)
 {
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 
-	if (RJD_THREAD_ID_INVALID.id != lock_win32->owning_thread.id) {
+	if (!rjd_thread_id_equals(RJD_THREAD_ID_INVALID, lock_win32->owning_thread)) {
 		return RJD_RESULT("The lock is still in use by a thread");
 	}
 
@@ -365,7 +365,7 @@ struct rjd_result rjd_lock_acquire(struct rjd_lock* lock)
 
 	// posix mutex is non-reentrant but win32 critical section is. To keep functionality the same,
 	// we ensure this CS is non-recursive as well.
-	if (rjd_thread_id_equals(lock_win32->owning_thread, current_thread.id)) {
+	if (rjd_thread_id_equals(lock_win32->owning_thread, current_thread)) {
 		return RJD_RESULT("Lock recursion detected.");
 	}
 
@@ -381,7 +381,7 @@ struct rjd_result rjd_lock_try_acquire(struct rjd_lock* lock)
 
 	// posix mutex is non-reentrant but win32 critical section is. To keep functionality the same,
 	// we ensure this CS is non-recursive as well.
-	if (rjd_thread_id_equals(lock_win32->owning_thread, current_thread.id)) {
+	if (rjd_thread_id_equals(lock_win32->owning_thread, current_thread)) {
 		return RJD_RESULT("Lock recursion detected.");
 	}
 
@@ -397,7 +397,7 @@ struct rjd_result rjd_lock_release(struct rjd_lock* lock)
 	struct rjd_lock_win32* lock_win32 = (struct rjd_lock_win32*)lock;
 	const struct rjd_thread_id current_thread = rjd_thread_id_current();
 
-	if (current_thread.id != lock_win32->owning_thread.id) {
+	if (!rjd_thread_id_equals(lock_win32->owning_thread, current_thread)) {
 		return RJD_RESULT("This thread does not own this lock.");
 	}
 
@@ -466,7 +466,8 @@ struct rjd_result rjd_rwlock_release_writer(struct rjd_rwlock* lock)
 {
 	struct rjd_rwlock_win32* lock_win32 = (struct rjd_rwlock_win32*)lock;
 	const struct rjd_thread_id current_thread = rjd_thread_id_current();
-	if (lock_win32->exclusive_owning_thread.id != current_thread.id) {
+
+	if (!rjd_thread_id_equals(lock_win32->exclusive_owning_thread, current_thread)) {
 		return RJD_RESULT("This thread does not own this lock.");
 	}
 	lock_win32->exclusive_owning_thread = RJD_THREAD_ID_INVALID;
