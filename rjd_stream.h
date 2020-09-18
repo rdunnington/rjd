@@ -132,6 +132,7 @@ struct rjd_istream rjd_istream_from_file(const char* filepath, struct rjd_mem_al
 						result = RJD_RESULT_OK();
 					}
 				}
+				printf("\trjd_istream_from_file (%s): file length: %d", filepath, (int)length);
 			}
 		}
 	} else {

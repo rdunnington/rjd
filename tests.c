@@ -2857,13 +2857,14 @@ void test_resource()
 
                     uint64_t length = stream.end - stream.start;
 
+                    {
+	                    char temp[256];
+	                    memcpy(temp, stream.start, length);
+	                    temp[length] = 0;
 
-                    char temp[256];
-                    memcpy(temp, stream.start, length);
-                    temp[length] = 0;
-
-                    printf("expected_str: %s (%llu)\n", expected_str, length);
-                    printf("actual str: %s (%llu)\n", temp, length);
+	                    printf("expected_str: '%s' (%u)\n", expected_str, (uint32_t)strlen(expected_str));
+	                    printf("actual str: '%s' (%u)\n", temp, (uint32_t)strlen(temp));
+	                }
 
                     expect_int64(strlen(expected_str), length);
                     expect_int32(0, memcmp(expected_str, stream.start, (size_t)length));
