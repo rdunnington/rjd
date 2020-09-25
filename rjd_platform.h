@@ -109,8 +109,6 @@
 	#define NOMINMAX
 	#include <windows.h>
 	#include <combaseapi.h>
-	#undef near
-	#undef far
 #endif // RJD_PLATFORM_WINDOWS
 #endif // RJD_IMPL
 
