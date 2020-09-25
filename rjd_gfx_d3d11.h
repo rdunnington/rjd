@@ -1,7 +1,5 @@
 #pragma once
 
-#if 0
-
 #define RJD_GFX_D3D11_H 1
 
 #if !RJD_GFX_H
@@ -16,18 +14,38 @@
 	#error "DirectX11 is only supported on Windows"
 #endif
 
+#define CINTERFACE
+#define COBJMACROS
+#include <d3d11.h>
+#include <dxgi1_6.h>
+#include <d3dcompiler.h>
+#undef CINTERFACE
+#undef COBJMACROS
+
+#if 1
+
 ////////////////////////////////////////////////////////////////////////////////
 // Local helpers
 
+#if RJD_COMPILER_GCC
+	// The GCC headers have all the correct declarations for these GUIDs, but the libraries are missing the definitions
+	const GUID IID_IDXGIFactory4 = { 0x1bc6ea02, 0xef36, 0x464f, { 0xbf,0x0c,0x21,0xca,0x39,0xe5,0x16,0x8a } };
+#endif
+
 struct rjd_gfx_context_d3d11
 {
+	HWND hwnd;
 	ID3D11Device* device;
+	ID3D11DeviceContext* context;
 	IDXGIAdapter1* adapter;
-	IDXGIFactory* factory;
-	//ID3D11Debug* debug;
+	IDXGIFactory4* factory;
+	IDXGISwapChain1* swapchain;
+	bool is_occluded;
 };
-RJD_STATIC_ASSERT(sizeof(rjd_gfx_context_d3d11) <= sizeof(rjd_gfx_context));
+RJD_STATIC_ASSERT(sizeof(struct rjd_gfx_context_d3d11) <= sizeof(struct rjd_gfx_context));
 
+struct rjd_result rjd_gfx_translate_hresult(HRESULT hr);
+DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format);
 
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
@@ -36,153 +54,18 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 {
 	RJD_ASSERT(out);
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)out;
-
-	//{
-	//	if (SUCCEEDED(D3D11GetDebugInterface(&IID_ID3D11Debug, &out->debug))) {
-	//		ID3D11Debug_EnableDebugLayer(out->debug);
-	//	} else {
-	//		printf("Failed to get debug interface\n");
-	//		return false;
-	//	}
-	//}
+	context_d3d11->hwnd = desc.win32.hwnd;
+	context_d3d11->is_occluded = false;
 
 	{
 		UINT flags = 0;
 		flags |= DXGI_CREATE_FACTORY_DEBUG; // TODO make this optional
 
-		HRESULT hr = CreateDXGIFactory2(flags, &IID_IDXGIFactory4, &context_d3d11->factory);
+		HRESULT hr = CreateDXGIFactory2(flags, &IID_IDXGIFactory4, (void**)&context_d3d11->factory);
 		if (!SUCCEEDED(hr)) {
-			printf("Failed to create factory: %u\n", hr);
-			return false;
+			return rjd_gfx_translate_hresult(hr);
 		}
 	}
-
-
-////////////////////////////////////////////////////////////////////////////////
-// Get the number of modes that fit the DXGI_FORMAT_R8G8B8A8_UNORM display format for the adapter output (monitor).
-	result = adapterOutput->GetDisplayModeList(DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_ENUM_MODES_INTERLACED, &numModes, NULL);
-	if(FAILED(result))
-	{
-		return false;
-	}
-
-	// Create a list to hold all the possible display modes for this monitor/video card combination.
-	displayModeList = new DXGI_MODE_DESC[numModes];
-	if(!displayModeList)
-	{
-		return false;
-	}
-
-	// Now fill the display mode list structures.
-	result = adapterOutput->GetDisplayModeList(DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_ENUM_MODES_INTERLACED, &numModes, displayModeList);
-	if(FAILED(result))
-	{
-		return false;
-	}
-
-	// Now go through all the display modes and find the one that matches the screen width and height.
-	// When a match is found store the numerator and denominator of the refresh rate for that monitor.
-	for(i=0; i<numModes; i++)
-	{
-		if(displayModeList[i].Width == (unsigned int)screenWidth)
-		{
-			if(displayModeList[i].Height == (unsigned int)screenHeight)
-			{
-				numerator = displayModeList[i].RefreshRate.Numerator;
-				denominator = displayModeList[i].RefreshRate.Denominator;
-			}
-		}
-	}
-
-	// Get the adapter (video card) description.
-	result = adapter->GetDesc(&adapterDesc);
-	if(FAILED(result))
-	{
-		return false;
-	}
-
-	// Store the dedicated video card memory in megabytes.
-	m_videoCardMemory = (int)(adapterDesc.DedicatedVideoMemory / 1024 / 1024);
-
-	// Convert the name of the video card to a character array and store it.
-	error = wcstombs_s(&stringLength, m_videoCardDescription, 128, adapterDesc.Description, 128);
-	if(error != 0)
-	{
-		return false;
-	}
-
-	// Release the display mode list.
-	delete [] displayModeList;
-	displayModeList = 0;
-
-	// Release the adapter output.
-	adapterOutput->Release();
-	adapterOutput = 0;
-
-	// Release the adapter.
-	adapter->Release();
-	adapter = 0;
-
-	// Release the factory.
-	factory->Release();
-	factory = 0;
-
-	// Initialize the swap chain description.
-    ZeroMemory(&swapChainDesc, sizeof(swapChainDesc));
-
-	// Set to a single back buffer.
-    swapChainDesc.BufferCount = 1;
-
-	// Set the width and height of the back buffer.
-    swapChainDesc.BufferDesc.Width = screenWidth;
-    swapChainDesc.BufferDesc.Height = screenHeight;
-
-	// Set regular 32-bit surface for the back buffer.
-    swapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-
-	// Set the refresh rate of the back buffer.
-	if(m_vsync_enabled)
-	{
-	    swapChainDesc.BufferDesc.RefreshRate.Numerator = numerator;
-		swapChainDesc.BufferDesc.RefreshRate.Denominator = denominator;
-	}
-	else
-	{
-	    swapChainDesc.BufferDesc.RefreshRate.Numerator = 0;
-		swapChainDesc.BufferDesc.RefreshRate.Denominator = 1;
-	}
-
-	// Set the usage of the back buffer.
-    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-
-	// Set the handle for the window to render to.
-    swapChainDesc.OutputWindow = hwnd;
-
-	// Turn multisampling off.
-    swapChainDesc.SampleDesc.Count = 1;
-    swapChainDesc.SampleDesc.Quality = 0;
-
-	// Set to full screen or windowed mode.
-	if(fullscreen)
-	{
-		swapChainDesc.Windowed = false;
-	}
-	else
-	{
-		swapChainDesc.Windowed = true;
-	}
-
-	// Set the scan line ordering and scaling to unspecified.
-	swapChainDesc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-	swapChainDesc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-
-	// Discard the back buffer contents after presenting.
-	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-
-	// Don't set the advanced flags.
-	swapChainDesc.Flags = 0;
-////////////////////////////////////////////////////////////////////////////////
-
 
 	const UINT flags = 
 		D3D11_CREATE_DEVICE_BGRA_SUPPORT | // enable compatibility with Direct2D.
@@ -194,7 +77,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		D3D_FEATURE_LEVEL_11_0,
 	};
 
-	struct rjd_result result = RJD_RESULT("No hardware adapter found. Does this machine have a GPU?");
+	struct rjd_result result_adapter = RJD_RESULT("No hardware adapter found. Does this machine have a GPU?");
 	for (UINT i = 0; DXGI_ERROR_NOT_FOUND != IDXGIFactory1_EnumAdapters1(context_d3d11->factory, i, &context_d3d11->adapter); ++i) {
 		DXGI_ADAPTER_DESC1 desc_adapter;
 		IDXGIAdapter1_GetDesc1(context_d3d11->adapter, &desc_adapter);
@@ -206,10 +89,14 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		// desc_adapter.DedicatedVideoMemory
 		// desc_adapter.Description // wchar_t* name
 	}
+	if (!rjd_result_isok(result_adapter)) {
+		return result_adapter;
+	}
 
 	const HRESULT hr_device = D3D11CreateDevice(
-		context_d3d11->adapter,
+		(IDXGIAdapter*)context_d3d11->adapter, // TODO verify this cast is legit
 		D3D_DRIVER_TYPE_HARDWARE,
+		NULL, // not using a software rasterizer
 		flags,
 		feature_levels,
 		rjd_countof(feature_levels),
@@ -231,13 +118,49 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		}
 	}
 
+	const DXGI_FORMAT backbuffer_format = rjd_gfx_format_to_dxgi(desc.backbuffer_color_format);
 	{
+		UINT support;
+		HRESULT hr = ID3D11Device_CheckFormatSupport(context_d3d11->device, backbuffer_format, &support);
+		if (hr == E_FAIL) {
+			return RJD_RESULT("Device does not support specified backbuffer format.");
+		}
+	}
+
+	// create swapchain
+	{
+		DXGI_RATIONAL refresh_rate = {
+			.Numerator = 0,
+			.Denominator = 1,
+		};
+
+		DXGI_SAMPLE_DESC desc_msaa = {
+			.Count = 1,
+			.Quality = 0,
+		};
+
+		if (desc.optional_desired_msaa_samples) {
+			for (uint32_t i = 0; i < desc.desired_msaa_samples_count; ++i) {
+				UINT quality = 0;
+				UINT count = desc.optional_desired_msaa_samples[i];
+				HRESULT hr = ID3D11Device_CheckMultisampleQualityLevels(context_d3d11->device, backbuffer_format, count, &quality);
+				if (SUCCEEDED(hr)) {
+					desc_msaa.Count = count;
+					desc_msaa.Quality = quality;
+				} else if (hr == 0) {
+					// unsupported
+				} else {
+					return RJD_RESULT("Failed to get multisample quality levels.");
+				}
+			}
+		}
+
 		DXGI_SWAP_CHAIN_DESC1 desc_swapchain = {
 			.Width = 0, // auto-detect
 			.Height = 0, // auto-detect
-			.Format = rjd_gfx_format_to_dxgi(desc.backbuffer_color_format),
+			.Format = backbuffer_format,
 			.Stereo = false,
-			.SampleDesc = NULL, // TODO
+			.SampleDesc = desc_msaa,
 			.BufferUsage = DXGI_USAGE_BACK_BUFFER,
 			.BufferCount = 3, // TODO make this configurable. Right now 3 matches the metal defaults.
 			.Scaling = DXGI_SCALING_NONE, // Don't stretch the backbuffer to fit the window size. We should handle that.
@@ -246,20 +169,29 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 			.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING, // needed to turn off vsync
 		};
 
-		//DXGI_SWAP_CHAIN_FULLSCREEN_DESC desc_fullscreen = {0};
-		//if (desc.is_fullscreen) {
-		//}
+		DXGI_SWAP_CHAIN_FULLSCREEN_DESC desc_fullscreen = {
+			.RefreshRate = refresh_rate,
+			.Windowed = TRUE, // TODO
+		};
 
 		HRESULT hr_swap = IDXGIFactory2_CreateSwapChainForHwnd(
-			context_d3d11->device,
-			desc.hwnd,
+			context_d3d11->factory,
+			(IUnknown*)context_d3d11->device,
+			desc.win32.hwnd,
 			&desc_swapchain,
-			desc_fullscreen_p,
+			&desc_fullscreen,
 			NULL, // don't restrict to a particular output of the adapter
 			&context_d3d11->swapchain);
+		if (FAILED(hr_swap)) {
+			switch (hr_swap) {
+				case E_OUTOFMEMORY: return RJD_RESULT("Failed to create swapchain: out of memory");
+				case DXGI_ERROR_INVALID_CALL: RJD_ASSERTFAIL("We should detect this before it gets here."); break;
+				default: return RJD_RESULT("Failed to create swapchain.");
+			}
+		}
 	}
 
-	return result;
+	return RJD_RESULT_OK();
 }
 
 void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
@@ -267,52 +199,86 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 	RJD_ASSERT(context);
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 
-	ID3D12Device_Release(context_d3d11->device);
+	IDXGISwapChain1_Release(context_d3d11->swapchain);
+	ID3D11Device_Release(context_d3d11->device);
 	IDXGIAdapter1_Release(context_d3d11->adapter);
 	IDXGIFactory4_Release(context_d3d11->factory);
 }
 
-bool rjd_gfx_msaa_is_count_supported(const struct rjd_gfx_context* context, uint32_t count); // count is usually: 1,2,4, or 8
-{
-	RJD_ASSERT(context);
-	//struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
-	//
-	RJD_UNUSED_PARAM(count);
-	return false;
-
-	//DXGI_FORMAT format = 0; // TODO should probably be passed in? probably needs to match the backbuffer format
-	//UINT supported_levels = 0; // TODO not sure what this is. 
-
-	//// struct DXGI_SWAP_CHAIN_DESC // probably has something to do with this?
-
-	//ID3D11Device_CheckMultisampleQualityLevels(context_d3d11->context, format, count, &supported_levels);
-	//if (FAILED(hr)) {
-	//	return false;
-	//}
-	//
-	//return supported_levels > 0;
-}
-
-void rjd_gfx_msaa_set_count(struct rjd_gfx_context* context, uint32_t count)
-{
-	// TODO
-	RJD_UNUSED_PARAM(context);
-	RJD_UNUSED_PARAM(count);
-}
-
-bool rjd_gfx_vsync_try_enable(struct rjd_gfx_context* context)
+struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode)
 {
 	RJD_UNUSED_PARAM(context);
-	return false; // TODO
+	RJD_UNUSED_PARAM(mode);
+	return RJD_RESULT("unimplemented");
 }
 
 struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context)
 {
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+
+	// find the primary output and wait for its vblank
+	RECT rect_window = {0};
+	if (GetWindowRect(context_d3d11->hwnd, &rect_window) == FALSE) {
+		return RJD_RESULT("Failed to get window rect. Check GetLastError() for more information"); // TODO make a GetLastError -> result function
+	}
+
+	IDXGIOutput* output = NULL;
+	IDXGIOutput* selected_output = NULL;
+	uint32_t selected_intersect_area = 0.0f;
+	for (UINT i = 0; DXGI_ERROR_NOT_FOUND != IDXGIAdapter1_EnumOutputs(context_d3d11->adapter, i, &output); ++i) {
+		DXGI_OUTPUT_DESC desc_output = {0};
+        HRESULT hr = IDXGIOutput_GetDesc(output, &desc_output);
+		if (SUCCEEDED(hr)) {
+			RECT rect_intersect = {0};
+			if (IntersectRect(&rect_intersect, &rect_window, &desc_output.DesktopCoordinates)) {
+				RJD_ASSERT(rect_intersect.bottom >= rect_intersect.top); // TODO remove this when you can test it's supposed to be bot - top
+				uint32_t output_intersect_area = (rect_intersect.right - rect_intersect.left) * (rect_intersect.bottom - rect_intersect.top);
+
+				if (selected_output == NULL || output_intersect_area > selected_intersect_area) {
+					selected_output = output;
+					selected_intersect_area = output_intersect_area;
+				}
+			}
+		}
+	}
+
+	if (selected_output == NULL) {
+		return RJD_RESULT("No outputs found. Were all monitors unplugged?");
+	}
+
+	HRESULT hr = IDXGIOutput_WaitForVBlank(selected_output);
+	struct rjd_result result = rjd_gfx_translate_hresult(hr);
+	return result;
 }
 
 struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context)
 {
-	
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+
+	const bool USE_VSYNC = true; // TODO make this configurable
+
+	UINT sync_interval = 0;
+	UINT flags = 0;
+	if (USE_VSYNC) {
+		sync_interval = 1;
+		flags = DXGI_PRESENT_DO_NOT_WAIT;
+	} else {
+		sync_interval = 0;
+		flags = DXGI_PRESENT_DO_NOT_WAIT | DXGI_PRESENT_ALLOW_TEARING;
+	}
+
+	if (context_d3d11->is_occluded) {
+		flags |= DXGI_PRESENT_TEST;
+	}
+
+	HRESULT hr = IDXGISwapChain_Present(context_d3d11->swapchain, sync_interval, flags);
+	context_d3d11->is_occluded = (hr == DXGI_STATUS_OCCLUDED);
+	if (context_d3d11->is_occluded) {
+		hr = S_OK;
+	}
+
+	struct rjd_result result = rjd_gfx_translate_hresult(hr);
+	return result;
 }
 
 // commands
@@ -339,5 +305,30 @@ void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* 
 
 ////////////////////////////////////////////////////////////////////////////////
 // local implementation
+
+struct rjd_result rjd_gfx_translate_hresult(HRESULT hr)
+{
+	if (SUCCEEDED(hr)) {
+		return RJD_RESULT_OK();
+	}
+
+	return RJD_RESULT("Failed. TODO more info.");
+}
+
+DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format)
+{
+	switch (format)
+	{
+		case RJD_GFX_FORMAT_COLOR_U8_RGBA: return DXGI_FORMAT_R8G8B8A8_UINT;
+		case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM: return DXGI_FORMAT_B8G8R8A8_UNORM;
+		case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB: return DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32: return DXGI_FORMAT_D32_FLOAT;
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8: return DXGI_FORMAT_D24_UNORM_S8_UINT;
+		case RJD_GFX_FORMAT_COUNT: break;
+	}
+
+	RJD_ASSERTFAIL("Unhandled case.");
+	return DXGI_FORMAT_UNKNOWN;
+}
 
 #endif

@@ -149,6 +149,16 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		view.sampleCount = 1; // users can set this higher later with rjd_gfx_set_msaa_count()
 	}
 
+	NSUInteger msaa_count = 1;
+	for (uint32_t i = 0; desc.optional_desired_msaa_sample && i < desc.msaa_samples_count) {
+		NSUInteger count = desc.optional_desired_msaa_sample[i];
+		if ([view.device supportsTextureSampleCount:count]) {
+			msaa_count = count;
+			break;
+		}
+	}
+	view.sampleCount = count;
+
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)out;
     memset(out, 0, sizeof(*out));
 
@@ -245,12 +255,11 @@ void rjd_gfx_msaa_set_count(struct rjd_gfx_context* context, uint32_t count)
 	context_metal->view.sampleCount = count;
 }
 
-bool rjd_gfx_vsync_try_enable(struct rjd_gfx_context* context)
+struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode)
 {
 	RJD_UNUSED_PARAM(context);
-
-	// TODO
-	return false;
+	RJD_UNUSED_PARAM(mode);
+	return RJD_RESULT("unimplemented");
 }
 
 struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out)

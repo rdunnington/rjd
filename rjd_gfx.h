@@ -364,16 +364,24 @@ struct rjd_gfx_command_buffer
 ////////////////////////////////////////////////////////////////////////////////
 // gfx context
 
+
+enum RJD_GFX_VSYNC_MODE
+{
+	RJD_GFX_VSYNC_MODE_ON,
+	RJD_GFX_VSYNC_MODE_OFF,
+};
+
 struct rjd_gfx_context_desc
 {
+	struct rjd_mem_allocator* allocator;
 	enum rjd_gfx_format backbuffer_color_format;
 	enum rjd_gfx_format backbuffer_depth_format;
-	struct rjd_mem_allocator* allocator;
-	uint32_t msaa_samples;
+	uint32_t* optional_desired_msaa_samples; // desired samples and fallbacks if unavailable. 1 is the default.
+	uint32_t desired_msaa_samples_count;
 
 	#if RJD_PLATFORM_WINDOWS
 		struct {
-			void* window_handle; // HWND
+			void* hwnd; // HWND
 		} win32;
 	#elif RJD_PLATFORM_OSX
 		struct {
@@ -400,9 +408,7 @@ static inline int32_t rjd_gfx_backend_isd3d11(void);
 struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd_gfx_context_desc desc);
 void rjd_gfx_context_destroy(struct rjd_gfx_context* context);
 
-bool rjd_gfx_msaa_is_count_supported(const struct rjd_gfx_context* context, uint32_t count); // count is usually: 1,2,4, or 8
-void rjd_gfx_msaa_set_count(struct rjd_gfx_context* context, uint32_t count);
-bool rjd_gfx_vsync_try_enable(struct rjd_gfx_context* context);
+struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode);
 struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context);
 struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context);
 
