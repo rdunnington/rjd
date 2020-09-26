@@ -88,8 +88,6 @@ struct rjd_gfx_context_metal
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_gfx_context_metal) <= sizeof(struct rjd_gfx_context));
 
-const struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER = {0};
-
 ////////////////////////////////////////////////////////////////////////////////
 // private helpers
 

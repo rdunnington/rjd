@@ -28,7 +28,7 @@
 // Local helpers
 
 #if RJD_COMPILER_GCC
-	// The GCC headers have all the correct declarations for these GUIDs, but the libraries are missing the definitions
+	// The GCC headers have all the correct declarations for these GUIDs, but libdxguid.a are missing the definitions
 	const GUID IID_IDXGIFactory4 = { 0x1bc6ea02, 0xef36, 0x464f, { 0xbf,0x0c,0x21,0xca,0x39,0xe5,0x16,0x8a } };
 #endif
 
@@ -40,12 +40,35 @@ struct rjd_gfx_context_d3d11
 	IDXGIAdapter1* adapter;
 	IDXGIFactory4* factory;
 	IDXGISwapChain1* swapchain;
+
+	//struct rjd_gfx_texture_d3d11* slotmap_textures;
+	//struct rjd_gfx_shader_d3d11* slotmap_shaders;
+	//struct rjd_gfx_pipeline_state_d3d11* slotmap_pipeline_states;
+	//struct rjd_gfx_mesh_d3d11* slotmap_meshes;
+	struct rjd_gfx_command_buffer_d3d11* slotmap_command_buffers;
+
 	bool is_occluded;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_gfx_context_d3d11) <= sizeof(struct rjd_gfx_context));
 
-struct rjd_result rjd_gfx_translate_hresult(HRESULT hr);
-DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format);
+struct rjd_gfx_command_buffer_d3d11
+{
+	ID3D11DeviceContext* deferred_context;
+	ID3D11RenderTargetView* render_target;
+};
+
+struct rjd_gfx_rgba
+{
+	float v[4];
+};
+
+// Local helpers
+static struct rjd_result rjd_gfx_translate_hresult(HRESULT hr);
+
+static DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format);
+static struct rjd_gfx_rgba rjd_gfx_format_value_to_rgba(struct rjd_gfx_format_value value);
+
+static bool rjd_gfx_texture_isbackbuffer(struct rjd_gfx_texture texture);
 
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
@@ -191,6 +214,8 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		}
 	}
 
+	context_d3d11->slotmap_command_buffers	= rjd_slotmap_alloc(struct rjd_gfx_command_buffer_d3d11, 16, desc.allocator);
+
 	return RJD_RESULT_OK();
 }
 
@@ -224,7 +249,7 @@ struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context)
 
 	IDXGIOutput* output = NULL;
 	IDXGIOutput* selected_output = NULL;
-	uint32_t selected_intersect_area = 0.0f;
+	uint32_t selected_intersect_area = 0;
 	for (UINT i = 0; DXGI_ERROR_NOT_FOUND != IDXGIAdapter1_EnumOutputs(context_d3d11->adapter, i, &output); ++i) {
 		DXGI_OUTPUT_DESC desc_output = {0};
         HRESULT hr = IDXGIOutput_GetDesc(output, &desc_output);
@@ -282,10 +307,81 @@ struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context)
 }
 
 // commands
-struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out);
-struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_begin_desc* command);
-struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_draw_desc* command);
-struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer);
+struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out)
+{
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+
+	struct rjd_gfx_command_buffer_d3d11 buffer_d3d11 = {0};
+	HRESULT hr = ID3D11Device_CreateDeferredContext(context_d3d11->device, 0, &buffer_d3d11.deferred_context);
+
+	struct rjd_result result = rjd_gfx_translate_hresult(hr);
+	if (rjd_result_isok(result)) {
+		rjd_slotmap_insert(context_d3d11->slotmap_command_buffers, buffer_d3d11, &out->handle);
+	}
+
+	return result;
+}
+
+struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_begin_desc* command)
+{
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+	struct rjd_gfx_command_buffer_d3d11* buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
+
+	if (buffer_d3d11->render_target) {
+		return RJD_RESULT("A render pass has already been started with this command buffer.");
+	}
+
+	if (rjd_gfx_texture_isbackbuffer(command->render_target)) {
+		ID3D11Texture2D* texture_backbuffer = NULL;
+		HRESULT hr = IDXGISwapChain_GetBuffer(context_d3d11->swapchain, 0, &IID_ID3D11Texture2D, (void**)&texture_backbuffer);
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
+		}
+
+		// TODO make sure the texture -> resource cast is safe
+		hr = ID3D11Device_CreateRenderTargetView(context_d3d11->device, (ID3D11Resource*)texture_backbuffer, NULL, &buffer_d3d11->render_target);
+
+		// TODO release texture2d?
+
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
+		}
+	} else {
+		RJD_ASSERTFAIL("unimplemented"); // TODO
+	}
+
+	struct rjd_gfx_rgba rgba_backbuffer = rjd_gfx_format_value_to_rgba(command->clear_color);
+	ID3D11DeviceContext_ClearRenderTargetView(buffer_d3d11->deferred_context, buffer_d3d11->render_target, rgba_backbuffer.v);
+
+	//ID3D11DeviceContext_ClearDepthStencilView(buffer_d3d11->deferred_context, buffer_d3d11->depth_stencil, color); // TODO
+
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_draw_desc* command)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(cmd_buffer);
+	RJD_UNUSED_PARAM(command);
+	return RJD_RESULT("unimplemented");
+}
+
+struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer)
+{
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+	struct rjd_gfx_command_buffer_d3d11* buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
+
+	ID3D11CommandList* commandlist = NULL;
+	HRESULT hr = ID3D11DeviceContext_FinishCommandList(buffer_d3d11->deferred_context, FALSE, &commandlist);
+	if (FAILED(hr)) {
+		return rjd_gfx_translate_hresult(hr);
+	}
+
+	ID3D11DeviceContext_ExecuteCommandList(context_d3d11->context, commandlist, FALSE);
+	ID3D11CommandList_Release(commandlist); // TODO needed?
+
+	return RJD_RESULT_OK();
+}
 
 // resources
 struct rjd_result rjd_gfx_texture_create(struct rjd_gfx_context* context, struct rjd_gfx_texture* out, struct rjd_gfx_texture_desc desc);
@@ -306,7 +402,7 @@ void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* 
 ////////////////////////////////////////////////////////////////////////////////
 // local implementation
 
-struct rjd_result rjd_gfx_translate_hresult(HRESULT hr)
+static struct rjd_result rjd_gfx_translate_hresult(HRESULT hr)
 {
 	if (SUCCEEDED(hr)) {
 		return RJD_RESULT_OK();
@@ -315,7 +411,7 @@ struct rjd_result rjd_gfx_translate_hresult(HRESULT hr)
 	return RJD_RESULT("Failed. TODO more info.");
 }
 
-DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format)
+static DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format)
 {
 	switch (format)
 	{
@@ -329,6 +425,39 @@ DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format)
 
 	RJD_ASSERTFAIL("Unhandled case.");
 	return DXGI_FORMAT_UNKNOWN;
+}
+
+static struct rjd_gfx_rgba rjd_gfx_format_value_to_rgba(struct rjd_gfx_format_value value)
+{
+	struct rjd_gfx_rgba out = {0};
+	switch (value.type)
+	{
+		case RJD_GFX_FORMAT_COLOR_U8_RGBA:
+			out.v[0] = value.color_u8_rgba[0];
+			out.v[1] = value.color_u8_rgba[1];
+			out.v[2] = value.color_u8_rgba[2];
+			out.v[3] = value.color_u8_rgba[3];
+			break;
+		case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM:
+		case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB:
+			RJD_ASSERT("TODO");
+			break;
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32:
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8:
+			RJD_ASSERT("This is intended to be used by colors, not depthstencil values.");
+			break;
+		case RJD_GFX_FORMAT_COUNT:
+			RJD_ASSERTFAIL("Bad type.");
+			break;
+	}
+
+	return out;
+}
+
+static bool rjd_gfx_texture_isbackbuffer(struct rjd_gfx_texture texture)
+{
+	return	texture.handle.salt == RJD_GFX_TEXTURE_BACKBUFFER.handle.salt &&
+			texture.handle.index == RJD_GFX_TEXTURE_BACKBUFFER.handle.index;
 }
 
 #endif

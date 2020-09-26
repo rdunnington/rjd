@@ -495,6 +495,8 @@ static const struct rjd_logchannel logchannel_error = {
 #define RJD_GFX_LOG(...) RJD_LOG_CHANNEL(&logchannel_default, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
 #define RJD_GFX_LOG_ERROR(...) RJD_LOG_CHANNEL(&logchannel_error, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
 
+const struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER = {0};
+
 ////////////////////////////////////////////////////////////////////////////////
 // platform-independent format
 
