@@ -26,7 +26,7 @@ tags:
 	ctags -f tags *
 
 clean:
-	rm *.exe
+	rm *.exe*
 	rm *.ilk
 	rm *.obj
 	rm *.pdb
