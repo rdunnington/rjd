@@ -2,6 +2,10 @@
 #include <limits.h>
 #include "tests_rjd_wrapped.h"
 
+#if RJD_PLATFORM_WINDOWS
+	#include <windows.h> // GetModuleHandle
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 // expect utils
 
@@ -3061,7 +3065,80 @@ void test_resource()
 	expect_no_leaks(&allocator);
 }
 
-int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
+struct test_window_data
+{
+	bool init;
+	uint32_t update_count;
+	bool close;
+};
+
+void test_window_init(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	RJD_UNUSED_PARAM(window);
+
+	struct test_window_data* data = env->userdata;
+	data->init = true;
+}
+
+void test_window_update(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	struct test_window_data* data = env->userdata;
+	++data->update_count;
+
+	if (data->update_count >= 100) {
+		rjd_window_close(window);
+	}
+}
+
+void test_window_close(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	RJD_UNUSED_PARAM(window);
+
+	struct test_window_data* data = env->userdata;
+	data->close = true;
+}
+
+void test_window_entrypoint(const struct rjd_window_environment* env)
+{
+    struct rjd_window_desc window_desc = {
+        .title = "test_window",
+        .requested_size = {
+            .width = 320,
+            .height = 240,
+        },
+        .env = *env,
+		.init_func = test_window_init,
+		.update_func = test_window_update,
+        .close_func = test_window_close,
+    };
+
+    struct rjd_window window = {0};
+
+    struct rjd_result result = rjd_window_create(&window, window_desc);
+    expect_result_ok(result);
+
+	rjd_window_runloop(&window);
+}
+
+void test_window(void)
+{
+	struct test_window_data data = {0};
+
+	struct rjd_window_environment env = {
+		.userdata = &data,
+	};
+
+	#if RJD_PLATFORM_WINDOWS
+		env.win32.hinstance = GetModuleHandle(NULL);
+	#endif
+
+	rjd_window_enter_windowed_environment(env, test_window_entrypoint);
+	expect_true(data.init);
+	expect_uint32(100, data.update_count);
+	expect_true(data.close);
+}
+
+int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 {
 	test_logging();
 	test_result();
@@ -3088,6 +3165,8 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_binrw();
 	test_strhash();
 	test_resource();
+	test_window();
 
 	return 0;
 }
+

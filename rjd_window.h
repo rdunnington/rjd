@@ -181,7 +181,7 @@ void rjd_window_runloop(struct rjd_window* window)
 		while (PeekMessage(&msg, window_win32->hwnd, 0, 0, PM_REMOVE))
 		{
 			// TODO support running multiple windows in the same thread?
-			if (msg.message == WM_DESTROY)
+			if (msg.message == WM_DESTROY || msg.message == WM_CLOSE)
 			{
 				running = false;
 			}
@@ -200,6 +200,8 @@ void rjd_window_runloop(struct rjd_window* window)
 	if (window_win32->close_func) {
 		window_win32->close_func(window, &window_win32->env);
 	}
+
+	DestroyWindow(window_win32->hwnd);
 
 	--global_window_count;
 }
@@ -228,7 +230,7 @@ struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
 void rjd_window_close(struct rjd_window* window)
 {
 	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
-	DestroyWindow(window_win32->hwnd);
+	PostMessageA(window_win32->hwnd, WM_CLOSE, 0, 0);
 }
 
 void* rjd_window_win32_get_hwnd(const struct rjd_window* window)
