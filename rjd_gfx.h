@@ -134,6 +134,7 @@ enum rjd_gfx_texture_usage
 
 struct rjd_gfx_texture_desc
 {
+	const char* debug_label;
 	void* data;
     uint32_t data_length;
 	uint32_t pixels_width;
@@ -141,7 +142,6 @@ struct rjd_gfx_texture_desc
 	enum rjd_gfx_format format;
 	enum rjd_gfx_texture_access access;
 	enum rjd_gfx_texture_usage usage;
-	const char* debug_label;
 };
 
 struct rjd_gfx_texture
@@ -163,13 +163,22 @@ struct rjd_gfx_texture
 //	enum rjd_gfx_shader_input_buffer_type_flags type_flags;
 //};
 
-// TODO provide a precompiled path as well, e.g. bool is_compiled
+enum rjd_gfx_shader_type
+{
+	RJD_GFX_SHADER_TYPE_VERTEX,
+	RJD_GFX_SHADER_TYPE_PIXEL,
+};
+
+// TODO provide a precompiled path as well, preferably with a shader_precompiled_desc?
 struct rjd_gfx_shader_desc
 {
+	const char* source_name;
+	const char* function_name;
 	const void* data;
-	//struct rjd_gfx_shader_input_slot* slots;
-
 	uint32_t count_data;
+	enum rjd_gfx_shader_type type;
+
+	//struct rjd_gfx_shader_input_slot* slots;
 	//uint32_t count_slots;
 };
 
@@ -221,7 +230,8 @@ enum rjd_gfx_depth_compare
 struct rjd_gfx_pipeline_state_desc
 {
 	const char* debug_name;
-	struct rjd_gfx_shader shader;
+	struct rjd_gfx_shader shader_vertex;
+	struct rjd_gfx_shader shader_pixel;
 	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_texture depthstencil_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_vertex_format_attribute* vertex_attributes;
@@ -335,14 +345,15 @@ enum rjd_gfx_cull
 
 struct rjd_gfx_pass_begin_desc
 {
+	const char* debug_label;
 	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_format_value clear_color;
 	struct rjd_gfx_format_value clear_depthstencil;
-	const char* debug_label;
 };
 
 struct rjd_gfx_pass_draw_desc
 {
+	const char* debug_label;
 	const struct rjd_gfx_viewport* viewport;
 	const struct rjd_gfx_pipeline_state* pipeline_state;
 	const struct rjd_gfx_mesh* meshes;
@@ -352,8 +363,6 @@ struct rjd_gfx_pass_draw_desc
 	uint32_t count_textures;
 	enum rjd_gfx_cull cull_mode;
 	enum rjd_gfx_winding_order winding_order;
-
-	const char* debug_label;
 };
 
 struct rjd_gfx_command_buffer
@@ -392,7 +401,7 @@ struct rjd_gfx_context_desc
 
 struct rjd_gfx_context
 {
-	char pimpl[128];
+	char pimpl[140];
 };
 
 ////////////////////////////////////////////////////////////////////////////////
