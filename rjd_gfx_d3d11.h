@@ -733,6 +733,8 @@ static inline void rjd_gfx_texture_destroy_d3d11(struct rjd_gfx_context_d3d11* c
 {
 	struct rjd_gfx_texture_d3d11* texture = rjd_slotmap_get(context->slotmap_textures, slot);
 	ID3D11Texture2D_Release(texture->texture);
+	rjd_strref_release(texture->debug_name);
+
 	rjd_slotmap_erase(context->slotmap_textures, slot);
 }
 
@@ -741,6 +743,7 @@ static inline void rjd_gfx_shader_destroy_d3d11(struct rjd_gfx_context_d3d11* co
 	struct rjd_gfx_shader_d3d11* shader = rjd_slotmap_get(context->slotmap_shaders, slot);
 	rjd_strref_release(shader->debug_name);
 	rjd_strref_release(shader->debug_source);
+
 	rjd_slotmap_erase(context->slotmap_shaders, slot);
 }
 
@@ -749,6 +752,7 @@ static inline void rjd_gfx_pipeline_state_destroy_d3d11(struct rjd_gfx_context_d
 	struct rjd_gfx_pipeline_state_d3d11* pipeline_state = rjd_slotmap_get(context->slotmap_pipeline_states, slot);
 	rjd_strref_release(pipeline_state->debug_name);
 	rjd_array_free(pipeline_state->vertex_attributes);
+
 	rjd_slotmap_erase(context->slotmap_pipeline_states, slot);
 }
 
@@ -759,6 +763,10 @@ static inline void rjd_gfx_mesh_destroy_d3d11(struct rjd_gfx_context_d3d11* cont
 
 static inline void rjd_gfx_command_buffer_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot)
 {
+	struct rjd_gfx_command_buffer_d3d11* buffer = rjd_slotmap_get(context->slotmap_command_buffers, slot);
+	ID3D11DeviceContext_Release(buffer->deferred_context);
+	ID3D11RenderTargetView_Release(buffer->render_target);
+
 	rjd_slotmap_erase(context->slotmap_command_buffers, slot);
 }
 
