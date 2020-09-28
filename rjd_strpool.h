@@ -1,5 +1,4 @@
 #pragma once
-
 #define RJD_STRPOOL_H 1
 
 struct rjd_strpool
@@ -11,9 +10,10 @@ struct rjd_strref;
 
 struct rjd_strpool rjd_strpool_init(struct rjd_mem_allocator* allocator, size_t initial_capacity);
 void rjd_strpool_free(struct rjd_strpool* pool);
-struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* fmt, ...);
+struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* str);
+struct rjd_strref* rjd_strpool_addf(struct rjd_strpool* pool, const char* fmt, ...);
 struct rjd_strref* rjd_strpool_addv(struct rjd_strpool* pool, const char* fmt, va_list args); 
-struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* str, size_t length);
+struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* inline_string, size_t length); // for non-null-terminated strings
 void rjd_strref_release(struct rjd_strref* ref);
 const char* rjd_strref_str(const struct rjd_strref* ref);
 uint32_t rjd_strref_length(const struct rjd_strref* ref);
@@ -24,7 +24,7 @@ struct rjd_strref
 {
 	const char* str;
 	struct rjd_strpool* owner;
-	int32_t refcount;
+	int32_t refcount; // TODO atomic
 	uint32_t length;
 };
 
@@ -52,7 +52,14 @@ void rjd_strpool_free(struct rjd_strpool* pool)
 	rjd_dict_free(&pool->storage);
 }
 
-struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* format, ...)
+struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* str)
+{
+	RJD_ASSERT(pool);
+
+	return rjd_strpool_addimpl(pool, str);
+}
+
+struct rjd_strref* rjd_strpool_addf(struct rjd_strpool* pool, const char* format, ...)
 {
 	RJD_ASSERT(pool);
 	RJD_ASSERT(format);
@@ -82,15 +89,15 @@ struct rjd_strref* rjd_strpool_addv(struct rjd_strpool* pool, const char* format
 	return ref;
 }
 
-struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* format, size_t length)
+struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* inline_string, size_t length)
 {
 	RJD_ASSERT(pool);
-	RJD_ASSERT(format);
+	RJD_ASSERT(inline_string);
 
 	struct rjd_strref* ref = NULL;
 
 	RJD_STRBUF_SCOPED(buffer, pool->storage.allocator, {
-		rjd_strbuf_appendl(&buffer, format, (uint32_t)length);
+		rjd_strbuf_appendl(&buffer, inline_string, (uint32_t)length);
 		ref = rjd_strpool_addimpl(pool, rjd_strbuf_str(&buffer));
 	});
 
@@ -128,7 +135,10 @@ uint32_t rjd_strref_length(const struct rjd_strref* ref)
 static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const char* str) 
 {
 	RJD_ASSERT(pool);
-	RJD_ASSERT(str);
+
+	if (!str) {
+		return NULL;
+	}
 
 	struct rjd_hash64 hash = rjd_hash64_data((const uint8_t*)str, -1);
 	struct rjd_strref* ref = rjd_dict_get(&pool->storage, hash);

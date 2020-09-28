@@ -2076,8 +2076,8 @@ void test_strpool()
 
 	struct rjd_strref* ref1 = rjd_strpool_add(&pool, test1);
 	struct rjd_strref* ref2 = rjd_strpool_add(&pool, test2);
-	struct rjd_strref* ref3 = rjd_strpool_add(&pool, test3);
-	struct rjd_strref* ref4 = rjd_strpool_add(&pool, "forma%d %de%d%d",7,7,5,7);
+	struct rjd_strref* ref3 = rjd_strpool_addf(&pool, test3);
+	struct rjd_strref* ref4 = rjd_strpool_addf(&pool, "forma%d %de%d%d",7,7,5,7);
 	struct rjd_strref* ref5 = rjd_strpool_addl(&pool, "substring test", strlen(test5));
 
 	expect_true(ref1 == rjd_strpool_add(&pool, test1));
