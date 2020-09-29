@@ -3067,6 +3067,7 @@ void test_resource()
 
 struct test_window_data
 {
+    struct rjd_window window;
 	bool init;
 	uint32_t update_count;
 	bool close;
@@ -3112,12 +3113,12 @@ void test_window_entrypoint(const struct rjd_window_environment* env)
         .close_func = test_window_close,
     };
 
-    struct rjd_window window = {0};
+    struct test_window_data* test_data = env->userdata;
 
-    struct rjd_result result = rjd_window_create(&window, window_desc);
+    struct rjd_result result = rjd_window_create(&test_data->window, window_desc);
     expect_result_ok(result);
 
-	rjd_window_runloop(&window);
+	rjd_window_runloop(&test_data->window);
 }
 
 void test_window(void)

@@ -84,6 +84,8 @@ struct rjd_gfx_context_metal
 	id <MTLCommandQueue> command_queue;
 	MTKMeshBufferAllocator* loader_mesh;
 
+	struct rjd_mem_allocator* allocator;
+
 	dispatch_semaphore_t wait_for_present_counter;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_gfx_context_metal) <= sizeof(struct rjd_gfx_context));
@@ -147,15 +149,15 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		view.sampleCount = 1; // users can set this higher later with rjd_gfx_set_msaa_count()
 	}
 
-	NSUInteger msaa_count = 1;
-	for (uint32_t i = 0; desc.optional_desired_msaa_sample && i < desc.msaa_samples_count) {
-		NSUInteger count = desc.optional_desired_msaa_sample[i];
+	NSUInteger count_msaa = 1;
+	for (uint32_t i = 0; desc.optional_desired_msaa_samples && i < desc.count_desired_msaa_samples; ++i) {
+		NSUInteger count = desc.optional_desired_msaa_samples[i];
 		if ([view.device supportsTextureSampleCount:count]) {
-			msaa_count = count;
+			count_msaa = count;
 			break;
 		}
 	}
-	view.sampleCount = count;
+	view.sampleCount = count_msaa;
 
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)out;
     memset(out, 0, sizeof(*out));
@@ -653,9 +655,13 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
             desc_metal.stencilAttachmentPixelFormat = stencil_format;
         }
 
-		if (rjd_slot_isvalid(desc.shader.handle)) {
-			struct rjd_gfx_shader_metal* shader = rjd_slotmap_get(context_metal->slotmap_shaders, desc.shader.handle);
+		if (rjd_slot_isvalid(desc.shader_vertex.handle)) {
+			struct rjd_gfx_shader_metal* shader = rjd_slotmap_get(context_metal->slotmap_shaders, desc.shader_vertex.handle);
     		desc_metal.vertexFunction = shader->vertex;
+		}
+
+		if (rjd_slot_isvalid(desc.shader_pixel.handle)) {
+			struct rjd_gfx_shader_metal* shader = rjd_slotmap_get(context_metal->slotmap_shaders, desc.shader_pixel.handle);
     		desc_metal.fragmentFunction = shader->fragment;
 		}
 
@@ -792,11 +798,13 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 	return result;
 }
 
-struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length)
+struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length)
 {
 	RJD_ASSERT(context);
 	RJD_ASSERT(mesh);
 	RJD_ASSERT(rjd_slot_isvalid(mesh->handle));
+
+	RJD_UNUSED_PARAM(cmd_buffer);
 
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
 	struct rjd_gfx_mesh_metal* mesh_metal = rjd_slotmap_get(context_metal->slotmap_meshes, mesh->handle);

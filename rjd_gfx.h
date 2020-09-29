@@ -386,7 +386,7 @@ struct rjd_gfx_context_desc
 	enum rjd_gfx_format backbuffer_color_format;
 	enum rjd_gfx_format backbuffer_depth_format;
 	uint32_t* optional_desired_msaa_samples; // desired samples and fallbacks if unavailable. 1 is the default.
-	uint32_t desired_msaa_samples_count;
+	uint32_t count_desired_msaa_samples;
 
 	#if RJD_PLATFORM_WINDOWS
 		struct {

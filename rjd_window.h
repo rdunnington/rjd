@@ -381,6 +381,12 @@ struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
 	return windowsize;
 }
 
+void rjd_window_close(struct rjd_window* window)
+{
+	const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
+	[window_osx->nswindow close];
+}
+
 MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 {
     const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
@@ -522,7 +528,7 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 		window_osx->update_func(self->window, &self->env);
 	}
 }
-
+g
 -(void)windowWillClose:(NSNotification*)notification
 {
 	RJD_UNUSED_PARAM(notification);
