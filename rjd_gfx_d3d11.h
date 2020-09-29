@@ -54,9 +54,16 @@ struct rjd_gfx_pipeline_state_d3d11
 	enum rjd_gfx_depth_compare depth_compare;
 };
 
+struct rjd_gfx_mesh_buffer_vertex_d3d11
+{
+	ID3D11Buffer* buffer;
+	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
+};
+
 struct rjd_gfx_mesh_d3d11
 {
-	int a;
+	struct rjd_gfx_mesh_buffer_vertex_d3d11* buffers_vertex;
+	uint32_t count_buffers;
 };
 
 struct rjd_gfx_command_buffer_d3d11
@@ -616,24 +623,101 @@ void rjd_gfx_pipeline_state_destroy(struct rjd_gfx_context* context, struct rjd_
 	rjd_gfx_pipeline_state_destroy_d3d11(context_d3d11, pipeline_state->handle);
 }
 
-struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc, struct rjd_mem_allocator* allocator)
+struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc)
 {
-	RJD_UNUSED_PARAM(context);
-	RJD_UNUSED_PARAM(out);
-	RJD_UNUSED_PARAM(desc);
-	RJD_UNUSED_PARAM(allocator);
-	return RJD_RESULT("todo");
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+
+	struct rjd_gfx_mesh_buffer_vertex_d3d11* buffers_vertex = 
+		rjd_mem_alloc_array(struct rjd_gfx_mesh_buffer_vertex_d3d11, desc.count_buffers, context_d3d11->allocator);
+
+	for (size_t i = 0; i < desc.count_buffers; ++i) {
+		const struct rjd_gfx_mesh_vertex_buffer_desc* desc_buffer = desc.buffers + i;
+		struct rjd_gfx_mesh_buffer_vertex_d3d11* buffer_vertex_d3d11 = buffers_vertex + i;
+
+		UINT buffer_size = 0;
+		UINT flags_bind = 0;
+		const void* data = NULL;
+
+		switch (desc_buffer->type)
+		{
+			case RJD_GFX_MESH_BUFFER_TYPE_VERTEX: 
+				buffer_size = desc_buffer->common.vertex.length;
+				data = desc_buffer->common.vertex.data;
+				flags_bind = D3D11_BIND_VERTEX_BUFFER;
+				break;
+			case RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS: 
+				buffer_size = desc_buffer->common.uniforms.capacity;
+				flags_bind = D3D11_BIND_CONSTANT_BUFFER;
+				if (buffer_size % 16 != 0) {
+					return RJD_RESULT("Uniform buffers must be a multiple of 16."); // TODO cleanup
+				}
+				break;
+		}
+
+		D3D11_BUFFER_DESC desc_buffer_d3d11 = {
+			.ByteWidth = buffer_size,
+			.Usage = D3D11_USAGE_DYNAMIC, // TODO expose options for immutable buffers
+			.BindFlags = flags_bind,
+			.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE,
+			.MiscFlags = 0,
+			.StructureByteStride = 0,
+		};
+
+		D3D11_SUBRESOURCE_DATA subresource = {
+			.pSysMem = data,
+			.SysMemPitch = 0,
+			.SysMemSlicePitch = 0,
+		};
+
+		ID3D11Buffer* buffer_d3d11 = NULL;
+		HRESULT hr = ID3D11Device_CreateBuffer(context_d3d11->device, &desc_buffer_d3d11, &subresource, &buffer_d3d11);
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
+		}
+
+		struct rjd_gfx_mesh_buffer_vertex_d3d11 buffer = {
+			.buffer = buffer_d3d11,
+			.usage_flags = desc_buffer->usage_flags,
+		};
+
+		*buffer_vertex_d3d11 = buffer;
+	}
+
+	struct rjd_gfx_mesh_d3d11 mesh_d3d11 = {
+		.buffers_vertex = buffers_vertex,
+		.count_buffers = desc.count_buffers,
+	};
+
+	rjd_slotmap_insert(context_d3d11->slotmap_meshes, mesh_d3d11, &out->handle);
+
+	return RJD_RESULT_OK();
 }
-//struct rjd_result rjd_gfx_mesh_create_indexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_indexed_desc desc);
-struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length)
+
+struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length)
 {
-	RJD_UNUSED_PARAM(context);
-	RJD_UNUSED_PARAM(mesh);
-	RJD_UNUSED_PARAM(buffer_index);
-	RJD_UNUSED_PARAM(offset);
-	RJD_UNUSED_PARAM(data);
-	RJD_UNUSED_PARAM(length);
-	return RJD_RESULT("todo");
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+	struct rjd_gfx_command_buffer_d3d11* command_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
+	struct rjd_gfx_mesh_d3d11* mesh_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_meshes, mesh->handle);
+
+	if (mesh_d3d11->count_buffers <= buffer_index) {
+		return RJD_RESULT("Invalid index into mesh buffer array");
+	}
+
+	struct rjd_gfx_mesh_buffer_vertex_d3d11* buffer = mesh_d3d11->buffers_vertex + buffer_index;
+
+	ID3D11Resource* resource = (ID3D11Resource*)buffer->buffer; // TODO make sure this cast is OK
+	UINT subresource = 0;
+	D3D11_MAPPED_SUBRESOURCE gpu_resource = {0};
+
+	HRESULT hr = ID3D11DeviceContext_Map(command_buffer_d3d11->deferred_context, resource, subresource, D3D11_MAP_WRITE_DISCARD, 0, &gpu_resource);
+	if (FAILED(hr)) {
+		return rjd_gfx_translate_hresult(hr);
+	}
+
+	memcpy((char*)gpu_resource.pData + offset, data, length);
+
+	ID3D11DeviceContext_Unmap(command_buffer_d3d11->deferred_context, resource, subresource);
+	return rjd_gfx_translate_hresult(hr);
 }
 
 void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh)
@@ -758,6 +842,14 @@ static inline void rjd_gfx_pipeline_state_destroy_d3d11(struct rjd_gfx_context_d
 
 static inline void rjd_gfx_mesh_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot)
 {
+	struct rjd_gfx_mesh_d3d11* mesh = rjd_slotmap_get(context->slotmap_meshes, slot);
+
+	for (size_t i = 0; i < mesh->count_buffers; ++i) {
+		struct rjd_gfx_mesh_buffer_vertex_d3d11* buffer = mesh->buffers_vertex + i;
+		ID3D11Buffer_Release(buffer->buffer);
+	}
+	rjd_mem_free(mesh->buffers_vertex);
+
 	rjd_slotmap_erase(context->slotmap_meshes, slot);
 }
 

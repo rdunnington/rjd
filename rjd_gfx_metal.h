@@ -727,7 +727,7 @@ void rjd_gfx_pipeline_state_destroy(struct rjd_gfx_context* context, struct rjd_
 	rjd_gfx_pipeline_state_destroy_metal(context_metal, pipeline_state->handle);
 }
 
-struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc, struct rjd_mem_allocator* allocator)
+struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc)
 {
 	RJD_ASSERT(out);
 	RJD_ASSERT(context);
@@ -740,7 +740,7 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
 	
-	struct rjd_gfx_mesh_vertex_buffer_metal* mesh_buffers = rjd_array_alloc(struct rjd_gfx_mesh_vertex_buffer_metal, desc.count_buffers, allocator);
+	struct rjd_gfx_mesh_vertex_buffer_metal* mesh_buffers = rjd_array_alloc(struct rjd_gfx_mesh_vertex_buffer_metal, desc.count_buffers, context_metal->allocator);
     rjd_array_resize(mesh_buffers, desc.count_buffers);
 
 	for (uint32_t i = 0; i < desc.count_buffers; ++i) {
