@@ -528,7 +528,7 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 		window_osx->update_func(self->window, &self->env);
 	}
 }
-g
+
 -(void)windowWillClose:(NSNotification*)notification
 {
 	RJD_UNUSED_PARAM(notification);
