@@ -30,8 +30,7 @@ struct rjd_gfx_texture_metal
 struct rjd_gfx_shader_metal
 {
 	id<MTLLibrary> library;
-	id<MTLFunction> vertex;
-	id<MTLFunction> fragment;
+	id<MTLFunction> function;
 };
 
 struct rjd_gfx_pipeline_state_metal
@@ -172,6 +171,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_metal->device = view.device;
 	context_metal->command_queue = [context_metal->device newCommandQueue];
 	context_metal->loader_mesh = [[MTKMeshBufferAllocator alloc] initWithDevice:context_metal->device];
+    context_metal->allocator = desc.allocator;
 	context_metal->wait_for_present_counter = dispatch_semaphore_create(1);
 
 	return RJD_RESULT_OK();
@@ -572,21 +572,16 @@ struct rjd_result rjd_gfx_shader_create(struct rjd_gfx_context* context, struct 
 		return RJD_RESULT("Error compiling shaders");
 	}
 
-	id<MTLFunction> vertexFunction = [library newFunctionWithName:@"vertexShader"];
-	id<MTLFunction> fragmentFunction = [library newFunctionWithName:@"fragmentShader"];
+	NSString* function_name = [NSString stringWithUTF8String:desc.function_name];
+	id<MTLFunction> function = [library newFunctionWithName:function_name];
 
-	if (vertexFunction == nil) {
-		return RJD_RESULT("The shader source must have a function named 'vertexShader'");
-	}
-
-	if (fragmentFunction == nil) {
-		return RJD_RESULT("The shader source must have a function named 'fragmentShader'");
+	if (function == nil) {
+		return RJD_RESULT("The shader source did not have the specified function name.");
 	}
 
 	struct rjd_gfx_shader_metal shader_metal = {
 		.library = library,
-		.vertex = vertexFunction,
-		.fragment = fragmentFunction,
+		.function = function,
 	};
     
 	rjd_slotmap_insert(context_metal->slotmap_shaders, shader_metal, &out->handle);
@@ -657,12 +652,12 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 
 		if (rjd_slot_isvalid(desc.shader_vertex.handle)) {
 			struct rjd_gfx_shader_metal* shader = rjd_slotmap_get(context_metal->slotmap_shaders, desc.shader_vertex.handle);
-    		desc_metal.vertexFunction = shader->vertex;
+    		desc_metal.vertexFunction = shader->function;
 		}
 
 		if (rjd_slot_isvalid(desc.shader_pixel.handle)) {
 			struct rjd_gfx_shader_metal* shader = rjd_slotmap_get(context_metal->slotmap_shaders, desc.shader_pixel.handle);
-    		desc_metal.fragmentFunction = shader->fragment;
+    		desc_metal.fragmentFunction = shader->function;
 		}
 
 		// vertex format
@@ -1091,8 +1086,7 @@ static inline void rjd_gfx_shader_destroy_metal(struct rjd_gfx_context_metal* co
 {
 	struct rjd_gfx_shader_metal* shader_metal = rjd_slotmap_get(context->slotmap_shaders, slot);
 
-	shader_metal->vertex = nil;
-	shader_metal->fragment = nil;
+	shader_metal->function = nil;
 	shader_metal->library = nil;
 
 	rjd_slotmap_erase(context->slotmap_shaders, slot);
