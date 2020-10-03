@@ -3151,14 +3151,14 @@ void test_window_init(struct rjd_window* window, const struct rjd_window_environ
 	data->init = true;
 }
 
-void test_window_update(struct rjd_window* window, const struct rjd_window_environment* env)
+bool test_window_update(struct rjd_window* window, const struct rjd_window_environment* env)
 {
+	RJD_UNUSED_PARAM(window);
+
 	struct test_window_data* data = env->userdata;
 	++data->update_count;
 
-	if (data->update_count >= 100) {
-		rjd_window_close(window);
-	}
+    return data->update_count < 100;
 }
 
 void test_window_close(struct rjd_window* window, const struct rjd_window_environment* env)
@@ -3212,8 +3212,200 @@ void test_window(void)
 ////////////////////////////////////////////////////////////////////////////////
 // rjd_input
 
+struct test_input_data
+{
+	struct rjd_mem_allocator* allocator;
+    struct rjd_window window;
+	struct rjd_input input;
+};
+
+void test_input_init(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	struct test_input_data* data = env->userdata;
+
+	rjd_input_create(&data->input, data->allocator);
+
+	struct rjd_result result = rjd_input_hook(&data->input, window, env);
+	expect_result_ok(result);
+}
+
+bool test_input_update(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	RJD_UNUSED_PARAM(window);
+
+	struct test_input_data* data = env->userdata;
+
+	{
+		struct rjd_input_sim_event event_key = {
+			.type = RJD_INPUT_SIM_TYPE_KEYBOARD,
+		};
+		
+		event_key.keyboard.is_down = true;
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_ARROW_LEFT;
+		rjd_input_simulate(&data->input, event_key);
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e';
+		rjd_input_simulate(&data->input, event_key);
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_SHIFT_LEFT;
+		rjd_input_simulate(&data->input, event_key);
+        
+//        rjd_input_markframe(&data->input);
+
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+
+		rjd_input_markframe(&data->input);
+
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+
+		rjd_input_markframe(&data->input);
+
+		event_key.keyboard.is_down = false;
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_ARROW_LEFT;
+		rjd_input_simulate(&data->input, event_key);
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e';
+		rjd_input_simulate(&data->input, event_key);
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_SHIFT_LEFT;
+		rjd_input_simulate(&data->input, event_key);
+
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+
+		rjd_input_markframe(&data->input);
+
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+	}
+
+	{
+		struct rjd_input_sim_event event_mouse = {
+			.type = RJD_INPUT_SIM_TYPE_MOUSE,
+		};
+
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_BUTTON_LEFT;
+		event_mouse.mouse.value = 1.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y;
+		event_mouse.mouse.value = 5.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_X;
+		event_mouse.mouse.value = 8.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+
+		expect_float(1.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(5.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+		expect_float(8.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_X));
+		expect_float(0.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(0.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+		expect_float(0.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_X));
+
+		rjd_input_markframe(&data->input);
+
+		expect_float(1.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(0.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));  // reset every frame
+		expect_float(8.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_X));
+		expect_float(1.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(5.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+		expect_float(8.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_X));
+
+		rjd_input_markframe(&data->input);
+
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_BUTTON_LEFT;
+		event_mouse.mouse.value = 0.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y;
+        event_mouse.mouse.value = 3.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_X;
+        event_mouse.mouse.value = 1.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+
+		expect_float(0.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+        expect_float(3.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+        expect_float(1.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_X));
+		expect_float(1.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(0.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+		expect_float(8.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_X));
+
+		rjd_input_markframe(&data->input);
+
+		expect_float(0.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(0.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+        expect_float(1.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_X));
+		expect_float(0.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+        expect_float(3.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+        expect_float(1.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_X));
+	}
+
+    return false;
+}
+
+void test_input_close(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	RJD_UNUSED_PARAM(window);
+
+	struct test_input_data* data = env->userdata;
+
+	rjd_input_destroy(&data->input);
+}
+
+void test_input_entrypoint(const struct rjd_window_environment* env)
+{
+    struct rjd_window_desc window_desc = {
+        .title = "test_window_for_input",
+        .requested_size = {
+            .width = 320,
+            .height = 240,
+        },
+        .env = *env,
+        .init_func = test_input_init,
+		.update_func = test_input_update,
+        .close_func = test_input_close,
+    };
+
+    struct test_input_data* test_data = env->userdata;
+
+    struct rjd_result result = rjd_window_create(&test_data->window, window_desc);
+    expect_result_ok(result);
+
+	rjd_window_runloop(&test_data->window);
+}
+
 void test_input(void)
 {
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+
+	struct test_input_data data = {
+		.allocator = &allocator,
+	};
+
+	struct rjd_window_environment env = {
+		.userdata = &data,
+	};
+
+	#if RJD_PLATFORM_WINDOWS
+		env.win32.hinstance = GetModuleHandle(NULL);
+	#endif
+
+	rjd_window_enter_windowed_environment(env, test_input_entrypoint);
+
+	expect_no_leaks(&allocator);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

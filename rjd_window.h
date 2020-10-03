@@ -7,7 +7,7 @@ struct rjd_window_environment;
 
 typedef void rjd_window_environment_init_func(const struct rjd_window_environment* env);
 typedef void rjd_window_on_init_func(struct rjd_window* window, const struct rjd_window_environment* env);
-typedef void rjd_window_on_update_func(struct rjd_window* window, const struct rjd_window_environment* env);
+typedef bool rjd_window_on_update_func(struct rjd_window* window, const struct rjd_window_environment* env);
 typedef void rjd_window_on_close_func(struct rjd_window* window, const struct rjd_window_environment* env);
 
 // Note that we use void* instead of the win32 types HINSTANCE and HWND to avoid taking a dependency 
@@ -85,9 +85,10 @@ void rjd_window_close(struct rjd_window* window);
 ////////////////////////////////////////////////////////////////////////////////
 // windows os
 
+static struct rjd_atomic_uint32 global_window_count = {0};
+
 #if RJD_PLATFORM_WINDOWS
 
-static uint32_t global_window_count = 0; // TODO atomic
 
 struct rjd_window_win32
 {
@@ -107,7 +108,7 @@ void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rj
 		init_func(&env);
 	}
 
-	while (global_window_count > 0)
+	while (rjd_atomic_uint32_get(&global_window_count) > 0)
 	{
 		// other threads could be running their own window loops, so just wait until
 		// all of them are closed before exiting
@@ -167,7 +168,7 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 
 void rjd_window_runloop(struct rjd_window* window)
 {
-	++global_window_count;
+	rjd_atomic_uint32_inc(&global_window_count);
 
 	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
 	if (window_win32->init_func) {
@@ -193,7 +194,7 @@ void rjd_window_runloop(struct rjd_window* window)
 		}
 
 		if (running && window_win32->update_func) {
-			window_win32->update_func(window, &window_win32->env);
+			running = window_win32->update_func(window, &window_win32->env);
 		}
 	}
 
@@ -203,7 +204,7 @@ void rjd_window_runloop(struct rjd_window* window)
 
 	DestroyWindow(window_win32->hwnd);
 
-	--global_window_count;
+	rjd_atomic_uint32_dec(&global_window_count);
 }
 
 struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
@@ -289,6 +290,8 @@ struct rjd_window_osx
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_osx));
 
+bool s_is_app_initialized = false;
+
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 @property (retain) NSWindow *window;
 -(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)func env:(struct rjd_window_environment)env;
@@ -315,6 +318,12 @@ void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rj
     NSApplication* app = [NSApplication sharedApplication];
     [app setDelegate:delegate];
 	[app activateIgnoringOtherApps:YES];
+    
+    // The applicationDidFinishLaunching notification isn't sent multiple times. We need to keep track
+    // to ensure the init_func() is called at the appropriate time
+    if (s_is_app_initialized && init_func) {
+        init_func(&env);
+    }
     [app run];
 }
 
@@ -349,6 +358,8 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 	RJD_ASSERT(nswindow.canBecomeKeyWindow == YES);
 	RJD_ASSERT(nswindow.canBecomeMainWindow == YES);
     [nswindow makeKeyAndOrderFront:nil];
+
+	rjd_atomic_uint32_inc(&global_window_count);
 
     struct rjd_window_osx* window_osx = (struct rjd_window_osx*)out;
     window_osx->nswindow = nswindow;
@@ -385,6 +396,7 @@ void rjd_window_close(struct rjd_window* window)
 {
 	const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
 	[window_osx->nswindow close];
+	rjd_atomic_uint32_dec(&global_window_count);
 }
 
 MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
@@ -426,6 +438,8 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
     NSMenu* menu = [[NSMenu alloc] initWithTitle:@"TestMenu"];
     [menu addItem:testItem];
     NSApplication.sharedApplication.mainMenu = menu;
+    
+    s_is_app_initialized = true;
 
 	if (self->init_func) {
 		self->init_func(&self->env);
@@ -435,8 +449,21 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 -(BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender
 {
 	RJD_UNUSED_PARAM(sender);
+    
+	// The NSApplication event loop will only check the stop flag *after* it handles an event.
+    [sender stop:nil];
+	NSEvent* force_handler_event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                  location:NSZeroPoint
+             modifierFlags:0
+                 timestamp:0
+              windowNumber:0
+                   context:nil
+                   subtype:0
+                     data1:0
+                     data2:0];
+    [NSApp postEvent:force_handler_event atStart:TRUE];
 
-    return YES;
+    return NO;
 }
 
 @end
@@ -525,7 +552,9 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 
     struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
 	if (window_osx->update_func) {
-		window_osx->update_func(self->window, &self->env);
+		if (window_osx->update_func(self->window, &self->env) == false) {
+			rjd_window_close(self->window);
+		}
 	}
 }
 
