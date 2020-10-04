@@ -3247,8 +3247,6 @@ bool test_input_update(struct rjd_window* window, const struct rjd_window_enviro
 		rjd_input_simulate(&data->input, event_key);
 		event_key.keyboard.key = RJD_INPUT_KEYBOARD_SHIFT_LEFT;
 		rjd_input_simulate(&data->input, event_key);
-        
-//        rjd_input_markframe(&data->input);
 
 		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
 		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
