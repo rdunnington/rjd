@@ -121,17 +121,22 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 		desc.title = "";
 	}
 
-	WNDCLASSEX window_class = { 0 };
-	window_class.cbSize = sizeof(WNDCLASSEX);
-	window_class.style = CS_HREDRAW | CS_VREDRAW;
-	window_class.lpfnWndProc = WindowProc;
-	window_class.hInstance = desc.env.win32.hinstance;
-	window_class.lpszClassName = "EngineWindowClass";
-	window_class.hCursor = LoadCursor(NULL, IDC_ARROW);
-	//window_class.hIcon = LoadImage(NULL, IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
-	if (!RegisterClassEx(&window_class))
-	{
-		return RJD_RESULT("Failed to create window class");
+	static bool s_did_register_window_class = false;
+	if (!s_did_register_window_class) {
+		s_did_register_window_class = true;
+
+		WNDCLASSEX window_class = { 0 };
+		window_class.cbSize = sizeof(WNDCLASSEX);
+		window_class.style = CS_HREDRAW | CS_VREDRAW;
+		window_class.lpfnWndProc = WindowProc;
+		window_class.hInstance = desc.env.win32.hinstance;
+		window_class.lpszClassName = "rjd_window_class";
+		window_class.hCursor = LoadCursor(NULL, IDC_ARROW);
+		//window_class.hIcon = LoadImage(NULL, IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
+		if (!RegisterClassEx(&window_class))
+		{
+			return RJD_RESULT("Failed to create window class");
+		}
 	}
 
 	const DWORD window_style = WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_SYSMENU;
@@ -142,7 +147,7 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 	} 
 
 	HWND hwnd = CreateWindowEx(0,
-		"EngineWindowClass",
+		"rjd_window_class",
 		desc.title,
 		window_style, 
 		1024, 80,
@@ -182,7 +187,7 @@ void rjd_window_runloop(struct rjd_window* window)
 		while (PeekMessage(&msg, window_win32->hwnd, 0, 0, PM_REMOVE))
 		{
 			// TODO support running multiple windows in the same thread?
-			if (msg.message == WM_DESTROY || msg.message == WM_CLOSE)
+			if (msg.message == WM_DESTROY || msg.message == WM_CLOSE || msg.message == WM_QUIT)
 			{
 				running = false;
 			}
