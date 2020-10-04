@@ -208,7 +208,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		};
 
 		if (desc.optional_desired_msaa_samples) {
-			for (uint32_t i = 0; i < desc.desired_msaa_samples_count; ++i) {
+			for (uint32_t i = 0; i < desc.count_desired_msaa_samples; ++i) {
 				UINT quality = 0;
 				UINT count = desc.optional_desired_msaa_samples[i];
 				HRESULT hr = ID3D11Device_CheckMultisampleQualityLevels(device, backbuffer_format, count, &quality);
