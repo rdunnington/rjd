@@ -31,7 +31,7 @@ files = [
     "rjd_procgeo.h",
     "rjd_easing.h",
     "rjd_strbuf.h",
-    "rjd_profiler.h",
+    "rjd_timer.h",
     "rjd_cmd.h",
     "rjd_dict.h",
     "rjd_fio.h",

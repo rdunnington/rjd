@@ -4650,12 +4650,12 @@ static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// rjd_profiler.h
+// rjd_timer.h
 ////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
 
-#define RJD_PROFILER_H 1
+#define RJD_TIMER_H 1
 
 struct rjd_timer
 {
@@ -4667,9 +4667,9 @@ void rjd_timer_reset(struct rjd_timer* timer);
 double rjd_timer_elapsed(const struct rjd_timer* timer);
 double rjd_timer_global(void);
 
-#define RJD_PROFILE_SCOPE_BEGIN(name) struct rjd_timer timer_##name = rjd_timer_init();
-#define RJD_PROFILE_SCOPE_END_WITHLOG(name, log_function) log_function("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&timer_##name));
-#define RJD_PROFILE_SCOPE_END(name)	RJD_PROFILE_SCOPE_END_WITHLOG(name, RJD_LOG)
+#define RJD_TIMER_SCOPE_BEGIN(name) struct rjd_timer timer_##name = rjd_timer_init();
+#define RJD_TIMER_SCOPE_END_WITHLOG(name, log_function) log_function("Elapsed %s: %.4fms", #name, rjd_timer_elapsed(&timer_##name));
+#define RJD_TIMER_SCOPE_END(name)	RJD_TIMER_SCOPE_END_WITHLOG(name, RJD_LOG)
 
 #if RJD_IMPL
 
