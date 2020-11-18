@@ -180,9 +180,9 @@ void rjd_window_runloop(struct rjd_window* window)
 		MSG msg = {0};
 		while (PeekMessage(&msg, window_win32->hwnd, 0, 0, PM_REMOVE))
 		{
-			// TODO support running multiple windows in the same thread?
-			if (msg.message == WM_DESTROY)
+			if (msg.message == WM_CLOSE)
 			{
+				DestroyWindow(window_win32->hwnd);
 				running = false;
 			}
 			else
@@ -245,20 +245,27 @@ LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM 
     const POINT kMinSize = {1, 1};
     switch (msg)
     {
-    //case WM_CLOSE:
-    //    PostQuitMessage(0);
-    //    break;
+    case WM_CLOSE:
+    	// This was translated from some other windows message, so our PeekMessage loop never saw it. 
+    	// Intercept and post it in the actual message queue for this window.
+    	// Our PeekMessage loop will pick it up, call DestroyWindow, and break.
+    	PostMessage(handle_window, WM_CLOSE, 0, 0);
+       	return 0;
+
     case WM_GETMINMAXINFO:
         ((MINMAXINFO*)lparam)->ptMinTrackSize = kMinSize;
-        break;
-		// TODO forward resize message
+        return 0;
+
+	// TODO forward resize message
     //case WM_SIZE:
 	//	//width = LOWORD(lparam);
 	//	//height = HIWORD(lparam);
 	//	//glViewport(0, 0, g_window_size.width, g_window_size.height);
     //    break;
+
+    default:
+    	return DefWindowProc(handle_window, msg, wparam, lparam);
     }
-    return DefWindowProc(handle_window, msg, wparam, lparam);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
