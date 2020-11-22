@@ -392,7 +392,7 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 				[encoder setVertexBuffer:buffer->buffer offset:buffer->offset atIndex:buffer->buffer_index];
 			}
 
-			if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_FRAGMENT) {
+			if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL) {
 				[encoder setFragmentBuffer:buffer->buffer offset:buffer->offset atIndex:buffer->buffer_index];
 			}
 		}

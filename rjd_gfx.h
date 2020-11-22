@@ -149,12 +149,6 @@ struct rjd_gfx_texture
 	struct rjd_slot handle;
 };
 
-//enum rjd_gfx_shader_input_buffer_type_flags
-//{
-//	RJD_GFX_SHADER_INPUT_USAGE_VERTEX = 0x1,
-//	RJD_GFX_SHADER_INPUT_USAGE_FRAGMENT = 0x2,
-//};
-
 // TODO determine if this is a good idea or not
 //struct rjd_gfx_shader_input_slot
 //{
@@ -258,7 +252,7 @@ struct rjd_gfx_pipeline_state_desc
 {
 	const char* debug_name;
 	struct rjd_gfx_shader shader_vertex;
-	struct rjd_gfx_shader shader_pixel; // TODO rename to shader_fragment
+	struct rjd_gfx_shader shader_pixel;
 	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_texture depthstencil_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_vertex_format_attribute* vertex_attributes;
@@ -294,7 +288,7 @@ enum rjd_gfx_mesh_buffer_type
 enum rjd_gfx_mesh_buffer_usage_flags
 {
 	RJD_GFX_MESH_BUFFER_USAGE_VERTEX = 0x1,
-	RJD_GFX_MESH_BUFFER_USAGE_FRAGMENT = 0x2,
+	RJD_GFX_MESH_BUFFER_USAGE_PIXEL = 0x2,
 };
 
 union rjd_gfx_mesh_buffer_common_desc
@@ -310,26 +304,20 @@ union rjd_gfx_mesh_buffer_common_desc
 	} vertex;
 };
 
-// TODO vertex_buffer isn't a great name, since it can also be inputs to fragment shaders. Maybe just mesh_shader_buffer?
+// TODO vertex_buffer isn't a great name, since it can also be inputs to pixel shaders. Maybe just mesh_buffer?
 struct rjd_gfx_mesh_vertex_buffer_desc
 {
 	enum rjd_gfx_mesh_buffer_type type;
 	union rjd_gfx_mesh_buffer_common_desc common;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
-	uint32_t buffer_index; // TODO maybe this should be name and index? buffer_slot? shader_input_slot?
+	uint32_t buffer_index; // TODO maybe rename to shader_slot?
 };
 
-//struct rjd_gfx_mesh_index_buffer_desc
-//{
-//	union rjd_gfx_mesh_buffer_desc buffer_desc;
-//	enum rjd_gfx_index_type type;
-//};
 // TODO implement the other 2 descs later
 struct rjd_gfx_mesh_vertexed_desc
 {
 	enum rjd_gfx_primitive_type primitive;
 	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
-	struct rjd_gfx_shader vertex_shader;
 	uint32_t count_buffers;
 	uint32_t count_vertices;
 };

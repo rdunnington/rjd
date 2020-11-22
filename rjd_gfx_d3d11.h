@@ -46,21 +46,21 @@ struct rjd_gfx_shader_d3d11
 {
 	ID3DBlob* bytecode;
 	ID3D11VertexShader* vertex;
-	ID3D11PixelShader* fragment;
+	ID3D11PixelShader* pixel;
 	struct rjd_strref* debug_name;
 	struct rjd_strref* debug_source;
 };
 
 struct rjd_gfx_pipeline_state_d3d11
 {
-	struct rjd_strref* debug_name;
 	ID3D11InputLayout* vertex_layout;
 	ID3D11RasterizerState* rasterizer_state;
 	struct rjd_gfx_shader shader_vertex;
-	struct rjd_gfx_shader shader_fragment;
+	struct rjd_gfx_shader shader_pixel;
 	struct rjd_gfx_texture render_target;
 	struct rjd_gfx_texture depthstencil_target;
 	enum rjd_gfx_depth_compare depth_compare;
+	struct rjd_strref* debug_name;
 };
 
 struct rjd_gfx_mesh_buffer_d3d11
@@ -177,8 +177,8 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	ID3D11DeviceContext* context = NULL;
 	{
 		const UINT flags =
-			//D3D11_CREATE_DEVICE_BGRA_SUPPORT | // enable compatibility with Direct2D.
-			//D3D11_CREATE_DEVICE_DEBUG | // TODO make this optional
+			D3D11_CREATE_DEVICE_BGRA_SUPPORT | // enable compatibility with Direct2D.
+			D3D11_CREATE_DEVICE_DEBUG | // TODO make this optional
 			0;
 
 		const D3D_FEATURE_LEVEL feature_levels[] = {
@@ -509,7 +509,7 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 	ID3D11DeviceContext_OMSetRenderTargets(cmd_buffer_d3d11->deferred_context, 1, &cmd_buffer_d3d11->render_target, NULL); // TODO depthstencil target
 
 	struct rjd_gfx_shader_d3d11* shader_vertex_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, pipeline_state_d3d11->shader_vertex.handle);
-	struct rjd_gfx_shader_d3d11* shader_fragment_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, pipeline_state_d3d11->shader_fragment.handle);
+	struct rjd_gfx_shader_d3d11* shader_pixel_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, pipeline_state_d3d11->shader_pixel.handle);
 
 	if (shader_vertex_d3d11->vertex) {
 		ID3D11DeviceContext_VSSetShader(cmd_buffer_d3d11->deferred_context, shader_vertex_d3d11->vertex, NULL, 0);
@@ -517,10 +517,10 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 		return RJD_RESULT("The selected shader did not have a vertex shader.");
 	}
 
-	if (shader_fragment_d3d11->fragment == NULL) {
-		ID3D11DeviceContext_PSSetShader(cmd_buffer_d3d11->deferred_context, shader_fragment_d3d11->fragment, NULL, 0);
+	if (shader_pixel_d3d11->pixel == NULL) {
+		ID3D11DeviceContext_PSSetShader(cmd_buffer_d3d11->deferred_context, shader_pixel_d3d11->pixel, NULL, 0);
 	} else {
-		return RJD_RESULT("The selected shader did not have a fragment shader.");
+		return RJD_RESULT("The selected shader did not have a pixel shader.");
 	}
 
 	// textures & sampler states
@@ -560,7 +560,7 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 					&buffer_d3d11->stride, 
 					&buffer_d3d11->offset);
 			}
-			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_FRAGMENT) {
+			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL) {
 				ID3D11DeviceContext_PSSetConstantBuffers(
 					cmd_buffer_d3d11->deferred_context, 
 					buffer_d3d11->slot, 
@@ -734,24 +734,29 @@ struct rjd_result rjd_gfx_shader_create(struct rjd_gfx_context* context, struct 
 	}
 
 	ID3D11VertexShader* vertex = NULL;
-	ID3D11PixelShader* fragment = NULL;
+	ID3D11PixelShader* pixel = NULL;
 
-	void* bytecode_data = ID3D10Blob_GetBufferPointer(errors);
-	size_t bytecode_size = ID3D10Blob_GetBufferSize(errors);
+	const void* bytecode_data = ID3D10Blob_GetBufferPointer(bytecode);
+	const size_t bytecode_size = ID3D10Blob_GetBufferSize(bytecode);
+
 	if (desc.type == RJD_GFX_SHADER_TYPE_VERTEX) {
-		hr = ID3D11Device_CreatePixelShader(context_d3d11->device, bytecode_data, bytecode_size, NULL, &fragment);
+		hr = ID3D11Device_CreateVertexShader(context_d3d11->device, bytecode_data, bytecode_size, NULL, &vertex);
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
+		}
 	}
-	if (desc.type == RJD_GFX_SHADER_TYPE_VERTEX) {
-		hr = ID3D11Device_CreatePixelShader(context_d3d11->device, bytecode_data, bytecode_size, NULL, &fragment);
-	}
-	if (FAILED(hr)) {
-		return rjd_gfx_translate_hresult(hr);
+
+	if (desc.type == RJD_GFX_SHADER_TYPE_PIXEL) {
+		hr = ID3D11Device_CreatePixelShader(context_d3d11->device, bytecode_data, bytecode_size, NULL, &pixel);
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
+		}
 	}
 
 	struct rjd_gfx_shader_d3d11 shader_d3d11 = {
 		.bytecode = bytecode,
 		.vertex = vertex,
-		.fragment = fragment,
+		.pixel = pixel,
 		.debug_name = rjd_strpool_add(&context_d3d11->debug_names, desc.function_name),
 		.debug_source = rjd_strpool_add(&context_d3d11->debug_names, desc.source_name),
 	};
@@ -774,21 +779,10 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 	ID3D11InputLayout* vertex_layout = NULL;
 
 	{
-		size_t count_d3d_elements = 0;
-		for (size_t i = 0; i < desc.count_vertex_attributes; ++i) {
-			switch (desc.vertex_attributes[i].type) {
-				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT1: count_d3d_elements += 1; break;
-				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT2: count_d3d_elements += 2; break;
-				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT3: count_d3d_elements += 3; break;
-				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT4: count_d3d_elements += 4; break;
-				case RJD_GFX_VERTEX_FORMAT_TYPE_COUNT: RJD_ASSERT("Invalid vertex format type RJD_GFX_VERTEX_FORMAT_TYPE_COUNT"); break;
-			}
-		}
-
 		uint32_t semantic_index[RJD_GFX_VERTEX_SEMANTIC_COUNT] = {0};
 
-		D3D11_INPUT_ELEMENT_DESC* element_descs = rjd_mem_alloc_array(D3D11_INPUT_ELEMENT_DESC, count_d3d_elements, context_d3d11->allocator);
-		for (size_t i = 0, attribute_d3d = 0; i < desc.count_vertex_attributes; ++i) {
+		D3D11_INPUT_ELEMENT_DESC* element_descs = rjd_mem_alloc_array(D3D11_INPUT_ELEMENT_DESC, desc.count_vertex_attributes, context_d3d11->allocator);
+		for (size_t i = 0; i < desc.count_vertex_attributes; ++i) {
 			DXGI_FORMAT format = 0;
 			switch (desc.vertex_attributes[i].type) {
 				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT1: format = DXGI_FORMAT_R32_FLOAT; break;
@@ -804,23 +798,22 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 				RJD_ASSERTMSG(semantic_index[semantic] == 0, "You can only have 1 POSITION semantic in an input layout.");
 			}
 
-			element_descs[attribute_d3d].SemanticName = rjd_gfx_semantic_to_name(semantic);
-			element_descs[attribute_d3d].SemanticIndex = semantic_index[semantic];
-			element_descs[attribute_d3d].Format = format;
-			element_descs[attribute_d3d].InputSlot = desc.vertex_attributes[i].buffer_index;
-			element_descs[attribute_d3d].AlignedByteOffset = desc.vertex_attributes[i].offset;
-			element_descs[attribute_d3d].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA; // TODO support D3D11_INPUT_PER_INSTANCE_DATA
-			element_descs[attribute_d3d].InstanceDataStepRate = 0;
+			element_descs[i].SemanticName = rjd_gfx_semantic_to_name(semantic);
+			element_descs[i].SemanticIndex = semantic_index[semantic];
+			element_descs[i].Format = format;
+			element_descs[i].InputSlot = desc.vertex_attributes[i].buffer_index;
+			element_descs[i].AlignedByteOffset = desc.vertex_attributes[i].offset;
+			element_descs[i].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA; // TODO support D3D11_INPUT_PER_INSTANCE_DATA
+			element_descs[i].InstanceDataStepRate = 0;
 
 			++semantic_index[semantic];
-			++attribute_d3d;
 		}
 
-		struct rjd_gfx_shader_d3d11* shader_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, desc.shader_vertex.handle);
-		void* bytecode = ID3D10Blob_GetBufferPointer(shader_d3d11->bytecode);
-		size_t bytecode_size = ID3D10Blob_GetBufferSize(shader_d3d11->bytecode);
+		const struct rjd_gfx_shader_d3d11* shader_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, desc.shader_vertex.handle);
+		const void* bytecode = ID3D10Blob_GetBufferPointer(shader_d3d11->bytecode);
+		const size_t bytecode_size = ID3D10Blob_GetBufferSize(shader_d3d11->bytecode);
 
-		HRESULT result = ID3D11Device_CreateInputLayout(context_d3d11->device, element_descs, (UINT)count_d3d_elements, bytecode, bytecode_size, &vertex_layout);
+		HRESULT result = ID3D11Device_CreateInputLayout(context_d3d11->device, element_descs, desc.count_vertex_attributes, bytecode, bytecode_size, &vertex_layout);
 		if (FAILED(result)) {
 			return rjd_gfx_translate_hresult(result);
 		}
@@ -856,7 +849,7 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 		.vertex_layout = vertex_layout,
 		.rasterizer_state = rasterizer_state,
 		.shader_vertex = desc.shader_vertex,
-		.shader_fragment = desc.shader_pixel,
+		.shader_pixel = desc.shader_pixel,
 		.render_target = desc.render_target,
 		.depthstencil_target = desc.depthstencil_target,
 		.depth_compare = desc.depth_compare,
@@ -887,9 +880,9 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 		uint32_t stride = 0;
 		const void* data = NULL;
 
-		if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_FRAGMENT) {
+		if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL) {
 			if (desc_buffer->type != RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS) {
-				return RJD_RESULT("Buffers bound to fragment shaders must be constant.");
+				return RJD_RESULT("Buffers bound to pixel shaders must be constant.");
 			}
 		}
 
@@ -1161,8 +1154,8 @@ static inline void rjd_gfx_shader_destroy_d3d11(struct rjd_gfx_context_d3d11* co
 	if (shader->vertex) {
 		ID3D11VertexShader_Release(shader->vertex);
 	}
-	if (shader->fragment) {
-		ID3D11PixelShader_Release(shader->fragment);
+	if (shader->pixel) {
+		ID3D11PixelShader_Release(shader->pixel);
 	}
 	rjd_strref_release(shader->debug_name);
 	rjd_strref_release(shader->debug_source);
