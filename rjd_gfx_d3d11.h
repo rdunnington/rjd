@@ -500,6 +500,16 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 {
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 	struct rjd_gfx_command_buffer_d3d11* cmd_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
+	const D3D11_VIEWPORT viewport =
+	{
+		.TopLeftX = 0,
+		.TopLeftY = 0,
+		.Width = (float)command->viewport->width,
+		.Height = (float)command->viewport->height,
+		.MinDepth = 0, 
+		.MaxDepth = 1.0f,
+	};
+	ID3D11DeviceContext_RSSetViewports(cmd_buffer_d3d11->deferred_context, 1, &viewport);
 
 	// pipeline state
 	struct rjd_gfx_pipeline_state_d3d11* pipeline_state_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_pipeline_states, command->pipeline_state->handle);
@@ -517,7 +527,7 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 		return RJD_RESULT("The selected shader did not have a vertex shader.");
 	}
 
-	if (shader_pixel_d3d11->pixel == NULL) {
+	if (shader_pixel_d3d11->pixel) {
 		ID3D11DeviceContext_PSSetShader(cmd_buffer_d3d11->deferred_context, shader_pixel_d3d11->pixel, NULL, 0);
 	} else {
 		return RJD_RESULT("The selected shader did not have a pixel shader.");
@@ -896,6 +906,9 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 
 				if (desc_buffer->buffer_index >= D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT - 1) {
 					return RJD_RESULT("Vertex buffer index must be < D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT");
+				}
+				if (stride == 0) {
+					return RJD_RESULT("Vertex buffers must have a stride larger than 0.");
 				}
 				break;
 			case RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS: 
