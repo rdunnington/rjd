@@ -14,6 +14,10 @@
 	#error "DirectX11 is only supported on Windows"
 #endif
 
+// This forward declaration is needed to suppress an order of declarations bug in the d3d headers.
+// d3d11shader.h(454): warning C4115: 'ID3D11ModuleInstance': named type definition in parentheses
+struct ID3D11ModuleInstance;
+
 #define CINTERFACE
 #define COBJMACROS
 #include <d3d11.h>
@@ -356,7 +360,7 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 	rjd_strpool_free(&context_d3d11->debug_names);
 
 	IDXGISwapChain1_Release(context_d3d11->swapchain);
-	//ID3D11Context_Release(context_d3d11->device); //TODO?
+	ID3D11DeviceContext_Release(context_d3d11->context);
 	ID3D11Device_Release(context_d3d11->device);
 	IDXGIAdapter1_Release(context_d3d11->adapter);
 	IDXGIFactory4_Release(context_d3d11->factory);
