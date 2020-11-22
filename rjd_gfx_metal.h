@@ -37,6 +37,8 @@ struct rjd_gfx_pipeline_state_metal
 {
 	id<MTLRenderPipelineState> state_render;
 	id<MTLDepthStencilState> state_depthstencil;
+	enum rjd_gfx_cull cull_mode;
+	enum rjd_gfx_winding_order winding_order;
 };
 
 struct rjd_gfx_mesh_vertex_buffer_metal
@@ -359,8 +361,8 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 
     [encoder pushDebugGroup:[NSString stringWithUTF8String:command->debug_label]];
 
-	const MTLWinding winding_order_metal = rjd_gfx_winding_to_metal(command->winding_order);
-	const MTLCullMode cull_mode_metal = rjd_gfx_cull_to_metal(command->cull_mode);
+	const MTLWinding winding_order_metal = rjd_gfx_winding_to_metal(pipeline_metal->winding_order);
+	const MTLCullMode cull_mode_metal = rjd_gfx_cull_to_metal(pipeline_metal->cull_mode);
 
     [encoder setRenderPipelineState:pipeline_metal->state_render];
     [encoder setDepthStencilState:pipeline_metal->state_depthstencil];
@@ -711,6 +713,8 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 	struct rjd_gfx_pipeline_state_metal state = {
 		.state_render = pipeline_state,
 		.state_depthstencil = depth_stencil_state,
+		.cull_mode = desc.cull_mode,
+		.winding_order = desc.winding_order,
 	};
 
 	rjd_slotmap_insert(context_metal->slotmap_pipeline_states, state, &out->handle);

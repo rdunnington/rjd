@@ -203,15 +203,42 @@ enum rjd_gfx_vertex_format_step
 	RJD_GFX_VERTEX_FORMAT_STEP_CONSTANT,
 };
 
+enum rjd_gfx_vertex_semantic
+{
+	RJD_GFX_VERTEX_SEMANTIC_POSITION,
+	RJD_GFX_VERTEX_SEMANTIC_COLOR,
+	RJD_GFX_VERTEX_SEMANTIC_NORMAL,
+	RJD_GFX_VERTEX_SEMANTIC_TEXCOORD,
+	RJD_GFX_VERTEX_SEMANTIC_BINORMAL,
+	RJD_GFX_VERTEX_SEMANTIC_TANGENT,
+	RJD_GFX_VERTEX_SEMANTIC_BLENDINDEX,
+	RJD_GFX_VERTEX_SEMANTIC_BLENDWEIGHT,
+	RJD_GFX_VERTEX_SEMANTIC_COUNT,
+};
+
 struct rjd_gfx_vertex_format_attribute
 {
 	enum rjd_gfx_vertex_format_type type;
 	enum rjd_gfx_vertex_format_step step;
+	enum rjd_gfx_vertex_semantic semantic; // only used for d3d11
 	uint32_t attribute_index;
 	uint32_t buffer_index;
 	uint32_t stride;
     uint32_t step_rate;
 	uint32_t offset;
+};
+
+enum rjd_gfx_winding_order
+{
+	RJD_GFX_WINDING_ORDER_CLOCKWISE,
+	RJD_GFX_WINDING_ORDER_COUNTERCLOCKWISE,
+};
+
+enum rjd_gfx_cull
+{
+	RJD_GFX_CULL_NONE,
+	RJD_GFX_CULL_BACK,
+	RJD_GFX_CULL_FRONT,
 };
 
 enum rjd_gfx_depth_compare
@@ -231,12 +258,14 @@ struct rjd_gfx_pipeline_state_desc
 {
 	const char* debug_name;
 	struct rjd_gfx_shader shader_vertex;
-	struct rjd_gfx_shader shader_pixel;
+	struct rjd_gfx_shader shader_pixel; // TODO rename to shader_fragment
 	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_texture depthstencil_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_vertex_format_attribute* vertex_attributes;
 	uint32_t count_vertex_attributes;
 	enum rjd_gfx_depth_compare depth_compare;
+	enum rjd_gfx_cull cull_mode;
+	enum rjd_gfx_winding_order winding_order;
 	// TODO stencil config
 };
 
@@ -277,6 +306,7 @@ union rjd_gfx_mesh_buffer_common_desc
 	struct {
 		const void* data;
 		uint32_t length;
+		uint32_t stride;
 	} vertex;
 };
 
@@ -299,6 +329,7 @@ struct rjd_gfx_mesh_vertexed_desc
 {
 	enum rjd_gfx_primitive_type primitive;
 	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
+	struct rjd_gfx_shader vertex_shader;
 	uint32_t count_buffers;
 	uint32_t count_vertices;
 };
@@ -328,20 +359,7 @@ struct rjd_gfx_mesh
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// render commands
-
-enum rjd_gfx_winding_order
-{
-	RJD_GFX_WINDING_ORDER_CLOCKWISE,
-	RJD_GFX_WINDING_ORDER_COUNTERCLOCKWISE,
-};
-
-enum rjd_gfx_cull
-{
-	RJD_GFX_CULL_NONE,
-	RJD_GFX_CULL_BACK,
-	RJD_GFX_CULL_FRONT,
-};
+// render command
 
 struct rjd_gfx_pass_begin_desc
 {
@@ -361,8 +379,6 @@ struct rjd_gfx_pass_draw_desc
 	const uint32_t* texture_indices; // parallel array with textures
 	uint32_t count_meshes;
 	uint32_t count_textures;
-	enum rjd_gfx_cull cull_mode;
-	enum rjd_gfx_winding_order winding_order;
 };
 
 struct rjd_gfx_command_buffer

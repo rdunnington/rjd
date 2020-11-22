@@ -33,12 +33,16 @@
 struct rjd_gfx_texture_d3d11
 {
 	ID3D11Texture2D* texture;
+	ID3D11ShaderResourceView* resource_view;
+	ID3D11SamplerState* sampler;
 	struct rjd_strref* debug_name;
 };
 
 struct rjd_gfx_shader_d3d11
 {
 	ID3DBlob* bytecode;
+	ID3D11VertexShader* vertex;
+	ID3D11PixelShader* fragment;
 	struct rjd_strref* debug_name;
 	struct rjd_strref* debug_source;
 };
@@ -46,24 +50,30 @@ struct rjd_gfx_shader_d3d11
 struct rjd_gfx_pipeline_state_d3d11
 {
 	struct rjd_strref* debug_name;
+	ID3D11InputLayout* vertex_layout;
+	ID3D11RasterizerState* rasterizer_state;
 	struct rjd_gfx_shader shader_vertex;
-	struct rjd_gfx_shader shader_pixel;
+	struct rjd_gfx_shader shader_fragment;
 	struct rjd_gfx_texture render_target;
 	struct rjd_gfx_texture depthstencil_target;
-	struct rjd_gfx_vertex_format_attribute* vertex_attributes; // rjd_array
 	enum rjd_gfx_depth_compare depth_compare;
 };
 
-struct rjd_gfx_mesh_buffer_vertex_d3d11
+struct rjd_gfx_mesh_buffer_d3d11
 {
 	ID3D11Buffer* buffer;
+	UINT stride;
+	UINT offset;
+	UINT slot;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
 };
 
 struct rjd_gfx_mesh_d3d11
 {
-	struct rjd_gfx_mesh_buffer_vertex_d3d11* buffers_vertex;
+	struct rjd_gfx_mesh_buffer_d3d11* buffers;
 	uint32_t count_buffers;
+	uint32_t count_vertices;
+	enum rjd_gfx_primitive_type primitive;
 };
 
 struct rjd_gfx_command_buffer_d3d11
@@ -103,8 +113,11 @@ static struct rjd_result rjd_gfx_translate_hresult(HRESULT hr);
 
 static DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format);
 static struct rjd_gfx_rgba rjd_gfx_format_value_to_rgba(struct rjd_gfx_format_value value);
+static D3D_PRIMITIVE_TOPOLOGY rjd_gfx_primitive_to_d3d11(enum rjd_gfx_primitive_type primitive);
+static D3D11_CULL_MODE rjd_gfx_cull_to_d3d(enum rjd_gfx_cull cull_mode);
 static D3D11_USAGE rjd_gfx_texture_access_to_gpu_access(enum rjd_gfx_texture_access access);
 static D3D11_CPU_ACCESS_FLAG rjd_gfx_texture_access_to_cpu_access(enum rjd_gfx_texture_access access);
+static const char* rjd_gfx_semantic_to_name(enum rjd_gfx_vertex_semantic semantic);
 
 static bool rjd_gfx_texture_isbackbuffer(struct rjd_gfx_texture texture);
 
@@ -132,57 +145,71 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		}
 	}
 
-	const UINT flags = 
-		D3D11_CREATE_DEVICE_BGRA_SUPPORT | // enable compatibility with Direct2D.
-		D3D11_CREATE_DEVICE_DEBUG | // TODO make this optional
-		0;
-
-	const D3D_FEATURE_LEVEL feature_levels[] = {
-		D3D_FEATURE_LEVEL_11_1,
-		D3D_FEATURE_LEVEL_11_0,
-	};
-
-	IDXGIAdapter1* adapter = NULL;
+	IDXGIAdapter1* adapter_extended = NULL;
 	struct rjd_result result_adapter = RJD_RESULT("No hardware adapter found. Does this machine have a GPU?");
-	for (UINT i = 0; DXGI_ERROR_NOT_FOUND != IDXGIFactory1_EnumAdapters1(factory, i, &adapter); ++i) {
+	for (UINT i = 0; DXGI_ERROR_NOT_FOUND != IDXGIFactory1_EnumAdapters1(factory, i, &adapter_extended); ++i) {
 		DXGI_ADAPTER_DESC1 desc_adapter;
-		IDXGIAdapter1_GetDesc1(adapter, &desc_adapter);
+		IDXGIAdapter1_GetDesc1(adapter_extended, &desc_adapter);
 		if (desc_adapter.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) {
-			adapter = NULL;
+			adapter_extended = NULL;
 			continue;
 		}
 
 		// desc_adapter.DedicatedVideoMemory
 		// desc_adapter.Description // wchar_t* name
+		result_adapter = RJD_RESULT_OK();
+		break;
 	}
 	if (!rjd_result_isok(result_adapter)) {
 		return result_adapter;
 	}
 
+	//IDXGIAdapter* adapter = NULL;
+	//if (adapter_extended) {
+	//	IDXGIAdapter1_QueryInterface(adapter_extended, &IID_IDXGIAdapter, &adapter);
+	//}
+
 	ID3D11Device* device = NULL;
 	ID3D11DeviceContext* context = NULL;
-	const HRESULT hr_device = D3D11CreateDevice(
-		(IDXGIAdapter*)adapter, // TODO verify this cast is legit
-		D3D_DRIVER_TYPE_HARDWARE,
-		NULL, // not using a software rasterizer
-		flags,
-		feature_levels,
-		rjd_countof(feature_levels),
-		D3D11_SDK_VERSION,
-		&device,
-		NULL,
-		&context);
+	{
+		const UINT flags =
+			//D3D11_CREATE_DEVICE_BGRA_SUPPORT | // enable compatibility with Direct2D.
+			//D3D11_CREATE_DEVICE_DEBUG | // TODO make this optional
+			0;
 
-	if (FAILED(hr_device)) {
-		if (hr_device == DXGI_ERROR_SDK_COMPONENT_MISSING) {
-			if (flags & D3D11_CREATE_DEVICE_DEBUG) {
-				return RJD_RESULT("Correct debug layer version not available on this machine. "
-									"Make sure the DirectX SDK is up to date.");
-			} else {
-				return RJD_RESULT("A SDK component was not available.");
+		const D3D_FEATURE_LEVEL feature_levels[] = {
+			//D3D_FEATURE_LEVEL_11_1,
+			D3D_FEATURE_LEVEL_11_0,
+			//D3D_FEATURE_LEVEL_10_1,
+			//D3D_FEATURE_LEVEL_10_0,
+		};
+
+		const HRESULT hr_device = D3D11CreateDevice(
+			//(IDXGIAdapter*)adapter, // TODO verify this cast is legit
+			NULL, // TODO replace this with the specified adapter
+			D3D_DRIVER_TYPE_HARDWARE,
+			NULL, // not using a software rasterizer
+			flags,
+			feature_levels,
+			rjd_countof(feature_levels),
+			D3D11_SDK_VERSION,
+			&device,
+			NULL,
+			&context);
+
+		if (FAILED(hr_device)) {
+			if (hr_device == DXGI_ERROR_SDK_COMPONENT_MISSING) {
+				if (flags & D3D11_CREATE_DEVICE_DEBUG) {
+					return RJD_RESULT("Correct debug layer version not available on this machine. "
+						"Make sure the DirectX SDK is up to date.");
+				}
+				else {
+					return RJD_RESULT("A SDK component was not available.");
+				}
 			}
-		} else {
-			return rjd_gfx_translate_hresult(hr_device); 
+			else {
+				return rjd_gfx_translate_hresult(hr_device);
+			}
 		}
 	}
 
@@ -202,39 +229,46 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 			.Denominator = 1,
 		};
 
+		// note that the flip model isn't compatible with msaa so we'll have to render to an offscreen msaa
+		// target to get the same effect
 		DXGI_SAMPLE_DESC desc_msaa = {
 			.Count = 1,
 			.Quality = 0,
 		};
 
-		if (desc.optional_desired_msaa_samples) {
-			for (uint32_t i = 0; i < desc.count_desired_msaa_samples; ++i) {
-				UINT quality = 0;
-				UINT count = desc.optional_desired_msaa_samples[i];
-				HRESULT hr = ID3D11Device_CheckMultisampleQualityLevels(device, backbuffer_format, count, &quality);
-				if (SUCCEEDED(hr)) {
-					desc_msaa.Count = count;
-					desc_msaa.Quality = quality;
-				} else if (hr == 0) {
-					// unsupported
-				} else {
-					return RJD_RESULT("Failed to get multisample quality levels.");
-				}
-			}
-		}
+		//if (desc.optional_desired_msaa_samples) {
+		//	for (uint32_t i = 0; i < desc.count_desired_msaa_samples; ++i) {
+		//		UINT quality = 0;
+		//		UINT count = desc.optional_desired_msaa_samples[i];
+		//		HRESULT hr = ID3D11Device_CheckMultisampleQualityLevels(device, backbuffer_format, count, &quality);
+		//		if (SUCCEEDED(hr)) {
+		//			desc_msaa.Count = count;
+		//			desc_msaa.Quality = quality;
+		//			break;
+		//		} else if (hr == 0) {
+		//			// unsupported
+		//		} else {
+		//			return RJD_RESULT("Failed to get multisample quality levels.");
+		//		}
+		//	}
+		//}
+
+		uint32_t flags = 0;
+		flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // needed to switch between fullscreen/windowed
+		flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING; // needed to turn off vsync
 
 		DXGI_SWAP_CHAIN_DESC1 desc_swapchain = {
 			.Width = 0, // auto-detect
 			.Height = 0, // auto-detect
-			.Format = backbuffer_format,
+			.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
 			.Stereo = false,
 			.SampleDesc = desc_msaa,
-			.BufferUsage = DXGI_USAGE_BACK_BUFFER,
-			.BufferCount = 3, // TODO make this configurable. Right now 3 matches the metal defaults.
-			.Scaling = DXGI_SCALING_NONE, // Don't stretch the backbuffer to fit the window size. We should handle that.
+			.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
+			.BufferCount = 3, // TODO make this configurable. Right now 3 matches the macos metal defaults.
+			.Scaling = DXGI_SCALING_STRETCH, // Don't stretch the backbuffer to fit the window size. We should handle that. // TODO figure out why DXGI_SCALING_NONE fails
 			.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD, // flip model has better perf and discard since we don't care to keep it around
-			.AlphaMode = DXGI_ALPHA_MODE_STRAIGHT,
-			.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING, // needed to turn off vsync
+			.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
+			.Flags = flags,
 		};
 
 		DXGI_SWAP_CHAIN_FULLSCREEN_DESC desc_fullscreen = {
@@ -269,7 +303,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_d3d11->slotmap_command_buffers	= rjd_slotmap_alloc(struct rjd_gfx_command_buffer_d3d11, 16, desc.allocator);
 
 	context_d3d11->factory = factory;
-	context_d3d11->adapter = adapter;
+	context_d3d11->adapter = adapter_extended;
 	context_d3d11->device = device;
 	context_d3d11->context = context;
 	context_d3d11->swapchain = swapchain;
@@ -342,6 +376,8 @@ struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context)
 	// find the primary output and wait for its vblank
 	RECT rect_window = {0};
 	if (GetWindowRect(context_d3d11->hwnd, &rect_window) == FALSE) {
+		//uint32_t err = GetLastError();
+		//RJD_LOG("err: %d", err);
 		return RJD_RESULT("Failed to get window rect. Check GetLastError() for more information"); // TODO make a GetLastError -> result function
 	}
 
@@ -423,9 +459,9 @@ struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context,
 struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_begin_desc* command)
 {
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
-	struct rjd_gfx_command_buffer_d3d11* buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
+	struct rjd_gfx_command_buffer_d3d11* cmd_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
 
-	if (buffer_d3d11->render_target) {
+	if (cmd_buffer_d3d11->render_target) {
 		return RJD_RESULT("A render pass has already been started with this command buffer.");
 	}
 
@@ -437,7 +473,7 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
 		}
 
 		// TODO make sure the texture -> resource cast is safe
-		hr = ID3D11Device_CreateRenderTargetView(context_d3d11->device, (ID3D11Resource*)texture_backbuffer, NULL, &buffer_d3d11->render_target);
+		hr = ID3D11Device_CreateRenderTargetView(context_d3d11->device, (ID3D11Resource*)texture_backbuffer, NULL, &cmd_buffer_d3d11->render_target);
 
 		// TODO release texture2d?
 
@@ -445,23 +481,94 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
 			return rjd_gfx_translate_hresult(hr);
 		}
 	} else {
-		RJD_ASSERTFAIL("unimplemented"); // TODO
+		RJD_ASSERTFAIL("non-backbuffer render targets are unimplemented"); // TODO
 	}
 
 	struct rjd_gfx_rgba rgba_backbuffer = rjd_gfx_format_value_to_rgba(command->clear_color);
-	ID3D11DeviceContext_ClearRenderTargetView(buffer_d3d11->deferred_context, buffer_d3d11->render_target, rgba_backbuffer.v);
+	ID3D11DeviceContext_ClearRenderTargetView(cmd_buffer_d3d11->deferred_context, cmd_buffer_d3d11->render_target, rgba_backbuffer.v);
 
-	//ID3D11DeviceContext_ClearDepthStencilView(buffer_d3d11->deferred_context, buffer_d3d11->depth_stencil, color); // TODO
+	//ID3D11DeviceContext_ClearDepthStencilView(cmd_buffer_d3d11->deferred_context, cmd_buffer_d3d11->depth_stencil, color); // TODO
 
 	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_draw_desc* command)
 {
-	RJD_UNUSED_PARAM(context);
-	RJD_UNUSED_PARAM(cmd_buffer);
-	RJD_UNUSED_PARAM(command);
-	return RJD_RESULT("unimplemented");
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+	struct rjd_gfx_command_buffer_d3d11* cmd_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
+
+	// pipeline state
+	struct rjd_gfx_pipeline_state_d3d11* pipeline_state_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_pipeline_states, command->pipeline_state->handle);
+	ID3D11DeviceContext_IASetInputLayout(cmd_buffer_d3d11->deferred_context, pipeline_state_d3d11->vertex_layout);
+	ID3D11DeviceContext_RSSetState(cmd_buffer_d3d11->deferred_context, pipeline_state_d3d11->rasterizer_state);
+
+	ID3D11DeviceContext_OMSetRenderTargets(cmd_buffer_d3d11->deferred_context, 1, &cmd_buffer_d3d11->render_target, NULL); // TODO depthstencil target
+
+	struct rjd_gfx_shader_d3d11* shader_vertex_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, pipeline_state_d3d11->shader_vertex.handle);
+	struct rjd_gfx_shader_d3d11* shader_fragment_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, pipeline_state_d3d11->shader_fragment.handle);
+
+	if (shader_vertex_d3d11->vertex) {
+		ID3D11DeviceContext_VSSetShader(cmd_buffer_d3d11->deferred_context, shader_vertex_d3d11->vertex, NULL, 0);
+	} else {
+		return RJD_RESULT("The selected shader did not have a vertex shader.");
+	}
+
+	if (shader_fragment_d3d11->fragment == NULL) {
+		ID3D11DeviceContext_PSSetShader(cmd_buffer_d3d11->deferred_context, shader_fragment_d3d11->fragment, NULL, 0);
+	} else {
+		return RJD_RESULT("The selected shader did not have a fragment shader.");
+	}
+
+	// textures & sampler states
+	for (size_t i = 0; i < command->count_textures; ++i) {
+		RJD_ASSERT(command->textures);
+		RJD_ASSERT(command->texture_indices);
+
+		struct rjd_gfx_texture_d3d11* texture_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_textures, command->textures[i].handle);
+		UINT slot = command->texture_indices[i];
+
+		if (D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT <= slot) {
+			return RJD_RESULT("Not allowed to bind to slots higher than D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT - 1");
+		}
+
+		ID3D11DeviceContext_PSSetShaderResources(cmd_buffer_d3d11->deferred_context, slot, 1, &texture_d3d11->resource_view);
+		ID3D11DeviceContext_PSSetSamplers(cmd_buffer_d3d11->deferred_context, slot, 1, &texture_d3d11->sampler);
+	}
+
+	// draw meshes
+	for (size_t index_mesh = 0; index_mesh < command->count_meshes; ++index_mesh) {
+		RJD_ASSERT(command->meshes);
+
+		const struct rjd_gfx_mesh_d3d11* mesh_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_meshes, command->meshes[index_mesh].handle);
+
+		const D3D_PRIMITIVE_TOPOLOGY primitive = rjd_gfx_primitive_to_d3d11(mesh_d3d11->primitive);
+		ID3D11DeviceContext_IASetPrimitiveTopology(cmd_buffer_d3d11->deferred_context, primitive);
+
+		for (size_t i = 0; i < mesh_d3d11->count_buffers; ++i) {
+			const struct rjd_gfx_mesh_buffer_d3d11* buffer_d3d11 = mesh_d3d11->buffers + i;
+
+			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX) {
+				ID3D11DeviceContext_IASetVertexBuffers(
+					cmd_buffer_d3d11->deferred_context, 
+					buffer_d3d11->slot, 
+					1, 
+					&buffer_d3d11->buffer, 
+					&buffer_d3d11->stride, 
+					&buffer_d3d11->offset);
+			}
+			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_FRAGMENT) {
+				ID3D11DeviceContext_PSSetConstantBuffers(
+					cmd_buffer_d3d11->deferred_context, 
+					buffer_d3d11->slot, 
+					1, 
+					&buffer_d3d11->buffer);
+			}
+		}
+
+		ID3D11DeviceContext_Draw(cmd_buffer_d3d11->deferred_context, mesh_d3d11->count_vertices, 0);
+	}
+
+	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer)
@@ -512,13 +619,56 @@ struct rjd_result rjd_gfx_texture_create(struct rjd_gfx_context* context, struct
 	};
 
 	ID3D11Texture2D* texture = NULL;
-	HRESULT hr = ID3D11Device_CreateTexture2D(context_d3d11->device, &desc_d3d11, &subresource, &texture);
-	if (FAILED(hr)) {
-		return rjd_gfx_translate_hresult(hr);
+	{
+		HRESULT hr = ID3D11Device_CreateTexture2D(context_d3d11->device, &desc_d3d11, &subresource, &texture);
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
+		}
+	}
+
+	ID3D11ShaderResourceView* resource_view = NULL;
+	{
+		D3D11_SHADER_RESOURCE_VIEW_DESC desc_resource_view = 
+		{
+			.Format = desc_d3d11.Format,
+			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
+			.Texture2D = {
+				.MostDetailedMip = 0,
+				.MipLevels = desc_d3d11.MipLevels,
+			},
+		};
+
+		HRESULT hr = ID3D11Device_CreateShaderResourceView(context_d3d11->device, (ID3D11Resource*)texture, &desc_resource_view, &resource_view);
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
+		}
+	}
+
+	ID3D11SamplerState* sampler = NULL;
+	{
+		// TODO make this configurable
+		D3D11_SAMPLER_DESC desc_sampler = {
+			.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT,
+			.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP,
+			.MipLODBias = 0.0f,
+			.MaxAnisotropy = 0,
+			.ComparisonFunc = D3D11_COMPARISON_ALWAYS,
+			.MinLOD = 0,
+			.MaxLOD = D3D11_FLOAT32_MAX,
+		};
+
+		HRESULT hr = ID3D11Device_CreateSamplerState(context_d3d11->device, &desc_sampler, &sampler);
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
+		}
 	}
 
 	struct rjd_gfx_texture_d3d11 texture_d3d11 = {
 		.texture = texture,
+		.resource_view = resource_view,
+		.sampler = sampler,
 		.debug_name = rjd_strpool_add(&context_d3d11->debug_names, desc.debug_label),
 	};
 
@@ -535,9 +685,12 @@ void rjd_gfx_texture_destroy(struct rjd_gfx_context* context, struct rjd_gfx_tex
 
 struct rjd_result rjd_gfx_shader_create(struct rjd_gfx_context* context, struct rjd_gfx_shader* out, struct rjd_gfx_shader_desc desc)
 {
+	RJD_ASSERT(context);
 	RJD_ASSERT(desc.data);
 	RJD_ASSERT(desc.count_data > 0);
 	RJD_ASSERT(desc.function_name);
+
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 
 	const char* target = NULL;
 	switch (desc.type)
@@ -549,7 +702,6 @@ struct rjd_result rjd_gfx_shader_create(struct rjd_gfx_context* context, struct 
 	UINT flags = 0;
 	flags |= D3DCOMPILE_WARNINGS_ARE_ERRORS;
 	flags |= D3DCOMPILE_DEBUG; // TODO make this optional
-
 
 	ID3DBlob* bytecode = NULL;
 	ID3DBlob* errors = NULL;
@@ -567,14 +719,35 @@ struct rjd_result rjd_gfx_shader_create(struct rjd_gfx_context* context, struct 
 		&bytecode,
 		&errors);
 	if (FAILED(hr)) {
-		// TODO output errors somehow
+		void* errors_data = ID3D10Blob_GetBufferPointer(errors);
+		size_t errors_size = ID3D10Blob_GetBufferSize(errors);
+
+		char* error_string = rjd_mem_alloc_array(char, errors_size + 1, context_d3d11->allocator);
+		memcpy(error_string, errors_data, errors_size);
+		error_string[errors_size] = 0;
+		RJD_LOG("Shader compile errors: %s\n", error_string);
 		return RJD_RESULT("Shaders failed to compile.");
 	}
 
-	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+	ID3D11VertexShader* vertex = NULL;
+	ID3D11PixelShader* fragment = NULL;
+
+	void* bytecode_data = ID3D10Blob_GetBufferPointer(errors);
+	size_t bytecode_size = ID3D10Blob_GetBufferSize(errors);
+	if (desc.type == RJD_GFX_SHADER_TYPE_VERTEX) {
+		hr = ID3D11Device_CreatePixelShader(context_d3d11->device, bytecode_data, bytecode_size, NULL, &fragment);
+	}
+	if (desc.type == RJD_GFX_SHADER_TYPE_VERTEX) {
+		hr = ID3D11Device_CreatePixelShader(context_d3d11->device, bytecode_data, bytecode_size, NULL, &fragment);
+	}
+	if (FAILED(hr)) {
+		return rjd_gfx_translate_hresult(hr);
+	}
 
 	struct rjd_gfx_shader_d3d11 shader_d3d11 = {
 		.bytecode = bytecode,
+		.vertex = vertex,
+		.fragment = fragment,
 		.debug_name = rjd_strpool_add(&context_d3d11->debug_names, desc.function_name),
 		.debug_source = rjd_strpool_add(&context_d3d11->debug_names, desc.source_name),
 	};
@@ -594,21 +767,94 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 {
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 
-	struct rjd_gfx_vertex_format_attribute* vertex_attributes_clone = 
-		rjd_array_alloc(struct rjd_gfx_vertex_format_attribute, desc.count_vertex_attributes, context_d3d11->allocator);
-	rjd_array_resize(vertex_attributes_clone, desc.count_vertex_attributes);
-	for (size_t i = 0; i < desc.count_vertex_attributes; ++i) {
-		vertex_attributes_clone[i] = desc.vertex_attributes[i];
+	ID3D11InputLayout* vertex_layout = NULL;
+
+	{
+		size_t count_d3d_elements = 0;
+		for (size_t i = 0; i < desc.count_vertex_attributes; ++i) {
+			switch (desc.vertex_attributes[i].type) {
+				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT1: count_d3d_elements += 1; break;
+				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT2: count_d3d_elements += 2; break;
+				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT3: count_d3d_elements += 3; break;
+				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT4: count_d3d_elements += 4; break;
+				case RJD_GFX_VERTEX_FORMAT_TYPE_COUNT: RJD_ASSERT("Invalid vertex format type RJD_GFX_VERTEX_FORMAT_TYPE_COUNT"); break;
+			}
+		}
+
+		uint32_t semantic_index[RJD_GFX_VERTEX_SEMANTIC_COUNT] = {0};
+
+		D3D11_INPUT_ELEMENT_DESC* element_descs = rjd_mem_alloc_array(D3D11_INPUT_ELEMENT_DESC, count_d3d_elements, context_d3d11->allocator);
+		for (size_t i = 0, attribute_d3d = 0; i < desc.count_vertex_attributes; ++i) {
+			DXGI_FORMAT format = 0;
+			switch (desc.vertex_attributes[i].type) {
+				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT1: format = DXGI_FORMAT_R32_FLOAT; break;
+				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT2: format = DXGI_FORMAT_R32G32_FLOAT; break;
+				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT3: format = DXGI_FORMAT_R32G32B32_FLOAT; break;
+				case RJD_GFX_VERTEX_FORMAT_TYPE_FLOAT4: format = DXGI_FORMAT_R32G32B32A32_FLOAT; break;
+				case RJD_GFX_VERTEX_FORMAT_TYPE_COUNT: RJD_ASSERT("Invalid vertex format type RJD_GFX_VERTEX_FORMAT_TYPE_COUNT"); break;
+			}
+		
+			const enum rjd_gfx_vertex_semantic semantic = desc.vertex_attributes[i].semantic;
+
+			if (semantic == RJD_GFX_VERTEX_SEMANTIC_POSITION) {
+				RJD_ASSERTMSG(semantic_index[semantic] == 0, "You can only have 1 POSITION semantic in an input layout.");
+			}
+
+			element_descs[attribute_d3d].SemanticName = rjd_gfx_semantic_to_name(semantic);
+			element_descs[attribute_d3d].SemanticIndex = semantic_index[semantic];
+			element_descs[attribute_d3d].Format = format;
+			element_descs[attribute_d3d].InputSlot = desc.vertex_attributes[i].buffer_index;
+			element_descs[attribute_d3d].AlignedByteOffset = desc.vertex_attributes[i].offset;
+			element_descs[attribute_d3d].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA; // TODO support D3D11_INPUT_PER_INSTANCE_DATA
+			element_descs[attribute_d3d].InstanceDataStepRate = 0;
+
+			++semantic_index[semantic];
+			++attribute_d3d;
+		}
+
+		struct rjd_gfx_shader_d3d11* shader_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, desc.shader_vertex.handle);
+		void* bytecode = ID3D10Blob_GetBufferPointer(shader_d3d11->bytecode);
+		size_t bytecode_size = ID3D10Blob_GetBufferSize(shader_d3d11->bytecode);
+
+		HRESULT result = ID3D11Device_CreateInputLayout(context_d3d11->device, element_descs, (UINT)count_d3d_elements, bytecode, bytecode_size, &vertex_layout);
+		if (FAILED(result)) {
+			return rjd_gfx_translate_hresult(result);
+		}
+
+		rjd_mem_free(element_descs);
+	}
+
+	ID3D11RasterizerState* rasterizer_state = NULL;
+	{
+		D3D11_RASTERIZER_DESC desc_rasterizer = 
+		{
+			.FillMode = D3D11_FILL_SOLID,
+			.CullMode = rjd_gfx_cull_to_d3d(desc.cull_mode),
+			.FrontCounterClockwise = desc.winding_order == RJD_GFX_WINDING_ORDER_COUNTERCLOCKWISE,
+			.DepthBias = 0,
+			.DepthBiasClamp = 1.0f,
+			.SlopeScaledDepthBias = 1.0f,
+			.DepthClipEnable = TRUE,
+			.ScissorEnable = FALSE, // TODO support stencils
+			.MultisampleEnable = FALSE, // TODO MSAA
+			.AntialiasedLineEnable = FALSE,
+		};
+
+		HRESULT result = ID3D11Device_CreateRasterizerState(context_d3d11->device, &desc_rasterizer, &rasterizer_state);
+		if (FAILED(result)) {
+			return rjd_gfx_translate_hresult(result);
+		}
 	}
 
 	struct rjd_gfx_pipeline_state_d3d11 state_d3d11 = 
 	{
 		.debug_name = rjd_strpool_add(&context_d3d11->debug_names, desc.debug_name),
+		.vertex_layout = vertex_layout,
+		.rasterizer_state = rasterizer_state,
 		.shader_vertex = desc.shader_vertex,
-		.shader_pixel = desc.shader_pixel,
+		.shader_fragment = desc.shader_pixel,
 		.render_target = desc.render_target,
 		.depthstencil_target = desc.depthstencil_target,
-		.vertex_attributes = vertex_attributes_clone,
 		.depth_compare = desc.depth_compare,
 	};
 	
@@ -627,30 +873,53 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 {
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 
-	struct rjd_gfx_mesh_buffer_vertex_d3d11* buffers_vertex = 
-		rjd_mem_alloc_array(struct rjd_gfx_mesh_buffer_vertex_d3d11, desc.count_buffers, context_d3d11->allocator);
+	struct rjd_gfx_mesh_buffer_d3d11* buffers = rjd_mem_alloc_array(struct rjd_gfx_mesh_buffer_d3d11, desc.count_buffers, context_d3d11->allocator);
 
 	for (size_t i = 0; i < desc.count_buffers; ++i) {
 		const struct rjd_gfx_mesh_vertex_buffer_desc* desc_buffer = desc.buffers + i;
-		struct rjd_gfx_mesh_buffer_vertex_d3d11* buffer_vertex_d3d11 = buffers_vertex + i;
 
 		UINT buffer_size = 0;
 		UINT flags_bind = 0;
+		uint32_t stride = 0;
 		const void* data = NULL;
+
+		if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_FRAGMENT) {
+			if (desc_buffer->type != RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS) {
+				return RJD_RESULT("Buffers bound to fragment shaders must be constant.");
+			}
+		}
 
 		switch (desc_buffer->type)
 		{
 			case RJD_GFX_MESH_BUFFER_TYPE_VERTEX: 
 				buffer_size = desc_buffer->common.vertex.length;
+				stride = desc_buffer->common.vertex.stride;
 				data = desc_buffer->common.vertex.data;
 				flags_bind = D3D11_BIND_VERTEX_BUFFER;
+
+				if (desc_buffer->buffer_index >= D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT - 1) {
+					return RJD_RESULT("Vertex buffer index must be < D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT");
+				}
 				break;
 			case RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS: 
 				buffer_size = desc_buffer->common.uniforms.capacity;
 				flags_bind = D3D11_BIND_CONSTANT_BUFFER;
+
 				if (buffer_size % 16 != 0) {
-					return RJD_RESULT("Uniform buffers must be a multiple of 16."); // TODO cleanup
+					return RJD_RESULT("Uniform buffer size must be a multiple of 16.");
 				}
+				if (D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 4 * sizeof(float) < buffer_size) {
+					return RJD_RESULT("Uniform buffer exceeded max allowable size");
+				}
+				if (desc_buffer->buffer_index >= D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT - 1) {
+					return RJD_RESULT("Constant buffer index must be < D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT");
+				}	
+
+				// Despite the documentation claiming otherwise, D3D11 requires valid data for constant 
+				// buffers. We'll just give it an array of zeroes to work with for now.
+				void* temp_data = rjd_mem_alloc_stack_array_noclear(uint8_t, buffer_size); // TODO verify this doesn't get destroyed once we leave switch scope?
+				memset(temp_data, 0, buffer_size);
+				data = temp_data;
 				break;
 		}
 
@@ -675,17 +944,22 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 			return rjd_gfx_translate_hresult(hr);
 		}
 
-		struct rjd_gfx_mesh_buffer_vertex_d3d11 buffer = {
+		struct rjd_gfx_mesh_buffer_d3d11 buffer = {
 			.buffer = buffer_d3d11,
+			.stride = stride,
+			.offset = 0,
+			.slot = desc_buffer->buffer_index,
 			.usage_flags = desc_buffer->usage_flags,
 		};
 
-		*buffer_vertex_d3d11 = buffer;
+		buffers[i] = buffer;
 	}
 
 	struct rjd_gfx_mesh_d3d11 mesh_d3d11 = {
-		.buffers_vertex = buffers_vertex,
+		.buffers = buffers,
 		.count_buffers = desc.count_buffers,
+		.count_vertices = desc.count_vertices,
+		.primitive = desc.primitive,
 	};
 
 	rjd_slotmap_insert(context_d3d11->slotmap_meshes, mesh_d3d11, &out->handle);
@@ -703,7 +977,7 @@ struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rj
 		return RJD_RESULT("Invalid index into mesh buffer array");
 	}
 
-	struct rjd_gfx_mesh_buffer_vertex_d3d11* buffer = mesh_d3d11->buffers_vertex + buffer_index;
+	struct rjd_gfx_mesh_buffer_d3d11* buffer = mesh_d3d11->buffers + buffer_index;
 
 	ID3D11Resource* resource = (ID3D11Resource*)buffer->buffer; // TODO make sure this cast is OK
 	UINT subresource = 0;
@@ -735,7 +1009,14 @@ static struct rjd_result rjd_gfx_translate_hresult(HRESULT hr)
 		return RJD_RESULT_OK();
 	}
 
-	return RJD_RESULT("Failed. TODO more info.");
+	switch (hr) 
+	{
+	case E_INVALIDARG:
+		return RJD_RESULT("E_INVALIDARG");
+
+	default:
+		return RJD_RESULT("Failed. TODO more info.");
+	}
 }
 
 static DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format)
@@ -781,6 +1062,30 @@ static struct rjd_gfx_rgba rjd_gfx_format_value_to_rgba(struct rjd_gfx_format_va
 	return out;
 }
 
+D3D_PRIMITIVE_TOPOLOGY rjd_gfx_primitive_to_d3d11(enum rjd_gfx_primitive_type primitive)
+{
+	switch (primitive)
+	{
+		case RJD_GFX_PRIMITIVE_TYPE_TRIANGLES: return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	}
+
+	RJD_ASSERTFAIL("Unhandled primitive type %d", primitive);
+	return 0;
+}
+
+static D3D11_CULL_MODE rjd_gfx_cull_to_d3d(enum rjd_gfx_cull cull_mode)
+{
+	switch (cull_mode)
+	{
+		case RJD_GFX_CULL_NONE: return D3D11_CULL_NONE;
+		case RJD_GFX_CULL_BACK: return D3D11_CULL_BACK;
+		case RJD_GFX_CULL_FRONT: return D3D11_CULL_FRONT;
+	}
+
+	RJD_ASSERTFAIL("Unhandled case %d", cull_mode);
+	return D3D11_CULL_NONE;
+}
+
 static D3D11_USAGE rjd_gfx_texture_access_to_gpu_access(enum rjd_gfx_texture_access access)
 {
 	switch (access)
@@ -807,6 +1112,25 @@ static D3D11_CPU_ACCESS_FLAG rjd_gfx_texture_access_to_cpu_access(enum rjd_gfx_t
 	return 0;
 }
 
+static const char* rjd_gfx_semantic_to_name(enum rjd_gfx_vertex_semantic semantic)
+{
+	switch (semantic)
+	{
+	case RJD_GFX_VERTEX_SEMANTIC_POSITION: return "SV_Position";
+	case RJD_GFX_VERTEX_SEMANTIC_COLOR:	return "COLOR";
+	case RJD_GFX_VERTEX_SEMANTIC_NORMAL: return "NORMAL";
+	case RJD_GFX_VERTEX_SEMANTIC_TEXCOORD: return "TEXCOORD";
+	case RJD_GFX_VERTEX_SEMANTIC_BINORMAL: return "BINORMAL";
+	case RJD_GFX_VERTEX_SEMANTIC_TANGENT: return "TANGENT";
+	case RJD_GFX_VERTEX_SEMANTIC_BLENDINDEX: return "BLENDINDICES";
+	case RJD_GFX_VERTEX_SEMANTIC_BLENDWEIGHT: return "BLENDWEIGHT";
+	case RJD_GFX_VERTEX_SEMANTIC_COUNT: RJD_ASSERTFAIL("RJD_GFX_VERTEX_SEMANTIC_COUNT is an invalid semantic type"); return NULL;
+	}
+
+	RJD_ASSERTFAIL("Unhandled case %d", semantic);
+	return NULL;
+}
+
 static bool rjd_gfx_texture_isbackbuffer(struct rjd_gfx_texture texture)
 {
 	return	texture.handle.salt == RJD_GFX_TEXTURE_BACKBUFFER.handle.salt &&
@@ -816,7 +1140,10 @@ static bool rjd_gfx_texture_isbackbuffer(struct rjd_gfx_texture texture)
 static inline void rjd_gfx_texture_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot)
 {
 	struct rjd_gfx_texture_d3d11* texture = rjd_slotmap_get(context->slotmap_textures, slot);
+
 	ID3D11Texture2D_Release(texture->texture);
+	ID3D11ShaderResourceView_Release(texture->resource_view);
+	ID3D11SamplerState_Release(texture->sampler);
 	rjd_strref_release(texture->debug_name);
 
 	rjd_slotmap_erase(context->slotmap_textures, slot);
@@ -825,6 +1152,14 @@ static inline void rjd_gfx_texture_destroy_d3d11(struct rjd_gfx_context_d3d11* c
 static inline void rjd_gfx_shader_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot)
 {
 	struct rjd_gfx_shader_d3d11* shader = rjd_slotmap_get(context->slotmap_shaders, slot);
+
+	ID3D10Blob_Release(shader->bytecode);
+	if (shader->vertex) {
+		ID3D11VertexShader_Release(shader->vertex);
+	}
+	if (shader->fragment) {
+		ID3D11PixelShader_Release(shader->fragment);
+	}
 	rjd_strref_release(shader->debug_name);
 	rjd_strref_release(shader->debug_source);
 
@@ -834,8 +1169,10 @@ static inline void rjd_gfx_shader_destroy_d3d11(struct rjd_gfx_context_d3d11* co
 static inline void rjd_gfx_pipeline_state_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot)
 {
 	struct rjd_gfx_pipeline_state_d3d11* pipeline_state = rjd_slotmap_get(context->slotmap_pipeline_states, slot);
+
+	ID3D11InputLayout_Release(pipeline_state->vertex_layout);
+	ID3D11RasterizerState_Release(pipeline_state->rasterizer_state);
 	rjd_strref_release(pipeline_state->debug_name);
-	rjd_array_free(pipeline_state->vertex_attributes);
 
 	rjd_slotmap_erase(context->slotmap_pipeline_states, slot);
 }
@@ -845,10 +1182,9 @@ static inline void rjd_gfx_mesh_destroy_d3d11(struct rjd_gfx_context_d3d11* cont
 	struct rjd_gfx_mesh_d3d11* mesh = rjd_slotmap_get(context->slotmap_meshes, slot);
 
 	for (size_t i = 0; i < mesh->count_buffers; ++i) {
-		struct rjd_gfx_mesh_buffer_vertex_d3d11* buffer = mesh->buffers_vertex + i;
-		ID3D11Buffer_Release(buffer->buffer);
+		ID3D11Buffer_Release(mesh->buffers[i].buffer);
 	}
-	rjd_mem_free(mesh->buffers_vertex);
+	rjd_mem_free(mesh->buffers);
 
 	rjd_slotmap_erase(context->slotmap_meshes, slot);
 }
@@ -861,4 +1197,3 @@ static inline void rjd_gfx_command_buffer_destroy_d3d11(struct rjd_gfx_context_d
 
 	rjd_slotmap_erase(context->slotmap_command_buffers, slot);
 }
-
