@@ -180,21 +180,19 @@ void rjd_window_runloop(struct rjd_window* window)
 		window_win32->init_func(window, &window_win32->env);
 	}
 
+	// TODO support running multiple windows in the same thread?
 	bool running = true;
 	while (running)
 	{
 		MSG msg = {0};
-		while (PeekMessage(&msg, window_win32->hwnd, 0, 0, PM_REMOVE))
+		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
 		{
-			// TODO support running multiple windows in the same thread?
-			if (msg.message == WM_DESTROY || msg.message == WM_CLOSE || msg.message == WM_QUIT)
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+
+			if (msg.message == WM_QUIT)
 			{
 				running = false;
-			}
-			else
-			{
-				TranslateMessage(&msg);
-				DispatchMessage(&msg);
 			}
 		}
 
@@ -207,7 +205,10 @@ void rjd_window_runloop(struct rjd_window* window)
 		window_win32->close_func(window, &window_win32->env);
 	}
 
-	DestroyWindow(window_win32->hwnd);
+	if (IsWindow(window_win32->hwnd)) {
+		DestroyWindow(window_win32->hwnd);
+	}
+
 
 	rjd_atomic_uint32_dec(&global_window_count);
 }
@@ -253,9 +254,9 @@ LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM 
     const POINT kMinSize = {1, 1};
     switch (msg)
     {
-    //case WM_CLOSE:
-    //    PostQuitMessage(0);
-    //    break;
+	case WM_CLOSE:
+		PostQuitMessage(0);
+		break;
     case WM_GETMINMAXINFO:
         ((MINMAXINFO*)lparam)->ptMinTrackSize = kMinSize;
         break;
@@ -265,8 +266,11 @@ LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM 
 	//	//height = HIWORD(lparam);
 	//	//glViewport(0, 0, g_window_size.width, g_window_size.height);
     //    break;
-    }
-    return DefWindowProc(handle_window, msg, wparam, lparam);
+	default:
+		return DefWindowProc(handle_window, msg, wparam, lparam);
+	}
+
+	return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
