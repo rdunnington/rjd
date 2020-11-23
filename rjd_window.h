@@ -209,7 +209,6 @@ void rjd_window_runloop(struct rjd_window* window)
 		DestroyWindow(window_win32->hwnd);
 	}
 
-
 	rjd_atomic_uint32_dec(&global_window_count);
 }
 
@@ -218,7 +217,7 @@ struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
 	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
 
 	RECT rect = {0};
-	GetWindowRect(window_win32->hwnd, &rect);
+	GetClientRect(window_win32->hwnd, &rect);
 
 	uint32_t width = rect.right - rect.left;
 	uint32_t height = rect.bottom - rect.top;
