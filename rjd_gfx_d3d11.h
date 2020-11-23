@@ -22,7 +22,9 @@ struct ID3D11ModuleInstance;
 #define COBJMACROS
 #include <d3d11.h>
 #include <dxgi1_6.h>
+#include <dxgidebug.h>
 #include <d3dcompiler.h>
+
 #undef CINTERFACE
 #undef COBJMACROS
 
@@ -99,6 +101,8 @@ struct rjd_gfx_context_d3d11
 	struct rjd_gfx_pipeline_state_d3d11* slotmap_pipeline_states;
 	struct rjd_gfx_mesh_d3d11* slotmap_meshes;
 	struct rjd_gfx_command_buffer_d3d11* slotmap_command_buffers;
+
+	ID3D11DeviceContext** free_deferred_contexts;
 
 	struct rjd_mem_allocator* allocator;
 	struct rjd_strpool debug_names;
@@ -306,6 +310,8 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_d3d11->slotmap_meshes			= rjd_slotmap_alloc(struct rjd_gfx_mesh_d3d11, 64, desc.allocator);
 	context_d3d11->slotmap_command_buffers	= rjd_slotmap_alloc(struct rjd_gfx_command_buffer_d3d11, 16, desc.allocator);
 
+	context_d3d11->free_deferred_contexts = rjd_array_alloc(ID3D11DeviceContext*, 1, desc.allocator);
+
 	context_d3d11->factory = factory;
 	context_d3d11->adapter = adapter_extended;
 	context_d3d11->device = device;
@@ -331,23 +337,23 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 	struct rjd_gfx_mesh_d3d11* meshes = context_d3d11->slotmap_meshes;
 	struct rjd_gfx_command_buffer_d3d11* commands = context_d3d11->slotmap_command_buffers;
 
-	for (struct rjd_slot s = rjd_slotmap_next(textures, NULL); !rjd_slot_isvalid(s); s = rjd_slotmap_next(textures, &s)) {
+	for (struct rjd_slot s = rjd_slotmap_next(textures, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(textures, &s)) {
 		rjd_gfx_texture_destroy_d3d11(context_d3d11, s);
 	}
 
-	for (struct rjd_slot s = rjd_slotmap_next(shaders, NULL); !rjd_slot_isvalid(s); s = rjd_slotmap_next(shaders, &s)) {
+	for (struct rjd_slot s = rjd_slotmap_next(shaders, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(shaders, &s)) {
 		rjd_gfx_shader_destroy_d3d11(context_d3d11, s);
 	}
 
-	for (struct rjd_slot s = rjd_slotmap_next(states, NULL); !rjd_slot_isvalid(s); s = rjd_slotmap_next(states, &s)) {
+	for (struct rjd_slot s = rjd_slotmap_next(states, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(states, &s)) {
 		rjd_gfx_pipeline_state_destroy_d3d11(context_d3d11, s);
 	}
 
-	for (struct rjd_slot s = rjd_slotmap_next(meshes, NULL); !rjd_slot_isvalid(s); s = rjd_slotmap_next(meshes, &s)) {
+	for (struct rjd_slot s = rjd_slotmap_next(meshes, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(meshes, &s)) {
 		rjd_gfx_mesh_destroy_d3d11(context_d3d11, s);
 	}
 
-	for (struct rjd_slot s = rjd_slotmap_next(commands, NULL); !rjd_slot_isvalid(s); s = rjd_slotmap_next(commands, &s)) {
+	for (struct rjd_slot s = rjd_slotmap_next(commands, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(commands, &s)) {
 		rjd_gfx_command_buffer_destroy_d3d11(context_d3d11, s);
 	}
 
@@ -359,11 +365,24 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 
 	rjd_strpool_free(&context_d3d11->debug_names);
 
+	for (size_t i = 0; i < rjd_array_count(context_d3d11->free_deferred_contexts); ++i) {
+		ID3D11DeviceContext_Release(context_d3d11->free_deferred_contexts[i]);
+	}
+	rjd_array_free(context_d3d11->free_deferred_contexts);
+
 	IDXGISwapChain1_Release(context_d3d11->swapchain);
 	ID3D11DeviceContext_Release(context_d3d11->context);
 	ID3D11Device_Release(context_d3d11->device);
 	IDXGIAdapter1_Release(context_d3d11->adapter);
 	IDXGIFactory4_Release(context_d3d11->factory);
+
+	{
+		IDXGIDebug1* debug = NULL;
+		HRESULT hr = DXGIGetDebugInterface1(0, &IID_IDXGIDebug, &debug);
+		if (SUCCEEDED(hr)) {
+			IDXGIDebug_ReportLiveObjects(debug, DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_SUMMARY);
+		}
+	}
 }
 
 struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode)
@@ -410,6 +429,9 @@ struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context)
 	}
 
 	HRESULT hr = IDXGIOutput_WaitForVBlank(selected_output);
+
+	IDXGIOutput_Release(selected_output);
+
 	struct rjd_result result = rjd_gfx_translate_hresult(hr);
 	return result;
 }
@@ -440,8 +462,7 @@ struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context)
 		hr = S_OK;
 	}
 
-	struct rjd_result result = rjd_gfx_translate_hresult(hr);
-	return result;
+	return rjd_gfx_translate_hresult(hr);
 }
 
 // commands
@@ -449,15 +470,19 @@ struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context,
 {
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 
-	struct rjd_gfx_command_buffer_d3d11 buffer_d3d11 = {0};
-	HRESULT hr = ID3D11Device_CreateDeferredContext(context_d3d11->device, 0, &buffer_d3d11.deferred_context);
+	struct rjd_gfx_command_buffer_d3d11 cmd_buffer_d3d11 = {0};
 
-	struct rjd_result result = rjd_gfx_translate_hresult(hr);
-	if (rjd_result_isok(result)) {
-		rjd_slotmap_insert(context_d3d11->slotmap_command_buffers, buffer_d3d11, &out->handle);
+	if (rjd_array_count(context_d3d11->free_deferred_contexts) > 0) {
+		cmd_buffer_d3d11.deferred_context = rjd_array_pop(context_d3d11->free_deferred_contexts);
+	} else {
+		HRESULT hr = ID3D11Device_CreateDeferredContext(context_d3d11->device, 0, &cmd_buffer_d3d11.deferred_context);
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
+		}
 	}
 
-	return result;
+	rjd_slotmap_insert(context_d3d11->slotmap_command_buffers, cmd_buffer_d3d11, &out->handle);
+	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_begin_desc* command)
@@ -476,14 +501,13 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
 			return rjd_gfx_translate_hresult(hr);
 		}
 
-		// TODO make sure the texture -> resource cast is safe
 		hr = ID3D11Device_CreateRenderTargetView(context_d3d11->device, (ID3D11Resource*)texture_backbuffer, NULL, &cmd_buffer_d3d11->render_target);
-
-		// TODO release texture2d?
-
 		if (FAILED(hr)) {
 			return rjd_gfx_translate_hresult(hr);
 		}
+
+		ID3D11Texture2D_Release(texture_backbuffer);
+
 	} else {
 		RJD_ASSERTFAIL("non-backbuffer render targets are unimplemented"); // TODO
 	}
@@ -588,16 +612,22 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer)
 {
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
-	struct rjd_gfx_command_buffer_d3d11* buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
+	struct rjd_gfx_command_buffer_d3d11* cmd_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
 
 	ID3D11CommandList* commandlist = NULL;
-	HRESULT hr = ID3D11DeviceContext_FinishCommandList(buffer_d3d11->deferred_context, FALSE, &commandlist);
+	HRESULT hr = ID3D11DeviceContext_FinishCommandList(cmd_buffer_d3d11->deferred_context, FALSE, &commandlist);
 	if (FAILED(hr)) {
 		return rjd_gfx_translate_hresult(hr);
 	}
 
 	ID3D11DeviceContext_ExecuteCommandList(context_d3d11->context, commandlist, FALSE);
-	ID3D11CommandList_Release(commandlist); // TODO needed?
+	ID3D11CommandList_Release(commandlist);
+	ID3D11RenderTargetView_Release(cmd_buffer_d3d11->render_target);
+
+	rjd_array_push(context_d3d11->free_deferred_contexts, cmd_buffer_d3d11->deferred_context);
+
+	cmd_buffer_d3d11->deferred_context = NULL;
+	cmd_buffer_d3d11->render_target = NULL;
 
 	return RJD_RESULT_OK();
 }
@@ -1201,9 +1231,13 @@ static inline void rjd_gfx_mesh_destroy_d3d11(struct rjd_gfx_context_d3d11* cont
 
 static inline void rjd_gfx_command_buffer_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot)
 {
-	struct rjd_gfx_command_buffer_d3d11* buffer = rjd_slotmap_get(context->slotmap_command_buffers, slot);
-	ID3D11DeviceContext_Release(buffer->deferred_context);
-	ID3D11RenderTargetView_Release(buffer->render_target);
+	struct rjd_gfx_command_buffer_d3d11* cmd_buffer = rjd_slotmap_get(context->slotmap_command_buffers, slot);
+	if (cmd_buffer->render_target) {
+		ID3D11RenderTargetView_Release(cmd_buffer->render_target);
+	}
+	if (cmd_buffer->deferred_context) {
+		ID3D11DeviceContext_Release(cmd_buffer->deferred_context);
+	}
 
 	rjd_slotmap_erase(context->slotmap_command_buffers, slot);
 }

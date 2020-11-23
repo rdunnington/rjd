@@ -405,7 +405,7 @@ struct rjd_gfx_context_desc
 
 struct rjd_gfx_context
 {
-	char pimpl[140];
+	char pimpl[148];
 };
 
 ////////////////////////////////////////////////////////////////////////////////
