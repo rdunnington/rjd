@@ -376,6 +376,7 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 	IDXGIAdapter1_Release(context_d3d11->adapter);
 	IDXGIFactory4_Release(context_d3d11->factory);
 
+#if RJD_COMPILER_MSVC // GCC doesn't know about IDXGIDebug1
 	{
 		IDXGIDebug1* debug = NULL;
 		HRESULT hr = DXGIGetDebugInterface1(0, &IID_IDXGIDebug, &debug);
@@ -383,6 +384,7 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 			IDXGIDebug_ReportLiveObjects(debug, DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_SUMMARY);
 		}
 	}
+#endif
 }
 
 struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode)
