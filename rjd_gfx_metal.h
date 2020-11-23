@@ -347,8 +347,6 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
     RJD_ASSERT(command->viewport);
     RJD_ASSERT(command->pipeline_state);
     RJD_ASSERT(command->meshes);
-    RJD_ASSERT(command->textures);
-    RJD_ASSERT(command->texture_indices);
 	RJD_ASSERT(rjd_slot_isvalid(cmd_buffer->handle));
 	RJD_ASSERT(rjd_slot_isvalid(command->pipeline_state->handle));
 

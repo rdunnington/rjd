@@ -951,9 +951,7 @@ struct rjd_input_osx
 	InputResponder* responder;
 	const struct rjd_window* window;
 
-	uint8_t now_index;
-	struct rjd_input_keyboard_state keyboard[2];
-	struct rjd_input_mouse_state mouse[2];
+	struct rjd_input_common common;
 };
 
 RJD_STATIC_ASSERT(sizeof(struct rjd_input_osx) <= sizeof(struct rjd_input));
@@ -1192,7 +1190,6 @@ float rjd_input_mouse_prev(const struct rjd_input* input, enum rjd_input_mouse c
 	return rjd_input_mouse_prev_common(&input_osx->common, code);
 }
 
-
 void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event event)
 {
 	RJD_ASSERT(input);
@@ -1395,7 +1392,7 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 {
 	if (event.keyCode < rjd_countof(RJD_INPUT_OSX_KEYCODE_TO_ENUM)) {
 		enum rjd_input_keyboard code = RJD_INPUT_OSX_KEYCODE_TO_ENUM[event.keyCode];
-		input->keyboard[input->now_index].values[code] = 1;
+		input->common.keyboard[input->common.now_index].values[code] = 1;
 	}
 }
 
@@ -1403,13 +1400,13 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 {
 	if (event.keyCode < rjd_countof(RJD_INPUT_OSX_KEYCODE_TO_ENUM)) {
 		enum rjd_input_keyboard code = RJD_INPUT_OSX_KEYCODE_TO_ENUM[event.keyCode];
-		input->keyboard[input->now_index].values[code] = 0;
+		input->common.keyboard[input->common.now_index].values[code] = 0;
 	}
 }
 
 -(void)flagsChanged:(NSEvent*)event
 {
-	struct rjd_input_keyboard_state* state = input->keyboard + input->now_index;
+	struct rjd_input_keyboard_state* state = input->common.keyboard + input->common.now_index;
 
 	state->values[RJD_INPUT_KEYBOARD_SHIFT_LEFT] = (event.modifierFlags & NX_DEVICELSHIFTKEYMASK) ? 1 : 0;
 	state->values[RJD_INPUT_KEYBOARD_SHIFT_RIGHT] = (event.modifierFlags & NX_DEVICERSHIFTKEYMASK) ? 1 : 0;
@@ -1424,25 +1421,25 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 -(void)mouseDown:(NSEvent*)event
 {
 	RJD_UNUSED_PARAM(event);
-    input->mouse[input->now_index].values[RJD_INPUT_MOUSE_BUTTON_LEFT] = 1;
+    input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_BUTTON_LEFT] = 1;
 }
 
 -(void)mouseUp:(NSEvent*)event
 {
 	RJD_UNUSED_PARAM(event);
-    input->mouse[input->now_index].values[RJD_INPUT_MOUSE_BUTTON_LEFT] = 0;
+    input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_BUTTON_LEFT] = 0;
 }
                   
 -(void)rightMouseDown:(NSEvent*)event
 {
 	RJD_UNUSED_PARAM(event);
-	input->mouse[input->now_index].values[RJD_INPUT_MOUSE_BUTTON_RIGHT] = 1;
+	input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_BUTTON_RIGHT] = 1;
 }
 
 -(void)rightMouseUp:(NSEvent*)event
 {
 	RJD_UNUSED_PARAM(event);
-	input->mouse[input->now_index].values[RJD_INPUT_MOUSE_BUTTON_RIGHT] = 0;
+	input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_BUTTON_RIGHT] = 0;
 }
                   
 -(void)otherMouseDown:(NSEvent*)event
@@ -1451,7 +1448,7 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 	for (uint32_t button = RJD_INPUT_MOUSE_BUTTON_BEGIN; button < RJD_INPUT_MOUSE_BUTTON_END; ++button) {
 		uint32_t bit = 1 << (button - RJD_INPUT_MOUSE_BUTTON_BEGIN);
 		bool pressed = (NSEvent.pressedMouseButtons & bit) != 0;
-		input->mouse[input->now_index].values[button] = pressed;
+		input->common.mouse[input->common.now_index].values[button] = pressed;
 	}
 }
 
@@ -1461,7 +1458,7 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 	for (uint32_t button = RJD_INPUT_MOUSE_BUTTON_BEGIN; button < RJD_INPUT_MOUSE_BUTTON_END; ++button) {
 		uint32_t bit = 1 << (button - RJD_INPUT_MOUSE_BUTTON_BEGIN);
 		bool pressed = (NSEvent.pressedMouseButtons & bit) != 0;
-		input->mouse[input->now_index].values[button] = pressed;
+		input->common.mouse[input->common.now_index].values[button] = pressed;
 	}
 }
 
@@ -1475,15 +1472,15 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 
 	struct rjd_window_size size = rjd_window_size_get(input->window);
 	if (x >= 0 && x <= size.width && y >= 0 && y <= size.height) {
-		input->mouse[input->now_index].values[RJD_INPUT_MOUSE_X] = (float)x;
-		input->mouse[input->now_index].values[RJD_INPUT_MOUSE_Y] = (float)y;
+		input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_X] = (float)x;
+		input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_Y] = (float)y;
 	}
 }
 
 -(void)scrollWheel:(NSEvent*)event
 {
-	input->mouse[input->now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X] = (float)event.scrollingDeltaX;
-	input->mouse[input->now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y] = (float)event.scrollingDeltaY;
+	input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X] = (float)event.scrollingDeltaX;
+	input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y] = (float)event.scrollingDeltaY;
 }
 
 @end
