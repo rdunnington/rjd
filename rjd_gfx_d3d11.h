@@ -301,7 +301,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		}
 	}
 
-    memset(out, 0, sizeof(*out));
+	memset(out, 0, sizeof(*out));
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)out;
 
 	context_d3d11->slotmap_textures			= rjd_slotmap_alloc(struct rjd_gfx_texture_d3d11, 64, desc.allocator);
@@ -411,7 +411,7 @@ struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context)
 	uint32_t selected_intersect_area = 0;
 	for (UINT i = 0; DXGI_ERROR_NOT_FOUND != IDXGIAdapter1_EnumOutputs(context_d3d11->adapter, i, &output); ++i) {
 		DXGI_OUTPUT_DESC desc_output = {0};
-        HRESULT hr = IDXGIOutput_GetDesc(output, &desc_output);
+		HRESULT hr = IDXGIOutput_GetDesc(output, &desc_output);
 		if (SUCCEEDED(hr)) {
 			RECT rect_intersect = {0};
 			if (IntersectRect(&rect_intersect, &rect_window, &desc_output.DesktopCoordinates)) {
@@ -613,9 +613,9 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 
 struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer)
 {
-    RJD_ASSERT(cmd_buffer);
-    RJD_ASSERT(context);
-    RJD_ASSERT(rjd_slot_isvalid(cmd_buffer->handle));
+	RJD_ASSERT(cmd_buffer);
+	RJD_ASSERT(context);
+	RJD_ASSERT(rjd_slot_isvalid(cmd_buffer->handle));
 
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 	struct rjd_gfx_command_buffer_d3d11* cmd_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
@@ -635,8 +635,8 @@ struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context,
 	cmd_buffer_d3d11->deferred_context = NULL;
 	cmd_buffer_d3d11->render_target = NULL;
 
-    rjd_slotmap_erase(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
-    rjd_slot_invalidate(&cmd_buffer->handle);
+	rjd_slotmap_erase(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
+	rjd_slot_invalidate(&cmd_buffer->handle);
 
 	return RJD_RESULT_OK();
 }
