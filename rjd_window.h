@@ -438,11 +438,11 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 	struct rjd_window_environment env;
 }
 
--(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)init_func closeFunc:(rjd_window_environment_close_func*)close_func env:(struct rjd_window_environment)_env
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)init closeFunc:(rjd_window_environment_close_func*)close env:(struct rjd_window_environment)_env
 {
     if (self = [super init]) {
-        self->init_func = init_func;
-        self->close_func = close_func;
+        self->init_func = init;
+        self->close_func = close;
 		self->env = _env;
     }
     return self;
