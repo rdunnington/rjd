@@ -279,23 +279,18 @@ enum rjd_gfx_index_type
 	RJD_GFX_INDEX_TYPE_UINT16,
 };
 
-enum rjd_gfx_mesh_buffer_type
-{
-	RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS,
-	RJD_GFX_MESH_BUFFER_TYPE_VERTEX,
-};
-
 enum rjd_gfx_mesh_buffer_usage_flags
 {
-	RJD_GFX_MESH_BUFFER_USAGE_VERTEX = 0x1,
-	RJD_GFX_MESH_BUFFER_USAGE_PIXEL = 0x2,
+	RJD_GFX_MESH_BUFFER_USAGE_VERTEX = 1 << 0,
+	RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT = 1 << 1,
+	RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT = 1 << 2,
 };
 
 union rjd_gfx_mesh_buffer_common_desc
 {
 	struct {
 		uint32_t capacity;
-	} uniforms;
+	} constant;
 
 	struct {
 		const void* data;
@@ -307,7 +302,6 @@ union rjd_gfx_mesh_buffer_common_desc
 // TODO vertex_buffer isn't a great name, since it can also be inputs to pixel shaders. Maybe just mesh_buffer?
 struct rjd_gfx_mesh_vertex_buffer_desc
 {
-	enum rjd_gfx_mesh_buffer_type type;
 	union rjd_gfx_mesh_buffer_common_desc common;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
 	uint32_t buffer_index; // TODO maybe rename to shader_slot?

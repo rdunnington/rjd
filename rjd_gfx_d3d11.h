@@ -186,7 +186,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 			0;
 
 		const D3D_FEATURE_LEVEL feature_levels[] = {
-			//D3D_FEATURE_LEVEL_11_1,
+			// D3D_FEATURE_LEVEL_11_1,
 			D3D_FEATURE_LEVEL_11_0,
 			//D3D_FEATURE_LEVEL_10_1,
 			//D3D_FEATURE_LEVEL_10_0,
@@ -596,7 +596,15 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 					&buffer_d3d11->stride, 
 					&buffer_d3d11->offset);
 			}
-			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL) {
+			// TODO support VSSetConstantBuffers1/PSSetConstantBuffers1
+			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT) {
+				ID3D11DeviceContext_VSSetConstantBuffers(
+					cmd_buffer_d3d11->deferred_context, 
+					buffer_d3d11->slot, 
+					1, 
+					&buffer_d3d11->buffer);
+			}
+			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
 				ID3D11DeviceContext_PSSetConstantBuffers(
 					cmd_buffer_d3d11->deferred_context, 
 					buffer_d3d11->slot, 
@@ -922,15 +930,12 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 		uint32_t stride = 0;
 		const void* data = NULL;
 
-		if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL) {
-			if (desc_buffer->type != RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS) {
-				return RJD_RESULT("Buffers bound to pixel shaders must be constant.");
+		if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX) {
+			if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT ||
+				desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
+				return RJD_RESULT("Vertex buffers cannot also be constant buffers.");
 			}
-		}
 
-		switch (desc_buffer->type)
-		{
-			case RJD_GFX_MESH_BUFFER_TYPE_VERTEX: 
 				buffer_size = desc_buffer->common.vertex.length;
 				stride = desc_buffer->common.vertex.stride;
 				data = desc_buffer->common.vertex.data;
@@ -942,9 +947,11 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 				if (stride == 0) {
 					return RJD_RESULT("Vertex buffers must have a stride larger than 0.");
 				}
-				break;
-			case RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS: 
-				buffer_size = desc_buffer->common.uniforms.capacity;
+		}
+
+		if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT || 
+			desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
+				buffer_size = desc_buffer->common.constant.capacity;
 				flags_bind = D3D11_BIND_CONSTANT_BUFFER;
 
 				if (buffer_size % 16 != 0) {
@@ -961,8 +968,12 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 				// buffers. We'll just give it an array of zeroes to work with for now.
 				void* temp_data = rjd_mem_alloc_stack_array_noclear(uint8_t, buffer_size); // TODO verify this doesn't get destroyed once we leave switch scope?
 				memset(temp_data, 0, buffer_size);
+				for (size_t j = 0; j < buffer_size; j += sizeof(float)) {
+					float* f = (void*)((char*)temp_data + j);
+					*f = 255.0f;
+				}
+
 				data = temp_data;
-				break;
 		}
 
 		D3D11_BUFFER_DESC desc_buffer_d3d11 = {
@@ -1011,18 +1022,21 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 
 struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length)
 {
+	RJD_ASSERT(context);
+	RJD_ASSERT(cmd_buffer);
+	RJD_ASSERT(mesh);
+	RJD_ASSERT(data || length == 0);
+
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 	struct rjd_gfx_command_buffer_d3d11* command_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
 	struct rjd_gfx_mesh_d3d11* mesh_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_meshes, mesh->handle);
 
-	if (mesh_d3d11->count_buffers <= buffer_index) {
-		return RJD_RESULT("Invalid index into mesh buffer array");
-	}
+	RJD_ASSERTMSG(buffer_index < mesh_d3d11->count_buffers, "Invalid index into mesh buffer array");
 
 	struct rjd_gfx_mesh_buffer_d3d11* buffer = mesh_d3d11->buffers + buffer_index;
 
-	ID3D11Resource* resource = (ID3D11Resource*)buffer->buffer; // TODO make sure this cast is OK
-	UINT subresource = 0;
+	ID3D11Resource* resource = (ID3D11Resource*)buffer->buffer;
+	const UINT subresource = 0;
 	D3D11_MAPPED_SUBRESOURCE gpu_resource = {0};
 
 	HRESULT hr = ID3D11DeviceContext_Map(command_buffer_d3d11->deferred_context, resource, subresource, D3D11_MAP_WRITE_DISCARD, 0, &gpu_resource);
@@ -1033,11 +1047,14 @@ struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rj
 	memcpy((char*)gpu_resource.pData + offset, data, length);
 
 	ID3D11DeviceContext_Unmap(command_buffer_d3d11->deferred_context, resource, subresource);
-	return rjd_gfx_translate_hresult(hr);
+	return RJD_RESULT_OK();
 }
 
 void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh)
 {
+	RJD_ASSERT(context);
+	RJD_ASSERT(mesh);
+
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 	rjd_gfx_mesh_destroy_d3d11(context_d3d11, mesh->handle);
 }
