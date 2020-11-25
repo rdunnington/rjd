@@ -409,7 +409,8 @@ struct rjd_input_win32
 {
 	const struct rjd_window* window;
 
-	HHOOK hook_handle;
+	HHOOK hook_handle_wndproc;
+	HHOOK hook_handle_getmessage;
 
 	struct rjd_input_common common;
 };
@@ -421,6 +422,8 @@ enum
 };
 
 LRESULT CALLBACK rjd_input_wndproc_hook(int nCode, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK rjd_input_getmessage_hook(int nCode, WPARAM wParam, LPARAM lParam);
+LRESULT rjd_input_hook_common(struct rjd_input_win32* input_win32, UINT message, WPARAM wParam, LPARAM lParam, int nCode, WPARAM hook_wparam, LPARAM hook_lparam);
 
 const enum rjd_input_keyboard RJD_INPUT_WIN32_KEYCODE_TO_ENUM[] =
 {
@@ -439,6 +442,7 @@ const enum rjd_input_keyboard RJD_INPUT_WIN32_KEYCODE_TO_ENUM[] =
 	RJD_INPUT_KEYBOARD_COUNT,				// 0x0C VK_CLEAR
 	RJD_INPUT_KEYBOARD_RETURN,				// 0x0D VK_RETURN
 	RJD_INPUT_KEYBOARD_COUNT,				// 0x0E undefined
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x0F undefined
 	RJD_INPUT_KEYBOARD_COUNT,				// 0x10 VK_SHIFT (but we use L and R versions)
 	RJD_INPUT_KEYBOARD_COUNT,				// 0x11 VK_CONTROL (but we use L and R versions)
 	RJD_INPUT_KEYBOARD_COUNT,				// 0x12 VK_MENU (alt, but we use L and R versions)
@@ -689,28 +693,31 @@ void rjd_input_destroy(struct rjd_input* input)
 
 struct rjd_result rjd_input_hook(struct rjd_input* input, const struct rjd_window* window, const struct rjd_window_environment* env)
 {
-	RJD_UNUSED_PARAM(window);
+	RJD_ASSERT(input);
+	RJD_ASSERT(window);
+	RJD_ASSERT(env);
 
 	void* hinstance = env->win32.hinstance;
 	void* hwnd = rjd_window_win32_get_hwnd(window);
 
+	if (GetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX) != 0) {
+		return RJD_RESULT("Another system aleady has the slot for RJD_INPUT_WIN32_WINDOW_PTR_INDEX.");
+	}
+	
+	SetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX, (LONG_PTR)input);
+
 	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
 
 	input_win32->window = window;
-	input_win32->hook_handle = SetWindowsHookExW(WH_CALLWNDPROC, rjd_input_wndproc_hook, hinstance, GetCurrentThreadId());
-	if (input_win32->hook_handle == NULL) {
-		printf("window proc err: %d\n", GetLastError());
+	input_win32->hook_handle_wndproc = SetWindowsHookExW(WH_CALLWNDPROC, rjd_input_wndproc_hook, hinstance, GetCurrentThreadId());
+	if (input_win32->hook_handle_wndproc == NULL) {
 		return RJD_RESULT("Failed to hook window proc. Check GetLastError() for more info.");
 	}
 
-	if (GetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX) != 0) {
-		UnhookWindowsHookEx(input_win32->hook_handle);
-		input_win32->hook_handle = 0;
-
-		return RJD_RESULT("Another system aleady has the slot for RJD_INPUT_WIN32_WINDOW_PTR_INDEX.");
+	input_win32->hook_handle_getmessage = SetWindowsHookExW(WH_GETMESSAGE, rjd_input_getmessage_hook, hinstance, GetCurrentThreadId());
+	if (input_win32->hook_handle_getmessage == NULL) {
+		return RJD_RESULT("Failed to hook getmessage. Check GetLastError() for more info.");
 	}
-
-	SetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX, (LONG_PTR)input);
 
 	return RJD_RESULT_OK();
 }
@@ -718,10 +725,14 @@ struct rjd_result rjd_input_hook(struct rjd_input* input, const struct rjd_windo
 void rjd_input_unhook(struct rjd_input* input)
 {
 	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
-	if (input_win32->hook_handle) {
+	if (input_win32->hook_handle_wndproc || input_win32->hook_handle_getmessage) {
 		void* hwnd = rjd_window_win32_get_hwnd(input_win32->window);
 		SetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX, 0);
-		UnhookWindowsHookEx(input_win32->hook_handle);
+		UnhookWindowsHookEx(input_win32->hook_handle_wndproc);
+		UnhookWindowsHookEx(input_win32->hook_handle_getmessage);
+
+		input_win32->hook_handle_wndproc = NULL;
+		input_win32->hook_handle_getmessage = NULL;
 	}
 }
 
@@ -842,31 +853,48 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 
 LRESULT CALLBACK rjd_input_wndproc_hook(int nCode, WPARAM wParam, LPARAM lParam)
 {
-	const CWPSTRUCT* msg_info = (const CWPSTRUCT*)lParam;
+	const CWPSTRUCT* msg = (const CWPSTRUCT*)lParam;
 
-	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)GetWindowLongPtrW(msg_info->hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX);
-	if (input_win32 == NULL) {
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)GetWindowLongPtrW(msg->hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX);
+	if (nCode < 0 || input_win32 == NULL) {
 		return CallNextHookEx(NULL, nCode, wParam, lParam);
 	};
 
+	return rjd_input_hook_common(input_win32, msg->message, msg->wParam, msg->lParam, nCode, wParam, lParam);
+}
+
+LRESULT CALLBACK rjd_input_getmessage_hook(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	const MSG* msg = (const MSG*)lParam;
+
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)GetWindowLongPtrW(msg->hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX);
+	if (nCode < 0 || input_win32 == NULL) {
+		return CallNextHookEx(NULL, nCode, wParam, lParam);
+	};
+
+	return rjd_input_hook_common(input_win32, msg->message, msg->wParam, msg->lParam, nCode, wParam, lParam);
+}
+
+LRESULT rjd_input_hook_common(struct rjd_input_win32* input_win32, UINT message, WPARAM wParam, LPARAM lParam, int nCode, WPARAM hook_wparam, LPARAM hook_lparam)
+{
 	const uint32_t now_index = input_win32->common.now_index;
 
-	switch (msg_info->message)
+	switch (message)
 	{
 		case WM_KEYDOWN:
 		case WM_KEYUP:
 		{
-			// const uint32_t repeat_count = (0xFFFF & msg_info->lParam);
-			const uint32_t scan_code = (0xFF0000 & msg_info->lParam) >> 16;
-			const bool is_extended = (0x01000000 & msg_info->lParam) != 0;
-			const bool is_down = (msg_info->message == WM_KEYDOWN);
+			// const uint32_t repeat_count = (0xFFFF & lParam);
+			const uint32_t scan_code = (0xFF0000 & lParam) >> 16;
+			const bool is_extended = (0x01000000 & lParam) != 0;
+			const bool is_down = (message == WM_KEYDOWN);
 
-			uint32_t virtual_key = (uint32_t)msg_info->wParam;
-			if (msg_info->wParam == VK_SHIFT) {
+			uint32_t virtual_key = (uint32_t)wParam;
+			if (wParam == VK_SHIFT) {
 				virtual_key = MapVirtualKey(scan_code, MAPVK_VSC_TO_VK_EX);
-			} else if (msg_info->wParam == VK_CONTROL) {
+			} else if (wParam == VK_CONTROL) {
 				virtual_key = is_extended ? VK_RCONTROL : VK_LCONTROL;
-			} else if (msg_info->wParam == VK_MENU) {
+			} else if (wParam == VK_MENU) {
 				virtual_key = is_extended ? VK_RMENU : VK_LMENU;
 			}
 
@@ -897,39 +925,39 @@ LRESULT CALLBACK rjd_input_wndproc_hook(int nCode, WPARAM wParam, LPARAM lParam)
 			break;
 		case WM_XBUTTONDOWN:
 		{
-			uint32_t button_index = (((msg_info->wParam & 0xFFFF0000) >> 16) == XBUTTON1) ? 3 : 4;
+			uint32_t button_index = (((wParam & 0xFFFF0000) >> 16) == XBUTTON1) ? 3 : 4;
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_BEGIN + button_index] = 1.0f;
 			break;
 		}
 		case WM_XBUTTONUP:
 		{
-			uint32_t button_index = (((msg_info->wParam & 0xFFFF0000) >> 16) == XBUTTON1) ? 3 : 4;
+			uint32_t button_index = (((wParam & 0xFFFF0000) >> 16) == XBUTTON1) ? 3 : 4;
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_BEGIN + button_index] = 0.0f;
 			break;
 		}
 		case WM_MOUSEWHEEL:
 		{
-			float delta = (float)GET_WHEEL_DELTA_WPARAM(msg_info->wParam) / WHEEL_DELTA;
+			float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y] = delta;
 			break;
 		}
 		case WM_MOUSEHWHEEL:
 		{
-			float delta = (float)GET_WHEEL_DELTA_WPARAM(msg_info->wParam) / WHEEL_DELTA;
+			float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X] = delta;
 			break;
 		}
 		case WM_MOUSEMOVE:
 		{
-			float x = (float)GET_X_LPARAM(msg_info->lParam);
-			float y = (float)GET_Y_LPARAM(msg_info->lParam);
+			float x = (float)GET_X_LPARAM(lParam);
+			float y = (float)GET_Y_LPARAM(lParam);
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_X] = x;
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_Y] = y;
 			break;
 		}
 	}
 
-	return CallNextHookEx(NULL, nCode, wParam, lParam);
+	return CallNextHookEx(NULL, nCode, hook_wparam, hook_lparam);
 }
 
 #elif RJD_PLATFORM_OSX
