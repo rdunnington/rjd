@@ -331,23 +331,23 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 	struct rjd_gfx_mesh_d3d11* meshes = context_d3d11->slotmap_meshes;
 	struct rjd_gfx_command_buffer_d3d11* commands = context_d3d11->slotmap_command_buffers;
 
-	for (struct rjd_slot s = rjd_slotmap_next(textures, NULL); !rjd_slot_isvalid(s); s = rjd_slotmap_next(textures, &s)) {
+	for (struct rjd_slot s = rjd_slotmap_next(textures, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(textures, &s)) {
 		rjd_gfx_texture_destroy_d3d11(context_d3d11, s);
 	}
 
-	for (struct rjd_slot s = rjd_slotmap_next(shaders, NULL); !rjd_slot_isvalid(s); s = rjd_slotmap_next(shaders, &s)) {
+	for (struct rjd_slot s = rjd_slotmap_next(shaders, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(shaders, &s)) {
 		rjd_gfx_shader_destroy_d3d11(context_d3d11, s);
 	}
 
-	for (struct rjd_slot s = rjd_slotmap_next(states, NULL); !rjd_slot_isvalid(s); s = rjd_slotmap_next(states, &s)) {
+	for (struct rjd_slot s = rjd_slotmap_next(states, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(states, &s)) {
 		rjd_gfx_pipeline_state_destroy_d3d11(context_d3d11, s);
 	}
 
-	for (struct rjd_slot s = rjd_slotmap_next(meshes, NULL); !rjd_slot_isvalid(s); s = rjd_slotmap_next(meshes, &s)) {
+	for (struct rjd_slot s = rjd_slotmap_next(meshes, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(meshes, &s)) {
 		rjd_gfx_mesh_destroy_d3d11(context_d3d11, s);
 	}
 
-	for (struct rjd_slot s = rjd_slotmap_next(commands, NULL); !rjd_slot_isvalid(s); s = rjd_slotmap_next(commands, &s)) {
+	for (struct rjd_slot s = rjd_slotmap_next(commands, NULL); rjd_slot_isvalid(s); s = rjd_slotmap_next(commands, &s)) {
 		rjd_gfx_command_buffer_destroy_d3d11(context_d3d11, s);
 	}
 
