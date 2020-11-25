@@ -263,18 +263,19 @@ LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM 
 		break;
     case WM_GETMINMAXINFO:
         ((MINMAXINFO*)lparam)->ptMinTrackSize = kMinSize;
-        break;
-		// TODO forward resize message
+        return 0;
+
+	// TODO forward resize message
     //case WM_SIZE:
 	//	//width = LOWORD(lparam);
 	//	//height = HIWORD(lparam);
 	//	//glViewport(0, 0, g_window_size.width, g_window_size.height);
     //    break;
-	default:
-		return DefWindowProc(handle_window, msg, wparam, lparam);
-	}
+    default:
+    	return DefWindowProc(handle_window, msg, wparam, lparam);
+    }
 
-	return 0;
+    return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

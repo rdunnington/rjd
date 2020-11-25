@@ -27,7 +27,7 @@
 #include "rjd_procgeo.h"
 #include "rjd_easing.h"
 #include "rjd_strbuf.h"
-#include "rjd_profiler.h"
+#include "rjd_timer.h"
 #include "rjd_cmd.h"
 #include "rjd_dict.h"
 #include "rjd_fio.h"

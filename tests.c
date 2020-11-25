@@ -1538,7 +1538,7 @@ void test_profiler(void)
 	test_logging_redirect_to_logbuffer();
 
 	{
-		RJD_PROFILE_SCOPE_BEGIN(test1);
+		RJD_TIMER_SCOPE_BEGIN(test1);
 
 		double d = 1;
 		for (size_t i = 0; i < 1000; ++i) {
@@ -1546,7 +1546,7 @@ void test_profiler(void)
 		}
 		expect_true(d > 0);
 
-		RJD_PROFILE_SCOPE_END(test1);
+		RJD_TIMER_SCOPE_END(test1);
 	}
 
 	expect_true(strstr(g_logbuffer, "Elapsed test1") != NULL);
