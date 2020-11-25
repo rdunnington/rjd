@@ -613,6 +613,10 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 
 struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer)
 {
+    RJD_ASSERT(cmd_buffer);
+    RJD_ASSERT(context);
+    RJD_ASSERT(rjd_slot_isvalid(cmd_buffer->handle));
+
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 	struct rjd_gfx_command_buffer_d3d11* cmd_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
 
@@ -630,6 +634,9 @@ struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context,
 
 	cmd_buffer_d3d11->deferred_context = NULL;
 	cmd_buffer_d3d11->render_target = NULL;
+
+    rjd_gfx_command_buffer_destroy_d3d11(context_d3d11, cmd_buffer->handle);
+    rjd_slot_invalidate(&cmd_buffer->handle);
 
 	return RJD_RESULT_OK();
 }
