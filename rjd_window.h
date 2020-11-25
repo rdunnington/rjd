@@ -6,6 +6,7 @@ struct rjd_window;
 struct rjd_window_environment;
 
 typedef void rjd_window_environment_init_func(const struct rjd_window_environment* env);
+typedef void rjd_window_environment_close_func(const struct rjd_window_environment* env);
 typedef void rjd_window_on_init_func(struct rjd_window* window, const struct rjd_window_environment* env);
 typedef bool rjd_window_on_update_func(struct rjd_window* window, const struct rjd_window_environment* env);
 typedef void rjd_window_on_close_func(struct rjd_window* window, const struct rjd_window_environment* env);
@@ -53,7 +54,7 @@ struct rjd_window
 	char impl[64];
 };
 
-void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func);
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func, rjd_window_environment_close_func* close_func);
 struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_desc desc);
 void rjd_window_runloop(struct rjd_window* window);
 struct rjd_window_size rjd_window_size_get(const struct rjd_window* window);
@@ -102,7 +103,7 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_win32));
 
 static LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM lparam);
 
-void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func)
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func, rjd_window_environment_close_func* close_func)
 {
 	if (init_func) {
 		init_func(&env);
@@ -112,6 +113,10 @@ void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rj
 	{
 		// other threads could be running their own window loops, so just wait until
 		// all of them are closed before exiting
+	}
+
+	if (close_func) {
+		close_func(&env);
 	}
 }
 
@@ -302,7 +307,7 @@ bool s_is_app_initialized = false;
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 @property (retain) NSWindow *window;
--(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)func env:(struct rjd_window_environment)env;
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)init_func closeFunc:(rjd_window_environment_close_func*)close_func env:(struct rjd_window_environment)env;
 @end
 
 @interface CustomViewController : NSViewController
@@ -319,20 +324,23 @@ bool s_is_app_initialized = false;
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
 
-void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func init_func)
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func, rjd_window_environment_close_func* close_func)
 {
 	NSApplicationLoad();
-    AppDelegate* delegate = [[AppDelegate alloc] initWithEnvFunc:init_func env:env];
+    AppDelegate* delegate = [[AppDelegate alloc] initWithEnvFunc:init_func closeFunc:close_func env:env];
     NSApplication* app = [NSApplication sharedApplication];
     [app setDelegate:delegate];
 	[app activateIgnoringOtherApps:YES];
     
     // The applicationDidFinishLaunching notification isn't sent multiple times. We need to keep track
-    // to ensure the init_func() is called at the appropriate time
+    // to ensure the init_func() is called upon reentry to this function
     if (s_is_app_initialized && init_func) {
         init_func(&env);
     }
     [app run];
+    if (close_func) {
+    	close_func(&env);
+    }
 }
 
 struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_desc desc)
@@ -425,13 +433,15 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 @implementation AppDelegate
 {
     rjd_window_environment_init_func* init_func;
+    rjd_window_environment_close_func* close_func;
 	struct rjd_window_environment env;
 }
 
--(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)func env:(struct rjd_window_environment)_env
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)init_func closeFunc:(rjd_window_environment_close_func*)close_func env:(struct rjd_window_environment)_env
 {
     if (self = [super init]) {
-        self->init_func = func;
+        self->init_func = init_func;
+        self->close_func = close_func;
 		self->env = _env;
     }
     return self;

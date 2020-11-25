@@ -3141,6 +3141,7 @@ struct test_window_data
 	bool init;
 	uint32_t update_count;
 	bool close;
+	bool env_close;
 };
 
 void test_window_init(struct rjd_window* window, const struct rjd_window_environment* env)
@@ -3169,7 +3170,7 @@ void test_window_close(struct rjd_window* window, const struct rjd_window_enviro
 	data->close = true;
 }
 
-void test_window_entrypoint(const struct rjd_window_environment* env)
+void test_window_env_entrypoint(const struct rjd_window_environment* env)
 {
     struct rjd_window_desc window_desc = {
         .title = "test_window",
@@ -3191,6 +3192,14 @@ void test_window_entrypoint(const struct rjd_window_environment* env)
 	rjd_window_runloop(&test_data->window);
 }
 
+void test_window_env_exit(const struct rjd_window_environment* env)
+{
+	struct test_window_data* test_data = env->userdata;
+	expect_true(test_data->close);
+	expect_false(test_data->env_close);
+	test_data->env_close = true;
+}
+
 void test_window(void)
 {
 	struct test_window_data data = {0};
@@ -3203,10 +3212,11 @@ void test_window(void)
 		env.win32.hinstance = GetModuleHandle(NULL);
 	#endif
 
-	rjd_window_enter_windowed_environment(env, test_window_entrypoint);
+	rjd_window_enter_windowed_environment(env, test_window_env_entrypoint, test_window_env_exit);
 	expect_true(data.init);
 	expect_uint32(100, data.update_count);
 	expect_true(data.close);
+	expect_true(data.env_close);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3401,7 +3411,7 @@ void test_input(void)
 		env.win32.hinstance = GetModuleHandle(NULL);
 	#endif
 
-	rjd_window_enter_windowed_environment(env, test_input_entrypoint);
+	rjd_window_enter_windowed_environment(env, test_input_entrypoint, NULL);
 
 	expect_no_leaks(&allocator);
 }
