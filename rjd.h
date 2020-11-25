@@ -8935,6 +8935,7 @@ struct rjd_window;
 struct rjd_window_environment;
 
 typedef void rjd_window_environment_init_func(const struct rjd_window_environment* env);
+typedef void rjd_window_environment_close_func(const struct rjd_window_environment* env);
 typedef void rjd_window_on_init_func(struct rjd_window* window, const struct rjd_window_environment* env);
 typedef bool rjd_window_on_update_func(struct rjd_window* window, const struct rjd_window_environment* env);
 typedef void rjd_window_on_close_func(struct rjd_window* window, const struct rjd_window_environment* env);
@@ -8982,7 +8983,7 @@ struct rjd_window
 	char impl[64];
 };
 
-void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func);
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func, rjd_window_environment_close_func* close_func);
 struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_desc desc);
 void rjd_window_runloop(struct rjd_window* window);
 struct rjd_window_size rjd_window_size_get(const struct rjd_window* window);
@@ -8994,13 +8995,17 @@ void rjd_window_close(struct rjd_window* window);
 	#if RJD_LANG_OBJC
 		@class MTKView;
 		RJD_STATIC_ASSERT(sizeof(MTKView*) == sizeof(void*));
+		@class BasicView;
+		RJD_STATIC_ASSERT(sizeof(BasicView*) == sizeof(void*));
 		@class NSWindow;
 		RJD_STATIC_ASSERT(sizeof(NSWindow*) == sizeof(void*));
 	#else
 		typedef void MTKView;
+		typedef void BasicView;
 		typedef void NSWindow;
 	#endif
 	MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window);
+	BasicView* rjd_window_osx_get_basicview(const struct rjd_window* window);
 	NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window);
 #endif
 
@@ -9031,7 +9036,7 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_win32));
 
 static LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM lparam);
 
-void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func)
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func, rjd_window_environment_close_func* close_func)
 {
 	if (init_func) {
 		init_func(&env);
@@ -9041,6 +9046,10 @@ void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rj
 	{
 		// other threads could be running their own window loops, so just wait until
 		// all of them are closed before exiting
+	}
+
+	if (close_func) {
+		close_func(&env);
 	}
 }
 
@@ -9138,7 +9147,6 @@ void rjd_window_runloop(struct rjd_window* window)
 		DestroyWindow(window_win32->hwnd);
 	}
 
-
 	rjd_atomic_uint32_dec(&global_window_count);
 }
 
@@ -9147,7 +9155,7 @@ struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
 	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
 
 	RECT rect = {0};
-	GetWindowRect(window_win32->hwnd, &rect);
+	GetClientRect(window_win32->hwnd, &rect);
 
 	uint32_t width = rect.right - rect.left;
 	uint32_t height = rect.bottom - rect.top;
@@ -9188,18 +9196,19 @@ LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM 
 		break;
     case WM_GETMINMAXINFO:
         ((MINMAXINFO*)lparam)->ptMinTrackSize = kMinSize;
-        break;
-		// TODO forward resize message
+        return 0;
+
+	// TODO forward resize message
     //case WM_SIZE:
 	//	//width = LOWORD(lparam);
 	//	//height = HIWORD(lparam);
 	//	//glViewport(0, 0, g_window_size.width, g_window_size.height);
     //    break;
-	default:
-		return DefWindowProc(handle_window, msg, wparam, lparam);
-	}
+    default:
+    	return DefWindowProc(handle_window, msg, wparam, lparam);
+    }
 
-	return 0;
+    return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -9220,7 +9229,8 @@ LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM 
 struct rjd_window_osx
 {
     NSWindow* nswindow;
-    MTKView* view;
+    MTKView* view_metal;
+    BasicView* view_basic;
     
     rjd_window_on_init_func* init_func;
     rjd_window_on_update_func* update_func;
@@ -9232,7 +9242,7 @@ bool s_is_app_initialized = false;
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 @property (retain) NSWindow *window;
--(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)func env:(struct rjd_window_environment)env;
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)init_func closeFunc:(rjd_window_environment_close_func*)close_func env:(struct rjd_window_environment)env;
 @end
 
 @interface CustomViewController : NSViewController
@@ -9246,23 +9256,33 @@ bool s_is_app_initialized = false;
 -(instancetype)initWithWindow:(struct rjd_window*)window env:(struct rjd_window_environment)env;
 @end
 
+@interface BasicView : NSView
+@end
+
+@interface BasicWindowDelegate : NSObject <NSWindowDelegate>
+-(instancetype)initWithWindow:(struct rjd_window*)window env:(struct rjd_window_environment)env;
+@end
+
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
 
-void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func init_func)
+void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rjd_window_environment_init_func* init_func, rjd_window_environment_close_func* close_func)
 {
 	NSApplicationLoad();
-    AppDelegate* delegate = [[AppDelegate alloc] initWithEnvFunc:init_func env:env];
+    AppDelegate* delegate = [[AppDelegate alloc] initWithEnvFunc:init_func closeFunc:close_func env:env];
     NSApplication* app = [NSApplication sharedApplication];
     [app setDelegate:delegate];
 	[app activateIgnoringOtherApps:YES];
     
     // The applicationDidFinishLaunching notification isn't sent multiple times. We need to keep track
-    // to ensure the init_func() is called at the appropriate time
+    // to ensure the init_func() is called upon reentry to this function
     if (s_is_app_initialized && init_func) {
         init_func(&env);
     }
     [app run];
+    if (close_func) {
+    	close_func(&env);
+    }
 }
 
 struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_desc desc)
@@ -9304,7 +9324,8 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
     window_osx->init_func = desc.init_func;
     window_osx->update_func = desc.update_func;
     window_osx->close_func = desc.close_func;
-    window_osx->view = view;
+    window_osx->view_metal = view.device != nil ? view : NULL;
+	window_osx->view_basic = view.device == nil ? (BasicView*)viewController.view : NULL;
 
     if (window_osx->init_func) {
         window_osx->init_func((struct rjd_window*)window_osx, &desc.env);
@@ -9322,7 +9343,9 @@ void rjd_window_runloop(struct rjd_window* window)
 struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
 {
 	const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
-	CGSize size = window_osx->view.drawableSize;
+
+	CGSize size = window_osx->view_metal ? window_osx->view_metal.drawableSize : window_osx->view_basic.bounds.size;
+
 	struct rjd_window_size windowsize = {
 		.width = size.width,
 		.height = size.height,
@@ -9340,7 +9363,13 @@ void rjd_window_close(struct rjd_window* window)
 MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 {
     const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
-	return window_osx->view;
+	return window_osx->view_metal;
+}
+
+BasicView* rjd_window_osx_get_basicview(const struct rjd_window* window)
+{
+    const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
+	return window_osx->view_basic;
 }
 
 NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
@@ -9355,13 +9384,15 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 @implementation AppDelegate
 {
     rjd_window_environment_init_func* init_func;
+    rjd_window_environment_close_func* close_func;
 	struct rjd_window_environment env;
 }
 
--(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)func env:(struct rjd_window_environment)_env
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)_init_func closeFunc:(rjd_window_environment_close_func*)_close_func env:(struct rjd_window_environment)_env
 {
     if (self = [super init]) {
-        self->init_func = func;
+        self->init_func = _init_func;
+        self->close_func = _close_func;
 		self->env = _env;
     }
     return self;
@@ -9409,6 +9440,8 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 @implementation CustomViewController
 {
     Renderer* renderer;
+	BasicWindowDelegate* basic_delegate;
+
     uint16_t width;
     uint16_t height;
     struct rjd_window* window;
@@ -9429,19 +9462,19 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 -(void)loadView
 {
     MTKView* view = (MTKView*)self.view;
-    if(!view.device)
-    {
-        NSLog(@"Metal is not supported on this device");
-        self.view = [[NSView alloc] initWithFrame:self.view.frame];
-        return;
+    if(view.device) {
+	    // We need to hold a strong reference to the Renderer or it will go out of scope
+	    // after this function and be destroyed. MTKView.delegate is a weak reference.
+	    self->renderer = [[Renderer alloc] initWithWindow:self->window env:self->env];
+	    [self->renderer mtkView:view drawableSizeWillChange:view.bounds.size];
+	    view.delegate = self->renderer;
+	    self.view = view;
+	} else {
+        NSLog(@"Metal is not supported on this device. Falling back to basic NSView with timer updates.");
+		self->basic_delegate = [[BasicWindowDelegate alloc] initWithWindow:window env:self->env];
+       	BasicView* view = [[BasicView alloc] initWithFrame:self.view.frame];
+		self.view = view;
     }
-
-    // We need to hold a strong reference to the Renderer or it will go out of scope
-    // after this function and be destroyed. MTKView.delegate is a weak reference.
-    self->renderer = [[Renderer alloc] initWithWindow:self->window env:self->env];
-    [self->renderer mtkView:view drawableSizeWillChange:view.bounds.size];
-    view.delegate = renderer;
-    self.view = view;
 }
 @end
 
@@ -9462,7 +9495,6 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 
 @implementation Renderer
 {
-    id<MTLDevice> device;
 	struct rjd_window* window;
 	struct rjd_window_environment env;
 }
@@ -9516,11 +9548,75 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 }
 @end
 
+@implementation BasicView
+@end
+
+@implementation BasicWindowDelegate
+{
+	struct rjd_window* window;
+	struct rjd_window_environment env;
+
+	NSTimer* ticker;
+}
+
+-(instancetype)initWithWindow:(struct rjd_window*)_window env:(struct rjd_window_environment)_env
+{
+	self->window = _window;
+	self->env = _env;
+
+	struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
+
+	[[NSNotificationCenter defaultCenter]	addObserver:self
+											selector:@selector(windowWillClose:)
+											name:NSWindowWillCloseNotification
+											object:window_osx->nswindow];
+
+
+	void (^update_tick_block)(NSTimer*) = ^void(NSTimer* timer) {
+		[self timerUpdate:timer];
+	};
+
+	self->ticker = [NSTimer scheduledTimerWithTimeInterval:1.0/60.0 repeats:YES block:update_tick_block];
+
+	return self;
+}
+
+-(void)timerUpdate:(NSTimer*)timer
+{
+	RJD_UNUSED_PARAM(timer);
+
+	struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
+	if (window_osx->update_func) {
+		if (window_osx->update_func(self->window, &self->env) == false) {
+			rjd_window_close(self->window);
+		}
+	}
+}
+
+-(void)windowWillClose:(NSNotification*)notification
+{
+	RJD_UNUSED_PARAM(notification);
+
+    struct rjd_window_osx* window_osx = (struct rjd_window_osx*)window;
+
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowWillCloseNotification object:window_osx->nswindow];
+
+    if (window_osx->close_func) {
+        window_osx->close_func(self->window, &self->env);
+    }
+    
+	[self->ticker invalidate];
+    self->ticker = nil;
+}
+
+@end
+
 #else
 	#error Unsupported platform.
 #endif
 
 #endif // RJD_IMPL
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // rjd_input.h
@@ -9937,7 +10033,8 @@ struct rjd_input_win32
 {
 	const struct rjd_window* window;
 
-	HHOOK hook_handle;
+	HHOOK hook_handle_wndproc;
+	HHOOK hook_handle_getmessage;
 
 	struct rjd_input_common common;
 };
@@ -9949,6 +10046,8 @@ enum
 };
 
 LRESULT CALLBACK rjd_input_wndproc_hook(int nCode, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK rjd_input_getmessage_hook(int nCode, WPARAM wParam, LPARAM lParam);
+LRESULT rjd_input_hook_common(struct rjd_input_win32* input_win32, UINT message, WPARAM wParam, LPARAM lParam, int nCode, WPARAM hook_wparam, LPARAM hook_lparam);
 
 const enum rjd_input_keyboard RJD_INPUT_WIN32_KEYCODE_TO_ENUM[] =
 {
@@ -9967,6 +10066,7 @@ const enum rjd_input_keyboard RJD_INPUT_WIN32_KEYCODE_TO_ENUM[] =
 	RJD_INPUT_KEYBOARD_COUNT,				// 0x0C VK_CLEAR
 	RJD_INPUT_KEYBOARD_RETURN,				// 0x0D VK_RETURN
 	RJD_INPUT_KEYBOARD_COUNT,				// 0x0E undefined
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x0F undefined
 	RJD_INPUT_KEYBOARD_COUNT,				// 0x10 VK_SHIFT (but we use L and R versions)
 	RJD_INPUT_KEYBOARD_COUNT,				// 0x11 VK_CONTROL (but we use L and R versions)
 	RJD_INPUT_KEYBOARD_COUNT,				// 0x12 VK_MENU (alt, but we use L and R versions)
@@ -10217,28 +10317,31 @@ void rjd_input_destroy(struct rjd_input* input)
 
 struct rjd_result rjd_input_hook(struct rjd_input* input, const struct rjd_window* window, const struct rjd_window_environment* env)
 {
-	RJD_UNUSED_PARAM(window);
+	RJD_ASSERT(input);
+	RJD_ASSERT(window);
+	RJD_ASSERT(env);
 
 	void* hinstance = env->win32.hinstance;
 	void* hwnd = rjd_window_win32_get_hwnd(window);
 
+	if (GetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX) != 0) {
+		return RJD_RESULT("Another system aleady has the slot for RJD_INPUT_WIN32_WINDOW_PTR_INDEX.");
+	}
+	
+	SetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX, (LONG_PTR)input);
+
 	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
 
 	input_win32->window = window;
-	input_win32->hook_handle = SetWindowsHookExW(WH_CALLWNDPROC, rjd_input_wndproc_hook, hinstance, GetCurrentThreadId());
-	if (input_win32->hook_handle == NULL) {
-		printf("window proc err: %d\n", GetLastError());
+	input_win32->hook_handle_wndproc = SetWindowsHookExW(WH_CALLWNDPROC, rjd_input_wndproc_hook, hinstance, GetCurrentThreadId());
+	if (input_win32->hook_handle_wndproc == NULL) {
 		return RJD_RESULT("Failed to hook window proc. Check GetLastError() for more info.");
 	}
 
-	if (GetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX) != 0) {
-		UnhookWindowsHookEx(input_win32->hook_handle);
-		input_win32->hook_handle = 0;
-
-		return RJD_RESULT("Another system aleady has the slot for RJD_INPUT_WIN32_WINDOW_PTR_INDEX.");
+	input_win32->hook_handle_getmessage = SetWindowsHookExW(WH_GETMESSAGE, rjd_input_getmessage_hook, hinstance, GetCurrentThreadId());
+	if (input_win32->hook_handle_getmessage == NULL) {
+		return RJD_RESULT("Failed to hook getmessage. Check GetLastError() for more info.");
 	}
-
-	SetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX, (LONG_PTR)input);
 
 	return RJD_RESULT_OK();
 }
@@ -10246,10 +10349,14 @@ struct rjd_result rjd_input_hook(struct rjd_input* input, const struct rjd_windo
 void rjd_input_unhook(struct rjd_input* input)
 {
 	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
-	if (input_win32->hook_handle) {
+	if (input_win32->hook_handle_wndproc || input_win32->hook_handle_getmessage) {
 		void* hwnd = rjd_window_win32_get_hwnd(input_win32->window);
 		SetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX, 0);
-		UnhookWindowsHookEx(input_win32->hook_handle);
+		UnhookWindowsHookEx(input_win32->hook_handle_wndproc);
+		UnhookWindowsHookEx(input_win32->hook_handle_getmessage);
+
+		input_win32->hook_handle_wndproc = NULL;
+		input_win32->hook_handle_getmessage = NULL;
 	}
 }
 
@@ -10370,31 +10477,48 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 
 LRESULT CALLBACK rjd_input_wndproc_hook(int nCode, WPARAM wParam, LPARAM lParam)
 {
-	const CWPSTRUCT* msg_info = (const CWPSTRUCT*)lParam;
+	const CWPSTRUCT* msg = (const CWPSTRUCT*)lParam;
 
-	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)GetWindowLongPtrW(msg_info->hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX);
-	if (input_win32 == NULL) {
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)GetWindowLongPtrW(msg->hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX);
+	if (nCode < 0 || input_win32 == NULL) {
 		return CallNextHookEx(NULL, nCode, wParam, lParam);
 	};
 
+	return rjd_input_hook_common(input_win32, msg->message, msg->wParam, msg->lParam, nCode, wParam, lParam);
+}
+
+LRESULT CALLBACK rjd_input_getmessage_hook(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	const MSG* msg = (const MSG*)lParam;
+
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)GetWindowLongPtrW(msg->hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX);
+	if (nCode < 0 || input_win32 == NULL) {
+		return CallNextHookEx(NULL, nCode, wParam, lParam);
+	};
+
+	return rjd_input_hook_common(input_win32, msg->message, msg->wParam, msg->lParam, nCode, wParam, lParam);
+}
+
+LRESULT rjd_input_hook_common(struct rjd_input_win32* input_win32, UINT message, WPARAM wParam, LPARAM lParam, int nCode, WPARAM hook_wparam, LPARAM hook_lparam)
+{
 	const uint32_t now_index = input_win32->common.now_index;
 
-	switch (msg_info->message)
+	switch (message)
 	{
 		case WM_KEYDOWN:
 		case WM_KEYUP:
 		{
-			// const uint32_t repeat_count = (0xFFFF & msg_info->lParam);
-			const uint32_t scan_code = (0xFF0000 & msg_info->lParam) >> 16;
-			const bool is_extended = (0x01000000 & msg_info->lParam) != 0;
-			const bool is_down = (msg_info->message == WM_KEYDOWN);
+			// const uint32_t repeat_count = (0xFFFF & lParam);
+			const uint32_t scan_code = (0xFF0000 & lParam) >> 16;
+			const bool is_extended = (0x01000000 & lParam) != 0;
+			const bool is_down = (message == WM_KEYDOWN);
 
-			uint32_t virtual_key = (uint32_t)msg_info->wParam;
-			if (msg_info->wParam == VK_SHIFT) {
+			uint32_t virtual_key = (uint32_t)wParam;
+			if (wParam == VK_SHIFT) {
 				virtual_key = MapVirtualKey(scan_code, MAPVK_VSC_TO_VK_EX);
-			} else if (msg_info->wParam == VK_CONTROL) {
+			} else if (wParam == VK_CONTROL) {
 				virtual_key = is_extended ? VK_RCONTROL : VK_LCONTROL;
-			} else if (msg_info->wParam == VK_MENU) {
+			} else if (wParam == VK_MENU) {
 				virtual_key = is_extended ? VK_RMENU : VK_LMENU;
 			}
 
@@ -10425,39 +10549,39 @@ LRESULT CALLBACK rjd_input_wndproc_hook(int nCode, WPARAM wParam, LPARAM lParam)
 			break;
 		case WM_XBUTTONDOWN:
 		{
-			uint32_t button_index = (((msg_info->wParam & 0xFFFF0000) >> 16) == XBUTTON1) ? 3 : 4;
+			uint32_t button_index = (((wParam & 0xFFFF0000) >> 16) == XBUTTON1) ? 3 : 4;
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_BEGIN + button_index] = 1.0f;
 			break;
 		}
 		case WM_XBUTTONUP:
 		{
-			uint32_t button_index = (((msg_info->wParam & 0xFFFF0000) >> 16) == XBUTTON1) ? 3 : 4;
+			uint32_t button_index = (((wParam & 0xFFFF0000) >> 16) == XBUTTON1) ? 3 : 4;
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_BEGIN + button_index] = 0.0f;
 			break;
 		}
 		case WM_MOUSEWHEEL:
 		{
-			float delta = (float)GET_WHEEL_DELTA_WPARAM(msg_info->wParam) / WHEEL_DELTA;
+			float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y] = delta;
 			break;
 		}
 		case WM_MOUSEHWHEEL:
 		{
-			float delta = (float)GET_WHEEL_DELTA_WPARAM(msg_info->wParam) / WHEEL_DELTA;
+			float delta = (float)GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X] = delta;
 			break;
 		}
 		case WM_MOUSEMOVE:
 		{
-			float x = (float)GET_X_LPARAM(msg_info->lParam);
-			float y = (float)GET_Y_LPARAM(msg_info->lParam);
+			float x = (float)GET_X_LPARAM(lParam);
+			float y = (float)GET_Y_LPARAM(lParam);
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_X] = x;
 			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_Y] = y;
 			break;
 		}
 	}
 
-	return CallNextHookEx(NULL, nCode, wParam, lParam);
+	return CallNextHookEx(NULL, nCode, hook_wparam, hook_lparam);
 }
 
 #elif RJD_PLATFORM_OSX
@@ -10479,9 +10603,7 @@ struct rjd_input_osx
 	InputResponder* responder;
 	const struct rjd_window* window;
 
-	uint8_t now_index;
-	struct rjd_input_keyboard_state keyboard[2];
-	struct rjd_input_mouse_state mouse[2];
+	struct rjd_input_common common;
 };
 
 RJD_STATIC_ASSERT(sizeof(struct rjd_input_osx) <= sizeof(struct rjd_input));
@@ -10657,9 +10779,12 @@ struct rjd_result rjd_input_hook(struct rjd_input* input, const struct rjd_windo
 		return RJD_RESULT("No window available to hook. Did the window initialize correctly?");
 	}
 
-	MTKView* view = rjd_window_osx_get_mtkview(window);
+	NSView* view = rjd_window_osx_get_mtkview(window);
 	if (view == nil) {
-		return RJD_RESULT("No view available in the window to hook. Did the window initialize correctly?");
+		view = rjd_window_osx_get_basicview(window);
+		if (view == nil) {
+			return RJD_RESULT("No view available in the window to hook. Did the window initialize correctly?");
+		}
 	}
 
 	input_osx->responder = [[InputResponder alloc] initWithInput:input_osx];
@@ -10719,7 +10844,6 @@ float rjd_input_mouse_prev(const struct rjd_input* input, enum rjd_input_mouse c
 	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)input;
 	return rjd_input_mouse_prev_common(&input_osx->common, code);
 }
-
 
 void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event event)
 {
@@ -10923,7 +11047,7 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 {
 	if (event.keyCode < rjd_countof(RJD_INPUT_OSX_KEYCODE_TO_ENUM)) {
 		enum rjd_input_keyboard code = RJD_INPUT_OSX_KEYCODE_TO_ENUM[event.keyCode];
-		input->keyboard[input->now_index].values[code] = 1;
+		input->common.keyboard[input->common.now_index].values[code] = 1;
 	}
 }
 
@@ -10931,13 +11055,13 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 {
 	if (event.keyCode < rjd_countof(RJD_INPUT_OSX_KEYCODE_TO_ENUM)) {
 		enum rjd_input_keyboard code = RJD_INPUT_OSX_KEYCODE_TO_ENUM[event.keyCode];
-		input->keyboard[input->now_index].values[code] = 0;
+		input->common.keyboard[input->common.now_index].values[code] = 0;
 	}
 }
 
 -(void)flagsChanged:(NSEvent*)event
 {
-	struct rjd_input_keyboard_state* state = input->keyboard + input->now_index;
+	struct rjd_input_keyboard_state* state = input->common.keyboard + input->common.now_index;
 
 	state->values[RJD_INPUT_KEYBOARD_SHIFT_LEFT] = (event.modifierFlags & NX_DEVICELSHIFTKEYMASK) ? 1 : 0;
 	state->values[RJD_INPUT_KEYBOARD_SHIFT_RIGHT] = (event.modifierFlags & NX_DEVICERSHIFTKEYMASK) ? 1 : 0;
@@ -10952,25 +11076,25 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 -(void)mouseDown:(NSEvent*)event
 {
 	RJD_UNUSED_PARAM(event);
-    input->mouse[input->now_index].values[RJD_INPUT_MOUSE_BUTTON_LEFT] = 1;
+    input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_BUTTON_LEFT] = 1;
 }
 
 -(void)mouseUp:(NSEvent*)event
 {
 	RJD_UNUSED_PARAM(event);
-    input->mouse[input->now_index].values[RJD_INPUT_MOUSE_BUTTON_LEFT] = 0;
+    input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_BUTTON_LEFT] = 0;
 }
                   
 -(void)rightMouseDown:(NSEvent*)event
 {
 	RJD_UNUSED_PARAM(event);
-	input->mouse[input->now_index].values[RJD_INPUT_MOUSE_BUTTON_RIGHT] = 1;
+	input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_BUTTON_RIGHT] = 1;
 }
 
 -(void)rightMouseUp:(NSEvent*)event
 {
 	RJD_UNUSED_PARAM(event);
-	input->mouse[input->now_index].values[RJD_INPUT_MOUSE_BUTTON_RIGHT] = 0;
+	input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_BUTTON_RIGHT] = 0;
 }
                   
 -(void)otherMouseDown:(NSEvent*)event
@@ -10979,7 +11103,7 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 	for (uint32_t button = RJD_INPUT_MOUSE_BUTTON_BEGIN; button < RJD_INPUT_MOUSE_BUTTON_END; ++button) {
 		uint32_t bit = 1 << (button - RJD_INPUT_MOUSE_BUTTON_BEGIN);
 		bool pressed = (NSEvent.pressedMouseButtons & bit) != 0;
-		input->mouse[input->now_index].values[button] = pressed;
+		input->common.mouse[input->common.now_index].values[button] = pressed;
 	}
 }
 
@@ -10989,29 +11113,32 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 	for (uint32_t button = RJD_INPUT_MOUSE_BUTTON_BEGIN; button < RJD_INPUT_MOUSE_BUTTON_END; ++button) {
 		uint32_t bit = 1 << (button - RJD_INPUT_MOUSE_BUTTON_BEGIN);
 		bool pressed = (NSEvent.pressedMouseButtons & bit) != 0;
-		input->mouse[input->now_index].values[button] = pressed;
+		input->common.mouse[input->common.now_index].values[button] = pressed;
 	}
 }
 
 -(void)mouseMoved:(NSEvent*)event
 {
-	MTKView* mtkview = rjd_window_osx_get_mtkview(input->window);
-	NSPoint locationInView = [mtkview convertPoint:event.locationInWindow fromView:nil];
+	NSView* view = rjd_window_osx_get_mtkview(input->window);
+    if (view == nil) {
+        view = rjd_window_osx_get_basicview(input->window);
+    }
+	NSPoint locationInView = [view convertPoint:event.locationInWindow fromView:nil];
 
 	int x = locationInView.x;
 	int y = locationInView.y;
 
 	struct rjd_window_size size = rjd_window_size_get(input->window);
 	if (x >= 0 && x <= size.width && y >= 0 && y <= size.height) {
-		input->mouse[input->now_index].values[RJD_INPUT_MOUSE_X] = (float)x;
-		input->mouse[input->now_index].values[RJD_INPUT_MOUSE_Y] = (float)y;
+		input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_X] = (float)x;
+		input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_Y] = (float)y;
 	}
 }
 
 -(void)scrollWheel:(NSEvent*)event
 {
-	input->mouse[input->now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X] = (float)event.scrollingDeltaX;
-	input->mouse[input->now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y] = (float)event.scrollingDeltaY;
+	input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X] = (float)event.scrollingDeltaX;
+	input->common.mouse[input->common.now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y] = (float)event.scrollingDeltaY;
 }
 
 @end
@@ -11304,23 +11431,18 @@ enum rjd_gfx_index_type
 	RJD_GFX_INDEX_TYPE_UINT16,
 };
 
-enum rjd_gfx_mesh_buffer_type
-{
-	RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS,
-	RJD_GFX_MESH_BUFFER_TYPE_VERTEX,
-};
-
 enum rjd_gfx_mesh_buffer_usage_flags
 {
-	RJD_GFX_MESH_BUFFER_USAGE_VERTEX = 0x1,
-	RJD_GFX_MESH_BUFFER_USAGE_PIXEL = 0x2,
+	RJD_GFX_MESH_BUFFER_USAGE_VERTEX = 1 << 0,
+	RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT = 1 << 1,
+	RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT = 1 << 2,
 };
 
 union rjd_gfx_mesh_buffer_common_desc
 {
 	struct {
 		uint32_t capacity;
-	} uniforms;
+	} constant;
 
 	struct {
 		const void* data;
@@ -11332,7 +11454,6 @@ union rjd_gfx_mesh_buffer_common_desc
 // TODO vertex_buffer isn't a great name, since it can also be inputs to pixel shaders. Maybe just mesh_buffer?
 struct rjd_gfx_mesh_vertex_buffer_desc
 {
-	enum rjd_gfx_mesh_buffer_type type;
 	union rjd_gfx_mesh_buffer_common_desc common;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
 	uint32_t buffer_index; // TODO maybe rename to shader_slot?
@@ -11430,7 +11551,7 @@ struct rjd_gfx_context_desc
 
 struct rjd_gfx_context
 {
-	char pimpl[140];
+	char pimpl[148];
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -11465,7 +11586,7 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 void rjd_gfx_pipeline_state_destroy(struct rjd_gfx_context* context, struct rjd_gfx_pipeline_state* pipeline_state);
 struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc);
 //struct rjd_result rjd_gfx_mesh_create_indexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_indexed_desc desc);
-struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length);
+struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, const void* data, uint32_t length);
 void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh);
 
 // format
