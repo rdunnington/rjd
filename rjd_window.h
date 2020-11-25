@@ -66,13 +66,17 @@ void rjd_window_close(struct rjd_window* window);
 	#if RJD_LANG_OBJC
 		@class MTKView;
 		RJD_STATIC_ASSERT(sizeof(MTKView*) == sizeof(void*));
+		@class BasicView;
+		RJD_STATIC_ASSERT(sizeof(BasicView*) == sizeof(void*));
 		@class NSWindow;
 		RJD_STATIC_ASSERT(sizeof(NSWindow*) == sizeof(void*));
 	#else
 		typedef void MTKView;
+		typedef void BasicView;
 		typedef void NSWindow;
 	#endif
 	MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window);
+	BasicView* rjd_window_osx_get_basicview(const struct rjd_window* window);
 	NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window);
 #endif
 
@@ -296,7 +300,8 @@ LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM 
 struct rjd_window_osx
 {
     NSWindow* nswindow;
-    MTKView* view;
+    MTKView* view_metal;
+    BasicView* view_basic;
     
     rjd_window_on_init_func* init_func;
     rjd_window_on_update_func* update_func;
@@ -319,6 +324,13 @@ bool s_is_app_initialized = false;
 @end
 
 @interface Renderer : NSObject <MTKViewDelegate>
+-(instancetype)initWithWindow:(struct rjd_window*)window env:(struct rjd_window_environment)env;
+@end
+
+@interface BasicView : NSView
+@end
+
+@interface BasicWindowDelegate : NSObject <NSWindowDelegate>
 -(instancetype)initWithWindow:(struct rjd_window*)window env:(struct rjd_window_environment)env;
 @end
 
@@ -383,7 +395,8 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
     window_osx->init_func = desc.init_func;
     window_osx->update_func = desc.update_func;
     window_osx->close_func = desc.close_func;
-    window_osx->view = view;
+    window_osx->view_metal = view.device != nil ? view : NULL;
+	window_osx->view_basic = view.device == nil ? (BasicView*)viewController.view : NULL;
 
     if (window_osx->init_func) {
         window_osx->init_func((struct rjd_window*)window_osx, &desc.env);
@@ -401,7 +414,9 @@ void rjd_window_runloop(struct rjd_window* window)
 struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
 {
 	const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
-	CGSize size = window_osx->view.drawableSize;
+
+	CGSize size = window_osx->view_metal ? window_osx->view_metal.drawableSize : window_osx->view_basic.bounds.size;
+
 	struct rjd_window_size windowsize = {
 		.width = size.width,
 		.height = size.height,
@@ -419,7 +434,13 @@ void rjd_window_close(struct rjd_window* window)
 MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
 {
     const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
-	return window_osx->view;
+	return window_osx->view_metal;
+}
+
+BasicView* rjd_window_osx_get_basicview(const struct rjd_window* window)
+{
+    const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
+	return window_osx->view_basic;
 }
 
 NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
@@ -438,11 +459,11 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 	struct rjd_window_environment env;
 }
 
--(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)init closeFunc:(rjd_window_environment_close_func*)close env:(struct rjd_window_environment)_env
+-(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)_init_func closeFunc:(rjd_window_environment_close_func*)_close_func env:(struct rjd_window_environment)_env
 {
     if (self = [super init]) {
-        self->init_func = init;
-        self->close_func = close;
+        self->init_func = _init_func;
+        self->close_func = _close_func;
 		self->env = _env;
     }
     return self;
@@ -490,6 +511,8 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 @implementation CustomViewController
 {
     Renderer* renderer;
+	BasicWindowDelegate* basic_delegate;
+
     uint16_t width;
     uint16_t height;
     struct rjd_window* window;
@@ -510,19 +533,19 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 -(void)loadView
 {
     MTKView* view = (MTKView*)self.view;
-    if(!view.device)
-    {
-        NSLog(@"Metal is not supported on this device");
-        self.view = [[NSView alloc] initWithFrame:self.view.frame];
-        return;
+    if(view.device) {
+	    // We need to hold a strong reference to the Renderer or it will go out of scope
+	    // after this function and be destroyed. MTKView.delegate is a weak reference.
+	    self->renderer = [[Renderer alloc] initWithWindow:self->window env:self->env];
+	    [self->renderer mtkView:view drawableSizeWillChange:view.bounds.size];
+	    view.delegate = self->renderer;
+	    self.view = view;
+	} else {
+        NSLog(@"Metal is not supported on this device. Falling back to basic NSView with timer updates.");
+		self->basic_delegate = [[BasicWindowDelegate alloc] initWithWindow:window env:self->env];
+       	BasicView* view = [[BasicView alloc] initWithFrame:self.view.frame];
+		self.view = view;
     }
-
-    // We need to hold a strong reference to the Renderer or it will go out of scope
-    // after this function and be destroyed. MTKView.delegate is a weak reference.
-    self->renderer = [[Renderer alloc] initWithWindow:self->window env:self->env];
-    [self->renderer mtkView:view drawableSizeWillChange:view.bounds.size];
-    view.delegate = renderer;
-    self.view = view;
 }
 @end
 
@@ -543,7 +566,6 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 
 @implementation Renderer
 {
-    id<MTLDevice> device;
 	struct rjd_window* window;
 	struct rjd_window_environment env;
 }
@@ -597,8 +619,72 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 }
 @end
 
+@implementation BasicView
+@end
+
+@implementation BasicWindowDelegate
+{
+	struct rjd_window* window;
+	struct rjd_window_environment env;
+
+	NSTimer* ticker;
+}
+
+-(instancetype)initWithWindow:(struct rjd_window*)_window env:(struct rjd_window_environment)_env
+{
+	self->window = _window;
+	self->env = _env;
+
+	struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
+
+	[[NSNotificationCenter defaultCenter]	addObserver:self
+											selector:@selector(windowWillClose:)
+											name:NSWindowWillCloseNotification
+											object:window_osx->nswindow];
+
+
+	void (^update_tick_block)(NSTimer*) = ^void(NSTimer* timer) {
+		[self timerUpdate:timer];
+	};
+
+	self->ticker = [NSTimer scheduledTimerWithTimeInterval:1.0/60.0 repeats:YES block:update_tick_block];
+
+	return self;
+}
+
+-(void)timerUpdate:(NSTimer*)timer
+{
+	RJD_UNUSED_PARAM(timer);
+
+	struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
+	if (window_osx->update_func) {
+		if (window_osx->update_func(self->window, &self->env) == false) {
+			rjd_window_close(self->window);
+		}
+	}
+}
+
+-(void)windowWillClose:(NSNotification*)notification
+{
+	RJD_UNUSED_PARAM(notification);
+
+    struct rjd_window_osx* window_osx = (struct rjd_window_osx*)window;
+
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:NSWindowWillCloseNotification object:window_osx->nswindow];
+
+    if (window_osx->close_func) {
+        window_osx->close_func(self->window, &self->env);
+    }
+    
+	[self->ticker invalidate];
+    self->ticker = nil;
+}
+
+@end
+
 #else
 	#error Unsupported platform.
 #endif
 
 #endif // RJD_IMPL
+
