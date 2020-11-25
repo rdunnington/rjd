@@ -134,6 +134,7 @@ enum rjd_gfx_texture_usage
 
 struct rjd_gfx_texture_desc
 {
+	const char* debug_label;
 	void* data;
     uint32_t data_length;
 	uint32_t pixels_width;
@@ -141,19 +142,12 @@ struct rjd_gfx_texture_desc
 	enum rjd_gfx_format format;
 	enum rjd_gfx_texture_access access;
 	enum rjd_gfx_texture_usage usage;
-	const char* debug_label;
 };
 
 struct rjd_gfx_texture
 {
 	struct rjd_slot handle;
 };
-
-//enum rjd_gfx_shader_input_buffer_type_flags
-//{
-//	RJD_GFX_SHADER_INPUT_USAGE_VERTEX = 0x1,
-//	RJD_GFX_SHADER_INPUT_USAGE_FRAGMENT = 0x2,
-//};
 
 // TODO determine if this is a good idea or not
 //struct rjd_gfx_shader_input_slot
@@ -163,13 +157,22 @@ struct rjd_gfx_texture
 //	enum rjd_gfx_shader_input_buffer_type_flags type_flags;
 //};
 
-// TODO provide a precompiled path as well, e.g. bool is_compiled
+enum rjd_gfx_shader_type
+{
+	RJD_GFX_SHADER_TYPE_VERTEX,
+	RJD_GFX_SHADER_TYPE_PIXEL,
+};
+
+// TODO provide a precompiled path as well, preferably with a shader_precompiled_desc?
 struct rjd_gfx_shader_desc
 {
+	const char* source_name;
+	const char* function_name;
 	const void* data;
-	//struct rjd_gfx_shader_input_slot* slots;
-
 	uint32_t count_data;
+	enum rjd_gfx_shader_type type;
+
+	//struct rjd_gfx_shader_input_slot* slots;
 	//uint32_t count_slots;
 };
 
@@ -194,15 +197,42 @@ enum rjd_gfx_vertex_format_step
 	RJD_GFX_VERTEX_FORMAT_STEP_CONSTANT,
 };
 
+enum rjd_gfx_vertex_semantic
+{
+	RJD_GFX_VERTEX_SEMANTIC_POSITION,
+	RJD_GFX_VERTEX_SEMANTIC_COLOR,
+	RJD_GFX_VERTEX_SEMANTIC_NORMAL,
+	RJD_GFX_VERTEX_SEMANTIC_TEXCOORD,
+	RJD_GFX_VERTEX_SEMANTIC_BINORMAL,
+	RJD_GFX_VERTEX_SEMANTIC_TANGENT,
+	RJD_GFX_VERTEX_SEMANTIC_BLENDINDEX,
+	RJD_GFX_VERTEX_SEMANTIC_BLENDWEIGHT,
+	RJD_GFX_VERTEX_SEMANTIC_COUNT,
+};
+
 struct rjd_gfx_vertex_format_attribute
 {
 	enum rjd_gfx_vertex_format_type type;
 	enum rjd_gfx_vertex_format_step step;
+	enum rjd_gfx_vertex_semantic semantic; // only used for d3d11
 	uint32_t attribute_index;
 	uint32_t buffer_index;
 	uint32_t stride;
     uint32_t step_rate;
 	uint32_t offset;
+};
+
+enum rjd_gfx_winding_order
+{
+	RJD_GFX_WINDING_ORDER_CLOCKWISE,
+	RJD_GFX_WINDING_ORDER_COUNTERCLOCKWISE,
+};
+
+enum rjd_gfx_cull
+{
+	RJD_GFX_CULL_NONE,
+	RJD_GFX_CULL_BACK,
+	RJD_GFX_CULL_FRONT,
 };
 
 enum rjd_gfx_depth_compare
@@ -221,12 +251,15 @@ enum rjd_gfx_depth_compare
 struct rjd_gfx_pipeline_state_desc
 {
 	const char* debug_name;
-	struct rjd_gfx_shader shader;
+	struct rjd_gfx_shader shader_vertex;
+	struct rjd_gfx_shader shader_pixel;
 	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_texture depthstencil_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_vertex_format_attribute* vertex_attributes;
 	uint32_t count_vertex_attributes;
 	enum rjd_gfx_depth_compare depth_compare;
+	enum rjd_gfx_cull cull_mode;
+	enum rjd_gfx_winding_order winding_order;
 	// TODO stencil config
 };
 
@@ -246,44 +279,34 @@ enum rjd_gfx_index_type
 	RJD_GFX_INDEX_TYPE_UINT16,
 };
 
-enum rjd_gfx_mesh_buffer_type
-{
-	RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS,
-	RJD_GFX_MESH_BUFFER_TYPE_VERTEX,
-};
-
 enum rjd_gfx_mesh_buffer_usage_flags
 {
-	RJD_GFX_MESH_BUFFER_USAGE_VERTEX = 0x1,
-	RJD_GFX_MESH_BUFFER_USAGE_FRAGMENT = 0x2,
+	RJD_GFX_MESH_BUFFER_USAGE_VERTEX = 1 << 0,
+	RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT = 1 << 1,
+	RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT = 1 << 2,
 };
 
 union rjd_gfx_mesh_buffer_common_desc
 {
 	struct {
 		uint32_t capacity;
-	} uniforms;
+	} constant;
 
 	struct {
 		const void* data;
 		uint32_t length;
+		uint32_t stride;
 	} vertex;
 };
 
-// TODO vertex_buffer isn't a great name, since it can also be inputs to fragment shaders. Maybe just mesh_shader_buffer?
+// TODO vertex_buffer isn't a great name, since it can also be inputs to pixel shaders. Maybe just mesh_buffer?
 struct rjd_gfx_mesh_vertex_buffer_desc
 {
-	enum rjd_gfx_mesh_buffer_type type;
 	union rjd_gfx_mesh_buffer_common_desc common;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
-	uint32_t buffer_index; // TODO maybe this should be name and index? buffer_slot? shader_input_slot?
+	uint32_t buffer_index; // TODO maybe rename to shader_slot?
 };
 
-//struct rjd_gfx_mesh_index_buffer_desc
-//{
-//	union rjd_gfx_mesh_buffer_desc buffer_desc;
-//	enum rjd_gfx_index_type type;
-//};
 // TODO implement the other 2 descs later
 struct rjd_gfx_mesh_vertexed_desc
 {
@@ -318,31 +341,19 @@ struct rjd_gfx_mesh
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// render commands
-
-enum rjd_gfx_winding_order
-{
-	RJD_GFX_WINDING_ORDER_CLOCKWISE,
-	RJD_GFX_WINDING_ORDER_COUNTERCLOCKWISE,
-};
-
-enum rjd_gfx_cull
-{
-	RJD_GFX_CULL_NONE,
-	RJD_GFX_CULL_BACK,
-	RJD_GFX_CULL_FRONT,
-};
+// render command
 
 struct rjd_gfx_pass_begin_desc
 {
+	const char* debug_label;
 	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_format_value clear_color;
 	struct rjd_gfx_format_value clear_depthstencil;
-	const char* debug_label;
 };
 
 struct rjd_gfx_pass_draw_desc
 {
+	const char* debug_label;
 	const struct rjd_gfx_viewport* viewport;
 	const struct rjd_gfx_pipeline_state* pipeline_state;
 	const struct rjd_gfx_mesh* meshes;
@@ -350,10 +361,6 @@ struct rjd_gfx_pass_draw_desc
 	const uint32_t* texture_indices; // parallel array with textures
 	uint32_t count_meshes;
 	uint32_t count_textures;
-	enum rjd_gfx_cull cull_mode;
-	enum rjd_gfx_winding_order winding_order;
-
-	const char* debug_label;
 };
 
 struct rjd_gfx_command_buffer
@@ -364,16 +371,24 @@ struct rjd_gfx_command_buffer
 ////////////////////////////////////////////////////////////////////////////////
 // gfx context
 
+
+enum RJD_GFX_VSYNC_MODE
+{
+	RJD_GFX_VSYNC_MODE_ON,
+	RJD_GFX_VSYNC_MODE_OFF,
+};
+
 struct rjd_gfx_context_desc
 {
+	struct rjd_mem_allocator* allocator;
 	enum rjd_gfx_format backbuffer_color_format;
 	enum rjd_gfx_format backbuffer_depth_format;
-	struct rjd_mem_allocator* allocator;
-	uint32_t msaa_samples;
+	uint32_t* optional_desired_msaa_samples; // desired samples and fallbacks if unavailable. 1 is the default.
+	uint32_t count_desired_msaa_samples;
 
 	#if RJD_PLATFORM_WINDOWS
 		struct {
-			void* window_handle; // HWND
+			void* hwnd; // HWND
 		} win32;
 	#elif RJD_PLATFORM_OSX
 		struct {
@@ -384,7 +399,7 @@ struct rjd_gfx_context_desc
 
 struct rjd_gfx_context
 {
-	char pimpl[128];
+	char pimpl[148];
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -392,6 +407,7 @@ struct rjd_gfx_context
 
 // backend
 static inline int32_t rjd_gfx_backend_ismetal(void);
+static inline int32_t rjd_gfx_backend_isd3d11(void);
 
 // context
 // NOTE: all functions that deal with a context are not threadsafe for simplicity. If you are making a multithreaded
@@ -399,9 +415,7 @@ static inline int32_t rjd_gfx_backend_ismetal(void);
 struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd_gfx_context_desc desc);
 void rjd_gfx_context_destroy(struct rjd_gfx_context* context);
 
-bool rjd_gfx_msaa_is_count_supported(const struct rjd_gfx_context* context, uint32_t count); // count is usually: 1,2,4, or 8
-void rjd_gfx_msaa_set_count(struct rjd_gfx_context* context, uint32_t count);
-bool rjd_gfx_vsync_try_enable(struct rjd_gfx_context* context);
+struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode);
 struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context);
 struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context);
 
@@ -418,13 +432,12 @@ struct rjd_result rjd_gfx_shader_create(struct rjd_gfx_context* context, struct 
 void rjd_gfx_shader_destroy(struct rjd_gfx_context* context, struct rjd_gfx_shader* shader);
 struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context, struct rjd_gfx_pipeline_state* out, struct rjd_gfx_pipeline_state_desc desc);
 void rjd_gfx_pipeline_state_destroy(struct rjd_gfx_context* context, struct rjd_gfx_pipeline_state* pipeline_state);
-struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc, struct rjd_mem_allocator* allocator);
+struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc);
 //struct rjd_result rjd_gfx_mesh_create_indexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_indexed_desc desc);
-struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length);
+struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, const void* data, uint32_t length);
 void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh);
 
 // format
-struct rjd_gfx_format_value rjd_gfx_format_value_from_u32(enum rjd_gfx_format, uint32_t value);
 uint32_t rjd_gfx_format_bytesize(enum rjd_gfx_format format);
 bool rjd_gfx_format_iscolor(enum rjd_gfx_format format);
 bool rjd_gfx_format_isdepthstencil(enum rjd_gfx_format format);
@@ -443,6 +456,11 @@ extern const struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER;
 static inline int32_t rjd_gfx_backend_ismetal(void)
 {
 	return RJD_GFX_BACKEND_METAL;
+}
+
+static inline int32_t rjd_gfx_backend_isd3d11(void)
+{
+	return RJD_GFX_BACKEND_D3D11;
 }
 
 static inline struct rjd_gfx_format_value rjd_gfx_format_make_color_u8_rgba(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
@@ -483,6 +501,8 @@ static const struct rjd_logchannel logchannel_error = {
 
 #define RJD_GFX_LOG(...) RJD_LOG_CHANNEL(&logchannel_default, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
 #define RJD_GFX_LOG_ERROR(...) RJD_LOG_CHANNEL(&logchannel_error, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
+
+const struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER = {0};
 
 ////////////////////////////////////////////////////////////////////////////////
 // platform-independent format

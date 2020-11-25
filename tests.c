@@ -2,6 +2,10 @@
 #include <limits.h>
 #include "tests_rjd_wrapped.h"
 
+#if RJD_PLATFORM_WINDOWS
+	#include <windows.h> // GetModuleHandle
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 // expect utils
 
@@ -169,6 +173,7 @@ void test_logging_reset(void)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// rjd_debug
 
 void test_logging()
 {
@@ -253,6 +258,9 @@ void test_logging()
 	test_logging_reset();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_result
+
 struct rjd_result check_result(bool condition) {
 	RJD_RESULT_CHECK(condition, "not ok");
 	return RJD_RESULT_OK();
@@ -277,6 +285,9 @@ void test_result()
 	expect_true(promote_result(r1).error == r1.error);
 	expect_true(rjd_result_isok(promote_result(r2)));
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_enum
 
 #define TEST_ENUM1_LIST(macro)	\
 	macro(e1_a)					\
@@ -331,6 +342,9 @@ void test_enum()
 	expect_true(e2_parse("NOTOK", &e2_value) && e2_value == e2_notok);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_hash
+
 void test_hash()
 {
 	const char* str1 = "test1";
@@ -351,6 +365,9 @@ void test_hash()
 	expect_uint64(rjd_hash64_str(str1).value, rjd_hash64_data(data1, -1).value);
 	expect_uint64(rjd_hash64_str(str2).value, rjd_hash64_data(data2, -1).value);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_mem
 
 void test_mem()
 {
@@ -531,6 +548,9 @@ void test_mem()
 		expect_str("mytest", test2);
 	}
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_array
 
 void test_array()
 {
@@ -955,6 +975,9 @@ void test_array()
 	expect_no_leaks(&allocator);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_math
+
 void expect_vec4(rjd_math_vec4 expected, rjd_math_vec4 actual) 
 {
 	if (!rjd_math_vec4_eq(expected, actual)) {
@@ -1173,6 +1196,9 @@ void test_procgeo()
 		expect_no_leaks(&allocator);
 	}
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_geo
 
 void test_geo()
 {
@@ -1414,6 +1440,9 @@ void test_geo()
 	}
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_easing
+
 void expect_ease(rjd_ease_func f, float f1, float f2, float f3)
 {
 	expect_float(f1, f(0.25f));
@@ -1455,6 +1484,9 @@ void test_easing()
 	expect_ease(rjd_ease_inout_elas, -0.011049f,  0.500000f,  1.011049f);
 	expect_ease(rjd_ease_inout_boun,  0.140625f,  0.500000f,  0.859375f);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_strbuf
 
 void test_strbuf(void)
 {	
@@ -1498,6 +1530,9 @@ void test_strbuf(void)
 	expect_no_leaks(&allocator);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_profiler
+
 void test_profiler(void)
 {
 	test_logging_redirect_to_logbuffer();
@@ -1518,6 +1553,9 @@ void test_profiler(void)
 
 	test_logging_reset();
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_cmd
 
 void test_cmd()
 {
@@ -1590,6 +1628,9 @@ void test_cmd()
 	test_logging_reset();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_rng
+
 void test_rng()
 {
 	struct rjd_rng rng = rjd_rng_init(0xF7A290B49);
@@ -1609,6 +1650,9 @@ void test_rng()
 	expect_int64(11675382715271363104ull, rjd_rng_next(&rng));
 	expect_int64(15127709716525989220ull, rjd_rng_next(&rng));
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_dict
 
 void test_dict()
 {
@@ -1660,6 +1704,9 @@ void test_dict()
 	expect_no_leaks(&allocator);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_fio
+
 void expect_fio_ok(bool expected_ok, struct rjd_result actual)
 {
 	if (expected_ok != rjd_result_isok(actual)) {
@@ -1692,6 +1739,7 @@ void test_fio()
 	result = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_REPLACE);
 	expect_fio_ok(true, result);
 	result = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_APPEND);
+    expect_fio_ok(true, result);
 	char* buffer2;
 	result = rjd_fio_read("test2.txt", &buffer2, &allocator);
 	expect_fio_ok(true, result);
@@ -1730,6 +1778,9 @@ void test_fio()
 
 	expect_no_leaks(&allocator);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_thread
 
 enum test_thread_stage
 {
@@ -1934,6 +1985,9 @@ void test_thread()
 	expect_no_leaks(&allocator);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_atomic
+
 enum test_atomic_type
 {
 	test_atomic_type_int64,
@@ -2055,8 +2109,10 @@ void test_atomic()
 	ATOMIC_TEST(uint8)
 
 	#undef ATOMIC_TEST
-
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_strpool
 
 void test_strpool()
 {
@@ -2072,8 +2128,8 @@ void test_strpool()
 
 	struct rjd_strref* ref1 = rjd_strpool_add(&pool, test1);
 	struct rjd_strref* ref2 = rjd_strpool_add(&pool, test2);
-	struct rjd_strref* ref3 = rjd_strpool_add(&pool, test3);
-	struct rjd_strref* ref4 = rjd_strpool_add(&pool, "forma%d %de%d%d",7,7,5,7);
+	struct rjd_strref* ref3 = rjd_strpool_addf(&pool, test3);
+	struct rjd_strref* ref4 = rjd_strpool_addf(&pool, "forma%d %de%d%d",7,7,5,7);
 	struct rjd_strref* ref5 = rjd_strpool_addl(&pool, "substring test", strlen(test5));
 
 	expect_true(ref1 == rjd_strpool_add(&pool, test1));
@@ -2110,6 +2166,9 @@ void test_strpool()
 
 	expect_no_leaks(&allocator);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_slotmap
 
 void test_slotmap(void)
 {
@@ -2169,6 +2228,9 @@ void test_slotmap(void)
 
 	expect_no_leaks(&allocator);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_utf8
 
 void test_utf8(void)
 {
@@ -2257,6 +2319,9 @@ void test_utf8(void)
 	}
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_path
+
 void test_path(void)
 {
 	// path operations
@@ -2318,6 +2383,9 @@ void test_path(void)
 	expect_str(".txt", rjd_path_extension_str("some\\path\\some_file.txt"));
 	expect_str(".txt", rjd_path_extension_str("some\\path\\some.long.extension.txt"));
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_stream
 
 void test_stream()
 {
@@ -2453,6 +2521,9 @@ void test_stream()
 	expect_no_leaks(&allocator);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_binrw
+
 struct test
 {
 	int64_t i64;
@@ -2535,6 +2606,9 @@ void test_binrw()
 	expect_int32(0, memcmp(&expected_max, &actual_max, sizeof(actual_max)));
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_strhash
+
 void test_strhash()
 {
 	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
@@ -2583,7 +2657,8 @@ void test_strhash()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// resource test data and functions
+// rjd_resource
+
 struct test_material
 {
 	struct rjd_resource_handle shader;
@@ -2732,9 +2807,6 @@ void test_texture_unload(struct rjd_resource_unload_params* params)
 	struct did_call_load_stages* did_call_stages = (struct did_call_load_stages*)params->userdata;
 	did_call_stages->unload = true;
 }
-
-// 
-////////////////////////////////////////////////////////////////////////////////
 
 void test_resource()
 {
@@ -3061,7 +3133,294 @@ void test_resource()
 	expect_no_leaks(&allocator);
 }
 
-int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void) 
+////////////////////////////////////////////////////////////////////////////////
+// rjd_window
+
+struct test_window_data
+{
+    struct rjd_window window;
+	bool init;
+	uint32_t update_count;
+	bool close;
+	bool env_close;
+};
+
+void test_window_init(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	RJD_UNUSED_PARAM(window);
+
+	struct test_window_data* data = env->userdata;
+	data->init = true;
+}
+
+bool test_window_update(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	RJD_UNUSED_PARAM(window);
+
+	struct test_window_data* data = env->userdata;
+	++data->update_count;
+
+    return data->update_count < 100;
+}
+
+void test_window_close(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	RJD_UNUSED_PARAM(window);
+
+	struct test_window_data* data = env->userdata;
+	data->close = true;
+}
+
+void test_window_env_entrypoint(const struct rjd_window_environment* env)
+{
+    struct rjd_window_desc window_desc = {
+        .title = "test_window",
+        .requested_size = {
+            .width = 320,
+            .height = 240,
+        },
+        .env = *env,
+		.init_func = test_window_init,
+		.update_func = test_window_update,
+        .close_func = test_window_close,
+    };
+
+    struct test_window_data* test_data = env->userdata;
+
+    struct rjd_result result = rjd_window_create(&test_data->window, window_desc);
+    expect_result_ok(result);
+
+	rjd_window_runloop(&test_data->window);
+}
+
+void test_window_env_exit(const struct rjd_window_environment* env)
+{
+	struct test_window_data* test_data = env->userdata;
+	expect_true(test_data->close);
+	expect_false(test_data->env_close);
+	test_data->env_close = true;
+}
+
+void test_window(void)
+{
+	struct test_window_data data = {0};
+
+	struct rjd_window_environment env = {
+		.userdata = &data,
+	};
+
+	#if RJD_PLATFORM_WINDOWS
+		env.win32.hinstance = GetModuleHandle(NULL);
+	#endif
+
+	rjd_window_enter_windowed_environment(env, test_window_env_entrypoint, test_window_env_exit);
+	expect_true(data.init);
+	expect_uint32(100, data.update_count);
+	expect_true(data.close);
+	expect_true(data.env_close);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// rjd_input
+
+struct test_input_data
+{
+	struct rjd_mem_allocator* allocator;
+    struct rjd_window window;
+	struct rjd_input input;
+};
+
+void test_input_init(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	struct test_input_data* data = env->userdata;
+
+	rjd_input_create(&data->input, data->allocator);
+
+	struct rjd_result result = rjd_input_hook(&data->input, window, env);
+	expect_result_ok(result);
+}
+
+bool test_input_update(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	RJD_UNUSED_PARAM(window);
+
+	struct test_input_data* data = env->userdata;
+
+	{
+		struct rjd_input_sim_event event_key = {
+			.type = RJD_INPUT_SIM_TYPE_KEYBOARD,
+		};
+		
+		event_key.keyboard.is_down = true;
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_ARROW_LEFT;
+		rjd_input_simulate(&data->input, event_key);
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e';
+		rjd_input_simulate(&data->input, event_key);
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_SHIFT_LEFT;
+		rjd_input_simulate(&data->input, event_key);
+
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+
+		rjd_input_markframe(&data->input);
+
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_true(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+
+		rjd_input_markframe(&data->input);
+
+		event_key.keyboard.is_down = false;
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_ARROW_LEFT;
+		rjd_input_simulate(&data->input, event_key);
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e';
+		rjd_input_simulate(&data->input, event_key);
+		event_key.keyboard.key = RJD_INPUT_KEYBOARD_SHIFT_LEFT;
+		rjd_input_simulate(&data->input, event_key);
+
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_true(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+
+		rjd_input_markframe(&data->input);
+
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_false(rjd_input_keyboard_now(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ARROW_LEFT));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e'));
+		expect_false(rjd_input_keyboard_prev(&data->input, RJD_INPUT_KEYBOARD_SHIFT_LEFT));
+	}
+
+	{
+		struct rjd_input_sim_event event_mouse = {
+			.type = RJD_INPUT_SIM_TYPE_MOUSE,
+		};
+
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_BUTTON_LEFT;
+		event_mouse.mouse.value = 1.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y;
+		event_mouse.mouse.value = 5.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_X;
+		event_mouse.mouse.value = 8.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+
+		expect_float(1.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(5.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+		expect_float(8.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_X));
+		expect_float(0.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(0.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+		expect_float(0.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_X));
+
+		rjd_input_markframe(&data->input);
+
+		expect_float(1.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(0.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));  // reset every frame
+		expect_float(8.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_X));
+		expect_float(1.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(5.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+		expect_float(8.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_X));
+
+		rjd_input_markframe(&data->input);
+
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_BUTTON_LEFT;
+		event_mouse.mouse.value = 0.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y;
+        event_mouse.mouse.value = 3.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+		event_mouse.mouse.button = RJD_INPUT_MOUSE_X;
+        event_mouse.mouse.value = 1.0f;
+		rjd_input_simulate(&data->input, event_mouse);
+
+		expect_float(0.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+        expect_float(3.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+        expect_float(1.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_X));
+		expect_float(1.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(0.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+		expect_float(8.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_X));
+
+		rjd_input_markframe(&data->input);
+
+		expect_float(0.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+		expect_float(0.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+        expect_float(1.0f, rjd_input_mouse_now(&data->input, RJD_INPUT_MOUSE_X));
+		expect_float(0.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_BUTTON_LEFT));
+        expect_float(3.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y));
+        expect_float(1.0f, rjd_input_mouse_prev(&data->input, RJD_INPUT_MOUSE_X));
+	}
+
+    return false;
+}
+
+void test_input_close(struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	RJD_UNUSED_PARAM(window);
+
+	struct test_input_data* data = env->userdata;
+
+	rjd_input_destroy(&data->input);
+}
+
+void test_input_entrypoint(const struct rjd_window_environment* env)
+{
+    struct rjd_window_desc window_desc = {
+        .title = "test_window_for_input",
+        .requested_size = {
+            .width = 320,
+            .height = 240,
+        },
+        .env = *env,
+        .init_func = test_input_init,
+		.update_func = test_input_update,
+        .close_func = test_input_close,
+    };
+
+    struct test_input_data* test_data = env->userdata;
+
+    struct rjd_result result = rjd_window_create(&test_data->window, window_desc);
+    expect_result_ok(result);
+
+	rjd_window_runloop(&test_data->window);
+}
+
+void test_input(void)
+{
+	struct rjd_mem_allocator allocator = rjd_mem_allocator_init_default();
+
+	struct test_input_data data = {
+		.allocator = &allocator,
+	};
+
+	struct rjd_window_environment env = {
+		.userdata = &data,
+	};
+
+	#if RJD_PLATFORM_WINDOWS
+		env.win32.hinstance = GetModuleHandle(NULL);
+	#endif
+
+	rjd_window_enter_windowed_environment(env, test_input_entrypoint, NULL);
+
+	expect_no_leaks(&allocator);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// entrypoint
+
+int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 {
 	test_logging();
 	test_result();
@@ -3088,6 +3447,9 @@ int RJD_COMPILER_MSVC_ONLY(__cdecl) main(void)
 	test_binrw();
 	test_strhash();
 	test_resource();
+	test_window();
+	test_input();
 
 	return 0;
 }
+

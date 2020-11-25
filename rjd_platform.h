@@ -108,8 +108,7 @@
 	#define WIN32_EXTRA_LEAN
 	#define NOMINMAX
 	#include <windows.h>
-	#undef near
-	#undef far
+	#include <combaseapi.h>
 #endif // RJD_PLATFORM_WINDOWS
 #endif // RJD_IMPL
 

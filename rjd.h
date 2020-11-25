@@ -134,8 +134,7 @@
 	#define WIN32_EXTRA_LEAN
 	#define NOMINMAX
 	#include <windows.h>
-	#undef near
-	#undef far
+	#include <combaseapi.h>
 #endif // RJD_PLATFORM_WINDOWS
 #endif // RJD_IMPL
 
@@ -2862,11 +2861,11 @@ static inline rjd_math_vec3 rjd_math_mat4_mulv3(rjd_math_mat4 m, rjd_math_vec3 v
 static inline rjd_math_vec4 rjd_math_mat4_mulv4(rjd_math_mat4 m, rjd_math_vec4 v);
 static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m);
 static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m);
-static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float right, float top, float bot, float near, float far);
-static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far);
-static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near, float far);
-static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far);
-static inline rjd_math_mat4 rjd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near, float far);
+static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float right, float top, float bot, float near_plane, float far_plane);
+static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near_plane, float far_plane);
+static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near_plane, float far_plane);
+static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near_plane, float far_plane);
+static inline rjd_math_mat4 rjd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near_plane, float far_plane);
 static inline rjd_math_mat4 rjd_math_mat4_lookat_righthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
 static inline rjd_math_mat4 rjd_math_mat4_lookat_lefthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up);
 static inline float*		rjd_math_mat4_write_colmajor(rjd_math_mat4 m, float* out);
@@ -3538,46 +3537,52 @@ static inline rjd_math_mat4 rjd_math_mat4_transpose(rjd_math_mat4 m) {
 	_MM_TRANSPOSE4_PS(m.m[0].v, m.m[1].v, m.m[2].v, m.m[3].v);
 	return m;
 }
-static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float right, float top, float bot, float near, float far) {
+static inline rjd_math_mat4 rjd_math_mat4_frustum_righthanded(float left, float right, float top, float bot, float near_plane, float far_plane) {
+	float np = near_plane;
+	float fp = far_plane;
+
 	rjd_math_mat4 m = {0};
-	m.m[0] = rjd_math_vec4_xyzw(2*near/(right-left),		0,						0,						0);
-	m.m[1] = rjd_math_vec4_xyzw(0,							2*near/(top-bot),		0,						0);
-	m.m[2] = rjd_math_vec4_xyzw((right+left)/(right-left),	(top+bot)/(top-bot),	-(far+near)/(far-near), -1);
-	m.m[3] = rjd_math_vec4_xyzw(0,							0,						-2*far*near/(far-near),	0);
+	m.m[0] = rjd_math_vec4_xyzw(2*np/(right-left),			0,						0,					0);
+	m.m[1] = rjd_math_vec4_xyzw(0,							2*np/(top-bot),			0,					0);
+	m.m[2] = rjd_math_vec4_xyzw((right+left)/(right-left),	(top+bot)/(top-bot),	-(fp+np)/(fp-np), 	-1);
+	m.m[3] = rjd_math_vec4_xyzw(0,							0,						-2*fp*np/(fp-np),	0);
 	return m;;
 }
-static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near, float far) {
+static inline rjd_math_mat4 rjd_math_mat4_ortho_righthanded(float left, float right, float top, float bot, float near_plane, float far_plane) {
+	float np = near_plane;
+	float fp = far_plane;
+
 	rjd_math_mat4 m;
-	m.m[0] = rjd_math_vec4_xyzw(           2/(right-left),                   0,               0, 0);
-	m.m[1] = rjd_math_vec4_xyzw(                        0,         2/(top-bot),               0, 0);
-	m.m[2] = rjd_math_vec4_xyzw(                        0,                   0,    1/(near-far), 0);
-	m.m[3] = rjd_math_vec4_xyzw((left+right)/(left-right), (top+bot)/(bot-top), near/(near-far), 1);
+	m.m[0] = rjd_math_vec4_xyzw(           2/(right-left),                   0,                0, 0);
+	m.m[1] = rjd_math_vec4_xyzw(                        0,         2/(top-bot),                0, 0);
+	m.m[2] = rjd_math_vec4_xyzw(                        0,                   0,    1/(np-fp),  0);
+	m.m[3] = rjd_math_vec4_xyzw((left+right)/(left-right), (top+bot)/(bot-top),	   np/(np-fp), 1);
 	return m;
 }
-static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near, float far) {
+static inline rjd_math_mat4 rjd_math_mat4_ortho_lefthanded(float left, float right, float top, float bot, float near_plane, float far_plane) {
 	RJD_ASSERTFAIL("not implemented");
 	RJD_UNUSED_PARAM(left);
 	RJD_UNUSED_PARAM(right);
 	RJD_UNUSED_PARAM(top);
 	RJD_UNUSED_PARAM(bot);
-	RJD_UNUSED_PARAM(near);
-	RJD_UNUSED_PARAM(far);
+	RJD_UNUSED_PARAM(near_plane);
+	RJD_UNUSED_PARAM(far_plane);
 	return rjd_math_mat4_identity();
 }
-static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near, float far) {
-    float scale = tanf(y_fov * 0.5f * RJD_MATH_PI / 180.0f) * near; 
+static inline rjd_math_mat4 rjd_math_mat4_perspective_righthanded(float y_fov, float aspect, float near_plane, float far_plane) {
+    float scale = tanf(y_fov * 0.5f * RJD_MATH_PI / 180.0f) * near_plane; 
     float right = aspect * scale;
 	float left = -right; 
 	float top = scale;
 	float bot = -top;
-	return rjd_math_mat4_frustum_righthanded(left, right, top, bot, near, far);
+	return rjd_math_mat4_frustum_righthanded(left, right, top, bot, near_plane, far_plane);
 }
-static inline rjd_math_mat4 rjd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near, float far) {
+static inline rjd_math_mat4 rjd_math_mat4_perspective_lefthanded(float y_fov, float aspect, float near_plane, float far_plane) {
 	RJD_ASSERTFAIL("not implemented");
 	RJD_UNUSED_PARAM(y_fov);
 	RJD_UNUSED_PARAM(aspect);
-	RJD_UNUSED_PARAM(near);
-	RJD_UNUSED_PARAM(far);
+	RJD_UNUSED_PARAM(near_plane);
+	RJD_UNUSED_PARAM(far_plane);
 	return rjd_math_mat4_identity();
 }
 static inline rjd_math_mat4 rjd_math_mat4_lookat_righthanded(rjd_math_vec3 eye, rjd_math_vec3 target, rjd_math_vec3 up) {
@@ -6587,7 +6592,6 @@ static void* rjd_thread_entrypoint_osx(void* params_untyped)
 ////////////////////////////////////////////////////////////////////////////////
 
 #pragma once
-
 #define RJD_STRPOOL_H 1
 
 struct rjd_strpool
@@ -6599,9 +6603,10 @@ struct rjd_strref;
 
 struct rjd_strpool rjd_strpool_init(struct rjd_mem_allocator* allocator, size_t initial_capacity);
 void rjd_strpool_free(struct rjd_strpool* pool);
-struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* fmt, ...);
+struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* str);
+struct rjd_strref* rjd_strpool_addf(struct rjd_strpool* pool, const char* fmt, ...);
 struct rjd_strref* rjd_strpool_addv(struct rjd_strpool* pool, const char* fmt, va_list args); 
-struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* str, size_t length);
+struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* inline_string, size_t length); // for non-null-terminated strings
 void rjd_strref_release(struct rjd_strref* ref);
 const char* rjd_strref_str(const struct rjd_strref* ref);
 uint32_t rjd_strref_length(const struct rjd_strref* ref);
@@ -6612,7 +6617,7 @@ struct rjd_strref
 {
 	const char* str;
 	struct rjd_strpool* owner;
-	int32_t refcount;
+	int32_t refcount; // TODO atomic
 	uint32_t length;
 };
 
@@ -6640,7 +6645,14 @@ void rjd_strpool_free(struct rjd_strpool* pool)
 	rjd_dict_free(&pool->storage);
 }
 
-struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* format, ...)
+struct rjd_strref* rjd_strpool_add(struct rjd_strpool* pool, const char* str)
+{
+	RJD_ASSERT(pool);
+
+	return rjd_strpool_addimpl(pool, str);
+}
+
+struct rjd_strref* rjd_strpool_addf(struct rjd_strpool* pool, const char* format, ...)
 {
 	RJD_ASSERT(pool);
 	RJD_ASSERT(format);
@@ -6670,15 +6682,15 @@ struct rjd_strref* rjd_strpool_addv(struct rjd_strpool* pool, const char* format
 	return ref;
 }
 
-struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* format, size_t length)
+struct rjd_strref* rjd_strpool_addl(struct rjd_strpool* pool, const char* inline_string, size_t length)
 {
 	RJD_ASSERT(pool);
-	RJD_ASSERT(format);
+	RJD_ASSERT(inline_string);
 
 	struct rjd_strref* ref = NULL;
 
 	RJD_STRBUF_SCOPED(buffer, pool->storage.allocator, {
-		rjd_strbuf_appendl(&buffer, format, (uint32_t)length);
+		rjd_strbuf_appendl(&buffer, inline_string, (uint32_t)length);
 		ref = rjd_strpool_addimpl(pool, rjd_strbuf_str(&buffer));
 	});
 
@@ -6716,7 +6728,10 @@ uint32_t rjd_strref_length(const struct rjd_strref* ref)
 static struct rjd_strref* rjd_strpool_addimpl(struct rjd_strpool* pool, const char* str) 
 {
 	RJD_ASSERT(pool);
-	RJD_ASSERT(str);
+
+	if (!str) {
+		return NULL;
+	}
 
 	struct rjd_hash64 hash = rjd_hash64_data((const uint8_t*)str, -1);
 	struct rjd_strref* ref = rjd_dict_get(&pool->storage, hash);
@@ -8921,7 +8936,7 @@ struct rjd_window_environment;
 
 typedef void rjd_window_environment_init_func(const struct rjd_window_environment* env);
 typedef void rjd_window_on_init_func(struct rjd_window* window, const struct rjd_window_environment* env);
-typedef void rjd_window_on_update_func(struct rjd_window* window, const struct rjd_window_environment* env);
+typedef bool rjd_window_on_update_func(struct rjd_window* window, const struct rjd_window_environment* env);
 typedef void rjd_window_on_close_func(struct rjd_window* window, const struct rjd_window_environment* env);
 
 // Note that we use void* instead of the win32 types HINSTANCE and HWND to avoid taking a dependency 
@@ -8999,9 +9014,10 @@ void rjd_window_close(struct rjd_window* window);
 ////////////////////////////////////////////////////////////////////////////////
 // windows os
 
+static struct rjd_atomic_uint32 global_window_count = {0};
+
 #if RJD_PLATFORM_WINDOWS
 
-static uint32_t global_window_count = 0; // TODO atomic
 
 struct rjd_window_win32
 {
@@ -9021,7 +9037,7 @@ void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rj
 		init_func(&env);
 	}
 
-	while (global_window_count > 0)
+	while (rjd_atomic_uint32_get(&global_window_count) > 0)
 	{
 		// other threads could be running their own window loops, so just wait until
 		// all of them are closed before exiting
@@ -9034,17 +9050,22 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 		desc.title = "";
 	}
 
-	WNDCLASSEX window_class = { 0 };
-	window_class.cbSize = sizeof(WNDCLASSEX);
-	window_class.style = CS_HREDRAW | CS_VREDRAW;
-	window_class.lpfnWndProc = WindowProc;
-	window_class.hInstance = desc.env.win32.hinstance;
-	window_class.lpszClassName = "EngineWindowClass";
-	window_class.hCursor = LoadCursor(NULL, IDC_ARROW);
-	//window_class.hIcon = LoadImage(NULL, IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
-	if (!RegisterClassEx(&window_class))
-	{
-		return RJD_RESULT("Failed to create window class");
+	static bool s_did_register_window_class = false;
+	if (!s_did_register_window_class) {
+		s_did_register_window_class = true;
+
+		WNDCLASSEX window_class = { 0 };
+		window_class.cbSize = sizeof(WNDCLASSEX);
+		window_class.style = CS_HREDRAW | CS_VREDRAW;
+		window_class.lpfnWndProc = WindowProc;
+		window_class.hInstance = desc.env.win32.hinstance;
+		window_class.lpszClassName = "rjd_window_class";
+		window_class.hCursor = LoadCursor(NULL, IDC_ARROW);
+		//window_class.hIcon = LoadImage(NULL, IDI_APPLICATION, IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
+		if (!RegisterClassEx(&window_class))
+		{
+			return RJD_RESULT("Failed to create window class");
+		}
 	}
 
 	const DWORD window_style = WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_SYSMENU;
@@ -9055,7 +9076,7 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 	} 
 
 	HWND hwnd = CreateWindowEx(0,
-		"EngineWindowClass",
+		"rjd_window_class",
 		desc.title,
 		window_style, 
 		1024, 80,
@@ -9081,33 +9102,31 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 
 void rjd_window_runloop(struct rjd_window* window)
 {
-	++global_window_count;
+	rjd_atomic_uint32_inc(&global_window_count);
 
 	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
 	if (window_win32->init_func) {
 		window_win32->init_func(window, &window_win32->env);
 	}
 
+	// TODO support running multiple windows in the same thread?
 	bool running = true;
 	while (running)
 	{
 		MSG msg = {0};
-		while (PeekMessage(&msg, window_win32->hwnd, 0, 0, PM_REMOVE))
+		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
 		{
-			// TODO support running multiple windows in the same thread?
-			if (msg.message == WM_DESTROY)
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+
+			if (msg.message == WM_QUIT)
 			{
 				running = false;
-			}
-			else
-			{
-				TranslateMessage(&msg);
-				DispatchMessage(&msg);
 			}
 		}
 
 		if (running && window_win32->update_func) {
-			window_win32->update_func(window, &window_win32->env);
+			running = window_win32->update_func(window, &window_win32->env);
 		}
 	}
 
@@ -9115,7 +9134,12 @@ void rjd_window_runloop(struct rjd_window* window)
 		window_win32->close_func(window, &window_win32->env);
 	}
 
-	--global_window_count;
+	if (IsWindow(window_win32->hwnd)) {
+		DestroyWindow(window_win32->hwnd);
+	}
+
+
+	rjd_atomic_uint32_dec(&global_window_count);
 }
 
 struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
@@ -9142,7 +9166,7 @@ struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
 void rjd_window_close(struct rjd_window* window)
 {
 	struct rjd_window_win32* window_win32 = (struct rjd_window_win32*)window;
-	DestroyWindow(window_win32->hwnd);
+	PostMessageA(window_win32->hwnd, WM_CLOSE, 0, 0);
 }
 
 void* rjd_window_win32_get_hwnd(const struct rjd_window* window)
@@ -9159,9 +9183,9 @@ LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM 
     const POINT kMinSize = {1, 1};
     switch (msg)
     {
-    //case WM_CLOSE:
-    //    PostQuitMessage(0);
-    //    break;
+	case WM_CLOSE:
+		PostQuitMessage(0);
+		break;
     case WM_GETMINMAXINFO:
         ((MINMAXINFO*)lparam)->ptMinTrackSize = kMinSize;
         break;
@@ -9171,8 +9195,11 @@ LRESULT CALLBACK WindowProc(HWND handle_window, UINT msg, WPARAM wparam, LPARAM 
 	//	//height = HIWORD(lparam);
 	//	//glViewport(0, 0, g_window_size.width, g_window_size.height);
     //    break;
-    }
-    return DefWindowProc(handle_window, msg, wparam, lparam);
+	default:
+		return DefWindowProc(handle_window, msg, wparam, lparam);
+	}
+
+	return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -9201,6 +9228,8 @@ struct rjd_window_osx
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_window) >= sizeof(struct rjd_window_osx));
 
+bool s_is_app_initialized = false;
+
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 @property (retain) NSWindow *window;
 -(instancetype)initWithEnvFunc:(rjd_window_environment_init_func*)func env:(struct rjd_window_environment)env;
@@ -9227,6 +9256,12 @@ void rjd_window_enter_windowed_environment(struct rjd_window_environment env, rj
     NSApplication* app = [NSApplication sharedApplication];
     [app setDelegate:delegate];
 	[app activateIgnoringOtherApps:YES];
+    
+    // The applicationDidFinishLaunching notification isn't sent multiple times. We need to keep track
+    // to ensure the init_func() is called at the appropriate time
+    if (s_is_app_initialized && init_func) {
+        init_func(&env);
+    }
     [app run];
 }
 
@@ -9262,6 +9297,8 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 	RJD_ASSERT(nswindow.canBecomeMainWindow == YES);
     [nswindow makeKeyAndOrderFront:nil];
 
+	rjd_atomic_uint32_inc(&global_window_count);
+
     struct rjd_window_osx* window_osx = (struct rjd_window_osx*)out;
     window_osx->nswindow = nswindow;
     window_osx->init_func = desc.init_func;
@@ -9291,6 +9328,13 @@ struct rjd_window_size rjd_window_size_get(const struct rjd_window* window)
 		.height = size.height,
 	};
 	return windowsize;
+}
+
+void rjd_window_close(struct rjd_window* window)
+{
+	const struct rjd_window_osx* window_osx = (const struct rjd_window_osx*)window;
+	[window_osx->nswindow close];
+	rjd_atomic_uint32_dec(&global_window_count);
 }
 
 MTKView* rjd_window_osx_get_mtkview(const struct rjd_window* window)
@@ -9332,6 +9376,8 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
     NSMenu* menu = [[NSMenu alloc] initWithTitle:@"TestMenu"];
     [menu addItem:testItem];
     NSApplication.sharedApplication.mainMenu = menu;
+    
+    s_is_app_initialized = true;
 
 	if (self->init_func) {
 		self->init_func(&self->env);
@@ -9341,8 +9387,21 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 -(BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender
 {
 	RJD_UNUSED_PARAM(sender);
+    
+	// The NSApplication event loop will only check the stop flag *after* it handles an event.
+    [sender stop:nil];
+	NSEvent* force_handler_event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                  location:NSZeroPoint
+             modifierFlags:0
+                 timestamp:0
+              windowNumber:0
+                   context:nil
+                   subtype:0
+                     data1:0
+                     data2:0];
+    [NSApp postEvent:force_handler_event atStart:TRUE];
 
-    return YES;
+    return NO;
 }
 
 @end
@@ -9431,7 +9490,9 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 
     struct rjd_window_osx* window_osx = (struct rjd_window_osx*)self->window;
 	if (window_osx->update_func) {
-		window_osx->update_func(self->window, &self->env);
+		if (window_osx->update_func(self->window, &self->env) == false) {
+			rjd_window_close(self->window);
+		}
 	}
 }
 
@@ -9489,10 +9550,15 @@ enum rjd_input_keyboard
 	RJD_INPUT_KEYBOARD_HOME,
 	RJD_INPUT_KEYBOARD_END,
 	RJD_INPUT_KEYBOARD_DELETE,
+	RJD_INPUT_KEYBOARD_BACKSPACE, // TODO OSX
 	RJD_INPUT_KEYBOARD_PAGEUP,
 	RJD_INPUT_KEYBOARD_PAGEDOWN,
     RJD_INPUT_KEYBOARD_RETURN,
 	RJD_INPUT_KEYBOARD_ESCAPE,
+	RJD_INPUT_KEYBOARD_PAUSE, // TODO OSX
+	RJD_INPUT_KEYBOARD_CAPSLOCK, // TODO OSX
+	RJD_INPUT_KEYBOARD_PRINTSCREEN, // TODO OSX
+	RJD_INPUT_KEYBOARD_INSERT, // TODO OSX
 	RJD_INPUT_KEYBOARD_ARROW_LEFT,
 	RJD_INPUT_KEYBOARD_ARROW_RIGHT,
 	RJD_INPUT_KEYBOARD_ARROW_UP,
@@ -9520,10 +9586,36 @@ enum rjd_input_mouse
 	RJD_INPUT_MOUSE_BUTTON_BEGIN, // Add the index of the desired button to this value
 	RJD_INPUT_MOUSE_BUTTON_END = RJD_INPUT_MOUSE_BUTTON_BEGIN + RJD_INPUT_MOUSE_MAX_BUTTONS,
 	RJD_INPUT_MOUSE_COUNT,
+
+	// Convenience values
+	RJD_INPUT_MOUSE_BUTTON_LEFT = RJD_INPUT_MOUSE_BUTTON_BEGIN,
+	RJD_INPUT_MOUSE_BUTTON_RIGHT
 };
 
-extern const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_LEFT;
-extern const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_RIGHT;
+enum rjd_input_sim_type
+{
+	RJD_INPUT_SIM_TYPE_KEYBOARD,
+	RJD_INPUT_SIM_TYPE_MOUSE,
+};
+
+struct rjd_input_sim_event
+{
+	enum rjd_input_sim_type type;
+	union
+	{
+		struct
+		{
+			enum rjd_input_keyboard key;
+			bool is_down;
+		} keyboard;
+
+		struct 
+		{
+			enum rjd_input_mouse button;
+			float value;
+		} mouse;
+	};
+};
 
 // TODO could add support for controllers, joysticks, driving wheels, etc
 // TODO debug record/replay
@@ -9537,11 +9629,13 @@ void rjd_input_markframe(struct rjd_input* input);
 bool rjd_input_keyboard_now(const struct rjd_input* input, enum rjd_input_keyboard code);
 bool rjd_input_keyboard_prev(const struct rjd_input* input, enum rjd_input_keyboard code);
 
-bool rjd_input_mouse_now(const struct rjd_input* input, enum rjd_input_mouse code);
-bool rjd_input_mouse_prev(const struct rjd_input* input, enum rjd_input_mouse code);
+float rjd_input_mouse_now(const struct rjd_input* input, enum rjd_input_mouse code);
+float rjd_input_mouse_prev(const struct rjd_input* input, enum rjd_input_mouse code);
 
 static inline bool rjd_input_keyboard_triggered(const struct rjd_input* input, enum rjd_input_keyboard code); // key was pressed starting this frame
-static inline bool rjd_input_mouse_triggered(const struct rjd_input* input, enum rjd_input_mouse code); // key was pressed starting this frame
+static inline bool rjd_input_mouse_triggered(const struct rjd_input* input, enum rjd_input_mouse code); // button was pressed starting this frame
+
+void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event event);
 
 const char* rjd_input_keyboard_tostring(enum rjd_input_keyboard code);
 
@@ -9560,27 +9654,8 @@ static inline bool rjd_input_mouse_triggered(const struct rjd_input* input, enum
 
 #if RJD_IMPL
 
-const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_LEFT = RJD_INPUT_MOUSE_BUTTON_BEGIN + 0;
-const enum rjd_input_mouse RJD_INPUT_MOUSE_BUTTON_RIGHT = RJD_INPUT_MOUSE_BUTTON_BEGIN + 1;
-
 ////////////////////////////////////////////////////////////////////////////////
-// Local helpers
-
-#if RJD_PLATFORM_WINDOWS
-
-#elif RJD_PLATFORM_OSX
-
-#include <Carbon/Carbon.h>
-
-////////////////////////////////////////////////////////////////////////////////
-// Local helpers
-
-struct rjd_input_osx;
-
-@interface InputResponder : NSResponder
-	@property(readonly) BOOL acceptsFirstResponder;
-	-(instancetype)initWithInput:(struct rjd_input_osx*)_input;
-@end
+// platform-independent impl
 
 struct rjd_input_keyboard_state
 {
@@ -9592,154 +9667,11 @@ struct rjd_input_mouse_state
 	float values[RJD_INPUT_MOUSE_MAX_BUTTONS];
 };
 
-struct rjd_input_osx
+struct rjd_input_common
 {
-	InputResponder* responder;
-	const struct rjd_window* window;
-
-	uint8_t now_index;
 	struct rjd_input_keyboard_state keyboard[2];
 	struct rjd_input_mouse_state mouse[2];
-};
-
-RJD_STATIC_ASSERT(sizeof(struct rjd_input_osx) <= sizeof(struct rjd_input));
-
-////////////////////////////////////////////////////////////////////////////////
-// Local data
-
-const uint8_t RJD_INPUT_KEYCODE_TO_ENUM[] =
-{
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'a',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 's',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'd',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'f',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'h',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'g',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'z',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'x',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'c',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'v',
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'b',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'q',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'w',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'r',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'y',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 't',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '1',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '2',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '3',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '4',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '6',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '5',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '=',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '9',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '7',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '-',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '8',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '0',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ']',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'o',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'u',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '[',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'i',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'p',
-	RJD_INPUT_KEYBOARD_RETURN,
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'l',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'j',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '\'',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'k',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ';',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '\\',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ',',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '/',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'n',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'm',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '.',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '\t',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ' ',
-	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '~',
-	RJD_INPUT_KEYBOARD_DELETE,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_ESCAPE,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT, // command (OSX)
-	RJD_INPUT_KEYBOARD_COUNT, // shift (OSX)
-	RJD_INPUT_KEYBOARD_COUNT, // option (OSX)
-	RJD_INPUT_KEYBOARD_COUNT, // control (OSX)
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT, // numpad .
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT, // numpad *
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT, // numpad +
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT, // numpad /
-	RJD_INPUT_KEYBOARD_COUNT, // numpad enter
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT, // numpad -
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT, // numpad =
-	RJD_INPUT_KEYBOARD_NUMPAD_0,
-	RJD_INPUT_KEYBOARD_NUMPAD_0 + 1,
-	RJD_INPUT_KEYBOARD_NUMPAD_0 + 2,
-	RJD_INPUT_KEYBOARD_NUMPAD_0 + 3,
-	RJD_INPUT_KEYBOARD_NUMPAD_0 + 4,
-	RJD_INPUT_KEYBOARD_NUMPAD_0 + 5,
-	RJD_INPUT_KEYBOARD_NUMPAD_0 + 6,
-	RJD_INPUT_KEYBOARD_NUMPAD_0 + 7,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_NUMPAD_0 + 8,
-	RJD_INPUT_KEYBOARD_NUMPAD_0 + 9,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 5,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 6,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 7,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 3,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 8,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 9,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 10,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 12,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 4,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 2,
-	RJD_INPUT_KEYBOARD_COUNT,
-	RJD_INPUT_KEYBOARD_FUNCTION_0 + 1,
-	RJD_INPUT_KEYBOARD_ARROW_LEFT,
-	RJD_INPUT_KEYBOARD_ARROW_RIGHT,
-	RJD_INPUT_KEYBOARD_ARROW_DOWN,
-	RJD_INPUT_KEYBOARD_ARROW_UP,
-	//RJD_INPUT_KEYBOARD_HOME,
-	//RJD_INPUT_KEYBOARD_END,
-	//RJD_INPUT_KEYBOARD_PAGEUP,
-	//RJD_INPUT_KEYBOARD_PAGEDOWN,
+	uint8_t now_index;
 };
 
 const char* RJD_INPUT_KEYBOARD_STRINGS[] =
@@ -9757,10 +9689,15 @@ const char* RJD_INPUT_KEYBOARD_STRINGS[] =
 	"RJD_INPUT_KEYBOARD_HOME",
 	"RJD_INPUT_KEYBOARD_END",
 	"RJD_INPUT_KEYBOARD_DELETE",
+	"RJD_INPUT_KEYBOARD_BACKSPACE",
 	"RJD_INPUT_KEYBOARD_PAGEUP",
 	"RJD_INPUT_KEYBOARD_PAGEDOWN",
     "RJD_INPUT_KEYBOARD_RETURN",
 	"RJD_INPUT_KEYBOARD_ESCAPE",
+	"RJD_INPUT_KEYBOARD_PAUSE",
+	"RJD_INPUT_KEYBOARD_CAPSLOCK",
+	"RJD_INPUT_KEYBOARD_PRINTSCREEN",
+	"RJD_INPUT_KEYBOARD_INSERT",
 	"RJD_INPUT_KEYBOARD_ARROW_LEFT",
 	"RJD_INPUT_KEYBOARD_ARROW_RIGHT",
 	"RJD_INPUT_KEYBOARD_ARROW_UP",
@@ -9923,6 +9860,770 @@ const char* RJD_INPUT_KEYBOARD_STRINGS[] =
 
 RJD_STATIC_ASSERT(rjd_countof(RJD_INPUT_KEYBOARD_STRINGS) == RJD_INPUT_KEYBOARD_COUNT);
 
+const char* rjd_input_keyboard_tostring(enum rjd_input_keyboard code)
+{
+	if (code < rjd_countof(RJD_INPUT_KEYBOARD_STRINGS)) {
+		return RJD_INPUT_KEYBOARD_STRINGS[code];
+	}
+	return NULL;
+}
+
+void rjd_input_markframe_common(struct rjd_input_common* input)
+{
+	RJD_ASSERT(input);
+
+	uint32_t prev_index = input->now_index;
+	input->now_index = (input->now_index + 1) % 2;
+
+	memcpy(input->keyboard + input->now_index, input->keyboard + prev_index, sizeof(*input->keyboard));
+	memcpy(input->mouse + input->now_index, input->mouse + prev_index, sizeof(*input->mouse));
+
+	struct rjd_input_mouse_state* mouse_now = input->mouse + input->now_index;
+	mouse_now->values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X] = 0;
+	mouse_now->values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y] = 0;
+}
+
+bool rjd_input_keyboard_now_common(const struct rjd_input_common* input, enum rjd_input_keyboard code)
+{
+	RJD_ASSERT(input);
+
+	const struct rjd_input_keyboard_state* state = input->keyboard + input->now_index;
+	RJD_ASSERT(code < rjd_countof(state->values));
+	bool value = state->values[code];
+	return value;
+}
+
+bool rjd_input_keyboard_prev_common(const struct rjd_input_common* input, enum rjd_input_keyboard code)
+{
+	RJD_ASSERT(input);
+
+	uint32_t prev_index = (input->now_index + 1) % 2;
+	const struct rjd_input_keyboard_state* state = input->keyboard + prev_index;
+	RJD_ASSERT(code < rjd_countof(state->values));
+	bool value = state->values[code];
+	return value;
+}
+
+float rjd_input_mouse_now_common(const struct rjd_input_common* input, enum rjd_input_mouse code)
+{
+	RJD_ASSERT(input);
+
+	const struct rjd_input_mouse_state* state = input->mouse + input->now_index;
+	RJD_ASSERT(code < rjd_countof(state->values));
+	float value = state->values[code];
+	return value;
+}
+
+float rjd_input_mouse_prev_common(const struct rjd_input_common* input, enum rjd_input_mouse code)
+{
+	RJD_ASSERT(input);
+
+	uint32_t prev_index = (input->now_index + 1) % 2;
+	const struct rjd_input_mouse_state* state = input->mouse + prev_index;
+	RJD_ASSERT(code < rjd_countof(state->values));
+	float value = state->values[code];
+	return value;
+}
+
+#if RJD_PLATFORM_WINDOWS
+
+#define WIN32_LEAN_AND_MEAN
+#define WIN32_EXTRA_LEAN
+#define NOMINMAX
+#include <windows.h>
+#include <windowsx.h> // GET_X_LPARAM, GET_Y_LPARAM
+
+struct rjd_input_win32
+{
+	const struct rjd_window* window;
+
+	HHOOK hook_handle;
+
+	struct rjd_input_common common;
+};
+RJD_STATIC_ASSERT(sizeof(struct rjd_input_win32) <= sizeof(struct rjd_input));
+
+enum
+{
+	RJD_INPUT_WIN32_WINDOW_PTR_INDEX = GWLP_USERDATA,
+};
+
+LRESULT CALLBACK rjd_input_wndproc_hook(int nCode, WPARAM wParam, LPARAM lParam);
+
+const enum rjd_input_keyboard RJD_INPUT_WIN32_KEYCODE_TO_ENUM[] =
+{
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x00 invalid
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x01 VK_LBUTTON
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x02 VK_RBUTTON
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x03 VK_CANCEL
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x04 VK_MBUTTON
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x05 VK_XBUTTON1
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x06 VK_XBUTTON2
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x07 reserved
+	RJD_INPUT_KEYBOARD_BACKSPACE,			// 0x08 VK_BACK
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '	',	// 0x09 VK_TAB
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x0A undefined
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x0B undefined
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x0C VK_CLEAR
+	RJD_INPUT_KEYBOARD_RETURN,				// 0x0D VK_RETURN
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x0E undefined
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x10 VK_SHIFT (but we use L and R versions)
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x11 VK_CONTROL (but we use L and R versions)
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x12 VK_MENU (alt, but we use L and R versions)
+	RJD_INPUT_KEYBOARD_PAUSE,				// 0x13 VK_PAUSE
+	RJD_INPUT_KEYBOARD_CAPSLOCK,			// 0x14 VK_CAPITAL
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x15 VK_KANA/VK_HANGEUL/VK_HANGUL
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x16 undefined
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x17 VK_JUNJA
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x18 VK_FINAL
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x19 VK_KANJI
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x1A undefined
+	RJD_INPUT_KEYBOARD_ESCAPE,				// 0x1B VK_ESCAPE
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x1C VK_CONVERT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x1D VK_NONCONVERT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x1E VK_ACCEPT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x1F VK_MODECHANGE
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ' ',	// 0x20 VK_SPACE
+	RJD_INPUT_KEYBOARD_PAGEUP,				// 0x21 VK_PRIOR
+	RJD_INPUT_KEYBOARD_PAGEDOWN,			// 0x22 VK_NEXT
+	RJD_INPUT_KEYBOARD_END,					// 0x23 VK_END
+	RJD_INPUT_KEYBOARD_HOME,				// 0x24 VK_HOME
+	RJD_INPUT_KEYBOARD_ARROW_LEFT,			// 0x25 VK_LEFT
+	RJD_INPUT_KEYBOARD_ARROW_UP,			// 0x26 VK_UP
+	RJD_INPUT_KEYBOARD_ARROW_RIGHT,			// 0x27 VK_RIGHT
+	RJD_INPUT_KEYBOARD_ARROW_DOWN,			// 0x28 VK_DOWN
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x29 VK_SELECT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x2A VK_PRINT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x2B VK_EXECUTE
+	RJD_INPUT_KEYBOARD_PRINTSCREEN,			// 0x2C VK_SNAPSHOT
+	RJD_INPUT_KEYBOARD_INSERT,				// 0x2D VK_INSERT
+	RJD_INPUT_KEYBOARD_DELETE,				// 0x2E VK_DELETE
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x2F VK_HELP
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '0',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '1',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '2',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '3',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '4',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '5',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '6',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '7',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '8',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '9',
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x3A
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x3B
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x3C
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x3D
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x3E
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x3F
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x40
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'a',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'b',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'c',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'd',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'f',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'g',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'h',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'i',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'j',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'k',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'l',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'm',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'n',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'o',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'p',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'q',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'r',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 's',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 't',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'u',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'v',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'w',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'x',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'y',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'z',
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x5B VK_LWIN
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x5C VK_RWIN
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x5D VK_APPS
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x5E reserved
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x5F VK_SLEEP
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 0,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 1,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 2,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 3,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 4,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 5,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 6,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 7,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 8,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 9,
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x6A VK_MULTIPLY
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x6B VK_ADD
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x6C VK_SEPARATOR
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x6D VK_SUBTRACT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x6E VK_DECIMAL
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x6F VK_DIVIDE
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 1,		// 0x70 VK_F1
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 2,		// 0x71 VK_F2
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 3,		// 0x72 VK_F3
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 4,		// 0x73 VK_F4
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 5,		// 0x74 VK_F5
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 6,		// 0x75 VK_F6
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 7,		// 0x76 VK_F7
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 8,		// 0x77 VK_F8
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 9,		// 0x78 VK_F9
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 10,		// 0x79 VK_F10
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 11,		// 0x7A VK_F11
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 12,		// 0x7B VK_F12
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 13,		// 0x7C VK_F13
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 14,		// 0x7D VK_F14
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 15,		// 0x7E VK_F15
+
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x88 VK_NAVIGATION_VIEW
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x89 VK_NAVIGATION_MENU
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x8A VK_NAVIGATION_UP
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x8B VK_NAVIGATION_DOWN
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x8C VK_NAVIGATION_LEFT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x8D VK_NAVIGATION_RIGHT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x8E VK_NAVIGATION_ACCEPT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x8F VK_NAVIGATION_CANCEL
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x90 VK_NUMLOCK
+	RJD_INPUT_KEYBOARD_COUNT,				// 0x91 VK_SCROLL
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '=',	// 0x92 VK_OEM_NEC_EQUAL
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x92 VK_OEM_FJ_JISHO
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x93 VK_OEM_FJ_MASSHOU
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x94 VK_OEM_FJ_TOUROKU
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x95 VK_OEM_FJ_LOYA
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x96 VK_OEM_FJ_ROYA
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x97 reserved          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x98 reserved          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x99 reserved          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x9A reserved          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x9B reserved          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x9C reserved          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x9D reserved          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x9E reserved          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0x9F reserved          
+	RJD_INPUT_KEYBOARD_SHIFT_LEFT, 			// 0xA0 VK_LSHIFT         
+	RJD_INPUT_KEYBOARD_SHIFT_RIGHT, 		// 0xA1 VK_RSHIFT         
+	RJD_INPUT_KEYBOARD_CONTROL_LEFT, 		// 0xA2 VK_LCONTROL       
+	RJD_INPUT_KEYBOARD_CONTROL_RIGHT, 		// 0xA3 VK_RCONTROL       
+	RJD_INPUT_KEYBOARD_ALT_LEFT, 			// 0xA4 VK_LMENU          
+	RJD_INPUT_KEYBOARD_ALT_RIGHT, 			// 0xA5 VK_RMENU          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xA6 VK_BROWSER_BACK        
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xA7 VK_BROWSER_FORWARD     
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xA8 VK_BROWSER_REFRESH     
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xA9 VK_BROWSER_STOP        
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xAA VK_BROWSER_SEARCH      
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xAB VK_BROWSER_FAVORITES   
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xAC VK_BROWSER_HOME        
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xAD VK_VOLUME_MUTE         
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xAE VK_VOLUME_DOWN         
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xAF VK_VOLUME_UP           
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xB0 VK_MEDIA_NEXT_TRACK    
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xB1 VK_MEDIA_PREV_TRACK    
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xB2 VK_MEDIA_STOP          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xB3 VK_MEDIA_PLAY_PAUSE    
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xB4 VK_LAUNCH_MAIL         
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xB5 VK_LAUNCH_MEDIA_SELECT 
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xB6 VK_LAUNCH_APP1         
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xB7 VK_LAUNCH_APP2         
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xB8 reserved          
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xB9 reserved          
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ';',	// 0xBA VK_OEM_1        ';:' for US
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '=',	// 0xBB VK_OEM_PLUS     '+' any country
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ',',	// 0xBC VK_OEM_COMMA    ',' any country
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '-',	// 0xBD VK_OEM_MINUS    '-' any country
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '.',	// 0xBE VK_OEM_PERIOD   '.' any country
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '/',	// 0xBF VK_OEM_2        '/?' for US
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xC0 VK_OEM_3  '`~' for US
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ';',	// 0xC1 reserved          
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xC2 reserved          
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xC3 VK_GAMEPAD_A
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xC4 VK_GAMEPAD_B
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xC5 VK_GAMEPAD_X
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xC6 VK_GAMEPAD_Y
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xC7 VK_GAMEPAD_RIGHT_SHOULDER
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xC8 VK_GAMEPAD_LEFT_SHOULDER
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xC9 VK_GAMEPAD_LEFT_TRIGGER
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xCA VK_GAMEPAD_RIGHT_TRIGGER
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xCB VK_GAMEPAD_DPAD_UP
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xCC VK_GAMEPAD_DPAD_DOWN
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xCD VK_GAMEPAD_DPAD_LEFT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xCE VK_GAMEPAD_DPAD_RIGHT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xCF VK_GAMEPAD_MENU
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xD0 VK_GAMEPAD_VIEW
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xD1 VK_GAMEPAD_LEFT_THUMBSTICK_BUTTON
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xD2 VK_GAMEPAD_RIGHT_THUMBSTICK_BUTTON
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xD3 VK_GAMEPAD_LEFT_THUMBSTICK_UP
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xD4 VK_GAMEPAD_LEFT_THUMBSTICK_DOWN
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xD5 VK_GAMEPAD_LEFT_THUMBSTICK_RIGHT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xD6 VK_GAMEPAD_LEFT_THUMBSTICK_LEFT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xD7 VK_GAMEPAD_RIGHT_THUMBSTICK_UP
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xD8 VK_GAMEPAD_RIGHT_THUMBSTICK_DOWN
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xD9 VK_GAMEPAD_RIGHT_THUMBSTICK_RIGHT
+	RJD_INPUT_KEYBOARD_COUNT,				// 0xDA VK_GAMEPAD_RIGHT_THUMBSTICK_LEFT
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '[',	// 0xDB VK_OEM_4  '[{' for US
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '\\',	// 0xDC VK_OEM_5  '\|' for US
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ']',	// 0xDD VK_OEM_6  ']}' for US
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '"',	// 0xDE VK_OEM_7  ''"' for US
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xDF VK_OEM_8
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xE0 reserved
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xE1 VK_OEM_AX
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xE2 VK_OEM_102
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xE3 VK_ICO_HELP
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xE4 VK_ICO_00
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xE5 VK_PROCESSKEY
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xE6 VK_ICO_CLEAR
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xE7 VK_PACKET
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xE9 VK_OEM_RESET
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xEA VK_OEM_JUMP
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xEB VK_OEM_PA1
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xEC VK_OEM_PA2
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xED VK_OEM_PA3
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xEE VK_OEM_WSCTRL
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xEF VK_OEM_CUSEL
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xF0 VK_OEM_ATTN
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xF1 VK_OEM_FINISH
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xF2 VK_OEM_COPY
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xF3 VK_OEM_AUTO
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xF4 VK_OEM_ENLW
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xF5 VK_OEM_BACKTAB
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xF6 VK_ATTN
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xF7 VK_CRSEL
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xF8 VK_EXSEL
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xF9 VK_EREOF
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xFA VK_PLAY
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xFB VK_ZOOM
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xFC VK_NONAME
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xFD VK_PA1
+	RJD_INPUT_KEYBOARD_COUNT, 				// 0xFE VK_OEM_CLEAR
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// public implementation
+
+void rjd_input_create(struct rjd_input* out, struct rjd_mem_allocator* allocator)
+{
+	RJD_UNUSED_PARAM(allocator);
+	memset(out, 0, sizeof(*out));
+}
+
+void rjd_input_destroy(struct rjd_input* input)
+{
+	rjd_input_unhook(input);
+	memset(input, 0, sizeof(*input));
+}
+
+struct rjd_result rjd_input_hook(struct rjd_input* input, const struct rjd_window* window, const struct rjd_window_environment* env)
+{
+	RJD_UNUSED_PARAM(window);
+
+	void* hinstance = env->win32.hinstance;
+	void* hwnd = rjd_window_win32_get_hwnd(window);
+
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
+
+	input_win32->window = window;
+	input_win32->hook_handle = SetWindowsHookExW(WH_CALLWNDPROC, rjd_input_wndproc_hook, hinstance, GetCurrentThreadId());
+	if (input_win32->hook_handle == NULL) {
+		printf("window proc err: %d\n", GetLastError());
+		return RJD_RESULT("Failed to hook window proc. Check GetLastError() for more info.");
+	}
+
+	if (GetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX) != 0) {
+		UnhookWindowsHookEx(input_win32->hook_handle);
+		input_win32->hook_handle = 0;
+
+		return RJD_RESULT("Another system aleady has the slot for RJD_INPUT_WIN32_WINDOW_PTR_INDEX.");
+	}
+
+	SetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX, (LONG_PTR)input);
+
+	return RJD_RESULT_OK();
+}
+
+void rjd_input_unhook(struct rjd_input* input)
+{
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
+	if (input_win32->hook_handle) {
+		void* hwnd = rjd_window_win32_get_hwnd(input_win32->window);
+		SetWindowLongPtrW(hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX, 0);
+		UnhookWindowsHookEx(input_win32->hook_handle);
+	}
+}
+
+void rjd_input_markframe(struct rjd_input* input)
+{
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
+	rjd_input_markframe_common(&input_win32->common);
+}
+
+bool rjd_input_keyboard_now(const struct rjd_input* input, enum rjd_input_keyboard code)
+{
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
+	return rjd_input_keyboard_now_common(&input_win32->common, code);
+}
+
+bool rjd_input_keyboard_prev(const struct rjd_input* input, enum rjd_input_keyboard code)
+{
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
+	return rjd_input_keyboard_prev_common(&input_win32->common, code);
+}
+
+float rjd_input_mouse_now(const struct rjd_input* input, enum rjd_input_mouse code)
+{
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
+	return rjd_input_mouse_now_common(&input_win32->common, code);
+}
+
+float rjd_input_mouse_prev(const struct rjd_input* input, enum rjd_input_mouse code)
+{
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
+	return rjd_input_mouse_prev_common(&input_win32->common, code);
+}
+
+void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event event)
+{
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)input;
+	void* hwnd = rjd_window_win32_get_hwnd(input_win32->window);
+
+	UINT msg = 0;
+	WPARAM wparam = {0};
+	LPARAM lparam = {0};
+
+	switch (event.type)
+	{
+		case RJD_INPUT_SIM_TYPE_KEYBOARD:
+		{
+			msg = event.keyboard.is_down ? WM_KEYDOWN : WM_KEYUP;
+
+			bool found = false;
+			for (uint32_t i = 0; i < rjd_countof(RJD_INPUT_WIN32_KEYCODE_TO_ENUM); ++i) {
+				if (RJD_INPUT_WIN32_KEYCODE_TO_ENUM[i] == event.keyboard.key) {
+					wparam = i;
+					found = true;
+					break;
+				}
+			}
+			RJD_ASSERTMSG(found, "No virtual key lookup found for enum rjd_input_keyboard value %d", event.keyboard.key);
+			break;
+		}
+
+		case RJD_INPUT_SIM_TYPE_MOUSE:
+		{
+			switch (event.mouse.button)
+			{
+				case RJD_INPUT_MOUSE_X:
+				{
+					msg = WM_MOUSEMOVE;
+					int16_t x = (int16_t)event.mouse.value;
+					int16_t y = (int16_t)rjd_input_mouse_now(input, RJD_INPUT_MOUSE_Y);
+					lparam = (y << 16) | (x);
+					break;
+				}
+				case RJD_INPUT_MOUSE_Y:
+				{
+					msg = WM_MOUSEMOVE;
+					int16_t x = (int16_t)rjd_input_mouse_now(input, RJD_INPUT_MOUSE_X);
+					int16_t y = (int16_t)event.mouse.value;
+					lparam = (y << 16) | (x);
+					break;
+				}
+				case RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X:
+				case RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y:
+				{
+					msg = WM_MOUSEWHEEL;
+					wparam = (uint16_t)(event.mouse.value * WHEEL_DELTA) << 16;
+					break;
+				}
+				case RJD_INPUT_MOUSE_BUTTON_LEFT:
+				{
+					msg = (event.mouse.value == 0.0f) ? WM_LBUTTONUP : WM_LBUTTONDOWN;
+					break;
+				}
+				case RJD_INPUT_MOUSE_BUTTON_RIGHT:
+				{
+					msg = (event.mouse.value == 0.0f) ? WM_LBUTTONUP : WM_LBUTTONDOWN;
+					break;
+				}
+				default:
+				{
+					if (event.mouse.button == RJD_INPUT_MOUSE_BUTTON_BEGIN + 2) {
+						msg = (event.mouse.value == 0.0f) ? WM_MBUTTONUP : WM_MBUTTONDOWN;
+					} else if (event.mouse.button == RJD_INPUT_MOUSE_BUTTON_BEGIN + 3) {
+						msg = (event.mouse.value == 0.0f) ? WM_XBUTTONUP : WM_XBUTTONDOWN;
+						wparam = XBUTTON1 << 16;
+					} else if (event.mouse.button == RJD_INPUT_MOUSE_BUTTON_BEGIN + 4) {
+						msg = (event.mouse.value == 0.0f) ? WM_XBUTTONUP : WM_XBUTTONDOWN;
+						wparam = XBUTTON2 << 16;
+					}
+				}
+			}
+		}
+	}
+
+	SendMessageW(hwnd, msg, wparam, lparam);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+LRESULT CALLBACK rjd_input_wndproc_hook(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	const CWPSTRUCT* msg_info = (const CWPSTRUCT*)lParam;
+
+	struct rjd_input_win32* input_win32 = (struct rjd_input_win32*)GetWindowLongPtrW(msg_info->hwnd, RJD_INPUT_WIN32_WINDOW_PTR_INDEX);
+	if (input_win32 == NULL) {
+		return CallNextHookEx(NULL, nCode, wParam, lParam);
+	};
+
+	const uint32_t now_index = input_win32->common.now_index;
+
+	switch (msg_info->message)
+	{
+		case WM_KEYDOWN:
+		case WM_KEYUP:
+		{
+			// const uint32_t repeat_count = (0xFFFF & msg_info->lParam);
+			const uint32_t scan_code = (0xFF0000 & msg_info->lParam) >> 16;
+			const bool is_extended = (0x01000000 & msg_info->lParam) != 0;
+			const bool is_down = (msg_info->message == WM_KEYDOWN);
+
+			uint32_t virtual_key = (uint32_t)msg_info->wParam;
+			if (msg_info->wParam == VK_SHIFT) {
+				virtual_key = MapVirtualKey(scan_code, MAPVK_VSC_TO_VK_EX);
+			} else if (msg_info->wParam == VK_CONTROL) {
+				virtual_key = is_extended ? VK_RCONTROL : VK_LCONTROL;
+			} else if (msg_info->wParam == VK_MENU) {
+				virtual_key = is_extended ? VK_RMENU : VK_LMENU;
+			}
+
+			if (virtual_key < rjd_countof(RJD_INPUT_WIN32_KEYCODE_TO_ENUM)) {
+				enum rjd_input_keyboard key = RJD_INPUT_WIN32_KEYCODE_TO_ENUM[virtual_key];
+
+				input_win32->common.keyboard[now_index].values[key] = is_down;
+			}
+			break;
+		}
+		case WM_LBUTTONDOWN:
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_LEFT] = 1.0f;
+			break;
+		case WM_LBUTTONUP:
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_LEFT] = 0.0f;
+			break;
+		case WM_RBUTTONDOWN:
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_RIGHT] = 1.0f;
+			break;
+		case WM_RBUTTONUP:
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_RIGHT] = 0.0f;
+			break;
+		case WM_MBUTTONDOWN:
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_BEGIN + 2] = 1.0f;
+			break;
+		case WM_MBUTTONUP:
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_BEGIN + 2] = 0.0f;
+			break;
+		case WM_XBUTTONDOWN:
+		{
+			uint32_t button_index = (((msg_info->wParam & 0xFFFF0000) >> 16) == XBUTTON1) ? 3 : 4;
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_BEGIN + button_index] = 1.0f;
+			break;
+		}
+		case WM_XBUTTONUP:
+		{
+			uint32_t button_index = (((msg_info->wParam & 0xFFFF0000) >> 16) == XBUTTON1) ? 3 : 4;
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_BUTTON_BEGIN + button_index] = 0.0f;
+			break;
+		}
+		case WM_MOUSEWHEEL:
+		{
+			float delta = (float)GET_WHEEL_DELTA_WPARAM(msg_info->wParam) / WHEEL_DELTA;
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y] = delta;
+			break;
+		}
+		case WM_MOUSEHWHEEL:
+		{
+			float delta = (float)GET_WHEEL_DELTA_WPARAM(msg_info->wParam) / WHEEL_DELTA;
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X] = delta;
+			break;
+		}
+		case WM_MOUSEMOVE:
+		{
+			float x = (float)GET_X_LPARAM(msg_info->lParam);
+			float y = (float)GET_Y_LPARAM(msg_info->lParam);
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_X] = x;
+			input_win32->common.mouse[now_index].values[RJD_INPUT_MOUSE_Y] = y;
+			break;
+		}
+	}
+
+	return CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+
+#elif RJD_PLATFORM_OSX
+
+#include <Carbon/Carbon.h>
+
+////////////////////////////////////////////////////////////////////////////////
+// Local helpers
+
+struct rjd_input_osx;
+
+@interface InputResponder : NSResponder
+	@property(readonly) BOOL acceptsFirstResponder;
+	-(instancetype)initWithInput:(struct rjd_input_osx*)_input;
+@end
+
+struct rjd_input_osx
+{
+	InputResponder* responder;
+	const struct rjd_window* window;
+
+	uint8_t now_index;
+	struct rjd_input_keyboard_state keyboard[2];
+	struct rjd_input_mouse_state mouse[2];
+};
+
+RJD_STATIC_ASSERT(sizeof(struct rjd_input_osx) <= sizeof(struct rjd_input));
+
+////////////////////////////////////////////////////////////////////////////////
+// Local data
+
+const uint8_t RJD_INPUT_OSX_KEYCODE_TO_ENUM[] =
+{
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'a',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 's',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'd',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'f',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'h',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'g',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'z',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'x',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'c',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'v',
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'b',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'q',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'w',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'e',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'r',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'y',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 't',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '1',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '2',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '3',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '4',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '6',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '5',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '=',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '9',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '7',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '-',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '8',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '0',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ']',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'o',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'u',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '[',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'i',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'p',
+	RJD_INPUT_KEYBOARD_RETURN,
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'l',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'j',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '\'',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'k',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ';',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '\\',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ',',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '/',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'n',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + 'm',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '.',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '\t',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + ' ',
+	RJD_INPUT_KEYBOARD_ASCII_BEGIN + '~',
+	RJD_INPUT_KEYBOARD_DELETE,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_ESCAPE,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT, // command (OSX)
+	RJD_INPUT_KEYBOARD_COUNT, // shift (OSX)
+	RJD_INPUT_KEYBOARD_COUNT, // option (OSX)
+	RJD_INPUT_KEYBOARD_COUNT, // control (OSX)
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT, // numpad .
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT, // numpad *
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT, // numpad +
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT, // numpad /
+	RJD_INPUT_KEYBOARD_COUNT, // numpad enter
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT, // numpad -
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT, // numpad =
+	RJD_INPUT_KEYBOARD_NUMPAD_0,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 1,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 2,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 3,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 4,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 5,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 6,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 7,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 8,
+	RJD_INPUT_KEYBOARD_NUMPAD_0 + 9,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 5,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 6,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 7,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 3,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 8,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 9,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 10,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 12,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 4,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 2,
+	RJD_INPUT_KEYBOARD_COUNT,
+	RJD_INPUT_KEYBOARD_FUNCTION_0 + 1,
+	RJD_INPUT_KEYBOARD_ARROW_LEFT,
+	RJD_INPUT_KEYBOARD_ARROW_RIGHT,
+	RJD_INPUT_KEYBOARD_ARROW_DOWN,
+	RJD_INPUT_KEYBOARD_ARROW_UP,
+	//RJD_INPUT_KEYBOARD_HOME,
+	//RJD_INPUT_KEYBOARD_END,
+	//RJD_INPUT_KEYBOARD_PAGEUP,
+	//RJD_INPUT_KEYBOARD_PAGEDOWN,
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // Interface implementation
 
@@ -9978,6 +10679,7 @@ struct rjd_result rjd_input_hook(struct rjd_input* input, const struct rjd_windo
 void rjd_input_unhook(struct rjd_input* input)
 {
 	RJD_ASSERT(input);
+
 	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)input;
 
 	NSWindow* nswindow = rjd_window_osx_get_nswindow(input_osx->window);
@@ -9990,70 +10692,205 @@ void rjd_input_unhook(struct rjd_input* input)
 
 void rjd_input_markframe(struct rjd_input* input)
 {
-	RJD_ASSERT(input);
 	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)input;
-
-	uint32_t prev_index = input_osx->now_index;
-	input_osx->now_index = (input_osx->now_index + 1) % 2;
-
-	memcpy(input_osx->keyboard + input_osx->now_index, input_osx->keyboard + prev_index, sizeof(*input_osx->keyboard));
-	memcpy(input_osx->mouse + input_osx->now_index, input_osx->mouse + prev_index, sizeof(*input_osx->mouse));
-
-	struct rjd_input_mouse_state* mouse_now = input_osx->mouse + input_osx->now_index;
-	mouse_now->values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X] = 0;
-	mouse_now->values[RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y] = 0;
+	rjd_input_markframe_common(&input_osx->common);
 }
 
 bool rjd_input_keyboard_now(const struct rjd_input* input, enum rjd_input_keyboard code)
 {
-	RJD_ASSERT(input);
 	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)input;
-
-	struct rjd_input_keyboard_state* state = input_osx->keyboard + input_osx->now_index;
-	RJD_ASSERT(code < rjd_countof(state->values));
-	bool value = state->values[code];
-	return value;
+	return rjd_input_keyboard_now_common(&input_osx->common, code);
 }
 
 bool rjd_input_keyboard_prev(const struct rjd_input* input, enum rjd_input_keyboard code)
 {
-	RJD_ASSERT(input);
 	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)input;
-
-	uint32_t prev_index = (input_osx->now_index + 1) % 2;
-	struct rjd_input_keyboard_state* state = input_osx->keyboard + prev_index;
-	RJD_ASSERT(code < rjd_countof(state->values));
-	bool value = state->values[code];
-	return value;
+	return rjd_input_keyboard_prev_common(&input_osx->common, code);
 }
 
-bool rjd_input_mouse_now(const struct rjd_input* input, enum rjd_input_mouse code)
+float rjd_input_mouse_now(const struct rjd_input* input, enum rjd_input_mouse code)
 {
-	RJD_ASSERT(input);
 	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)input;
-	struct rjd_input_mouse_state* state = input_osx->mouse + input_osx->now_index;
-	RJD_ASSERT(code < rjd_countof(state->values));
-	float value = state->values[code];
-	return value;
+	return rjd_input_mouse_now_common(&input_osx->common, code);
 }
 
-bool rjd_input_mouse_prev(const struct rjd_input* input, enum rjd_input_mouse code)
+float rjd_input_mouse_prev(const struct rjd_input* input, enum rjd_input_mouse code)
 {
-	RJD_ASSERT(input);
 	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)input;
-	uint32_t prev_index = (input_osx->now_index + 1) % 2;
-	struct rjd_input_mouse_state* state = input_osx->mouse + prev_index;
-	RJD_ASSERT(code < rjd_countof(state->values));
-	float value = state->values[code];
-	return value;
+	return rjd_input_mouse_prev_common(&input_osx->common, code);
 }
 
-const char* rjd_input_keyboard_tostring(enum rjd_input_keyboard code)
+
+void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event event)
 {
-	if (code < rjd_countof(RJD_INPUT_KEYBOARD_STRINGS)) {
-		return RJD_INPUT_KEYBOARD_STRINGS[code];
+	RJD_ASSERT(input);
+
+	struct rjd_input_osx* input_osx = (struct rjd_input_osx*)input;
+
+	switch (event.type)
+	{
+		case RJD_INPUT_SIM_TYPE_KEYBOARD:
+		{
+            NSEventModifierFlags modifier_flag = 0;
+			modifier_flag |= rjd_input_keyboard_now(input, RJD_INPUT_KEYBOARD_SHIFT_LEFT)   	? NX_DEVICELSHIFTKEYMASK : 0;
+			modifier_flag |= rjd_input_keyboard_now(input, RJD_INPUT_KEYBOARD_SHIFT_RIGHT)		? NX_DEVICERSHIFTKEYMASK : 0;
+			modifier_flag |= rjd_input_keyboard_now(input, RJD_INPUT_KEYBOARD_CONTROL_LEFT) 	? NX_DEVICELCTLKEYMASK : 0;
+			modifier_flag |= rjd_input_keyboard_now(input, RJD_INPUT_KEYBOARD_CONTROL_RIGHT)	? NX_DEVICERCTLKEYMASK : 0;
+			modifier_flag |= rjd_input_keyboard_now(input, RJD_INPUT_KEYBOARD_OPTION_LEFT)		? NX_DEVICELALTKEYMASK : 0;
+			modifier_flag |= rjd_input_keyboard_now(input, RJD_INPUT_KEYBOARD_OPTION_RIGHT)		? NX_DEVICERALTKEYMASK : 0;
+			modifier_flag |= rjd_input_keyboard_now(input, RJD_INPUT_KEYBOARD_COMMAND_LEFT)		? NX_DEVICELCMDKEYMASK : 0;
+			modifier_flag |= rjd_input_keyboard_now(input, RJD_INPUT_KEYBOARD_COMMAND_RIGHT)	? NX_DEVICERCMDKEYMASK : 0;
+
+			NSEventModifierFlags key_bit = 0;
+            switch (event.keyboard.key)
+            {
+                case RJD_INPUT_KEYBOARD_SHIFT_LEFT:     key_bit = NX_DEVICELSHIFTKEYMASK; break;
+                case RJD_INPUT_KEYBOARD_SHIFT_RIGHT:    key_bit = NX_DEVICERSHIFTKEYMASK; break;
+                case RJD_INPUT_KEYBOARD_CONTROL_LEFT:   key_bit = NX_DEVICELCTLKEYMASK; break;
+                case RJD_INPUT_KEYBOARD_CONTROL_RIGHT:  key_bit = NX_DEVICERCTLKEYMASK; break;
+                case RJD_INPUT_KEYBOARD_OPTION_LEFT:    key_bit = NX_DEVICELALTKEYMASK; break;
+                case RJD_INPUT_KEYBOARD_OPTION_RIGHT:   key_bit = NX_DEVICERALTKEYMASK; break;
+                case RJD_INPUT_KEYBOARD_COMMAND_LEFT:   key_bit = NX_DEVICELCMDKEYMASK; break;
+                case RJD_INPUT_KEYBOARD_COMMAND_RIGHT:  key_bit = NX_DEVICERCMDKEYMASK; break;
+                default: break;
+            }
+
+            if (key_bit) {
+				if (event.keyboard.is_down) {
+					modifier_flag |= key_bit;
+				} else {
+					modifier_flag &= ~(key_bit);
+				}
+
+				NSEvent* nsevent = [NSEvent keyEventWithType:NSEventTypeKeyDown
+					location:NSZeroPoint
+					modifierFlags:modifier_flag
+					timestamp:[NSDate date].timeIntervalSince1970
+					windowNumber:0
+					context:nil
+					characters:@""
+					charactersIgnoringModifiers:@""
+					isARepeat:false
+					keyCode:0];
+                  
+                [input_osx->responder flagsChanged:nsevent];
+            } else {
+                int32_t keycode = -1;
+                for (int32_t i = 0; i < (int32_t)rjd_countof(RJD_INPUT_OSX_KEYCODE_TO_ENUM); ++i) {
+                    if (RJD_INPUT_OSX_KEYCODE_TO_ENUM[i] == event.keyboard.key) {
+                        keycode = i;
+                        break;
+                    }
+                }
+                if (keycode < 0) {
+                    RJD_ASSERT(keycode >= 0);
+                    return;
+                }
+
+                NSEvent* nsevent = [NSEvent keyEventWithType:event.keyboard.is_down ? NSEventTypeKeyDown : NSEventTypeKeyUp
+					location:NSZeroPoint
+					modifierFlags:0
+					timestamp:[NSDate date].timeIntervalSince1970
+					windowNumber:0
+					context:nil
+					characters:@""
+					charactersIgnoringModifiers:@""
+					isARepeat:false
+					keyCode:keycode];
+
+                if (event.keyboard.is_down) {
+                    [input_osx->responder keyDown:nsevent];
+                } else {
+                    [input_osx->responder keyUp:nsevent];
+                }
+            }
+			break;
+		}
+
+		case RJD_INPUT_SIM_TYPE_MOUSE:
+		{
+			switch (event.mouse.button)
+			{
+				case RJD_INPUT_MOUSE_X:
+				case RJD_INPUT_MOUSE_Y:
+				{
+					const MTKView* mtkview = rjd_window_osx_get_mtkview(input_osx->window);
+					const NSPoint origin_in_window = {0,0};
+					const NSPoint origin_in_view = [mtkview convertPoint:origin_in_window fromView:nil];
+
+					NSPoint xy = {
+						.x = rjd_input_mouse_now(input, RJD_INPUT_MOUSE_X),
+						.y = rjd_input_mouse_now(input, RJD_INPUT_MOUSE_Y),
+					};
+
+					if (event.mouse.button == RJD_INPUT_MOUSE_X) {
+						xy.x = event.mouse.value;
+					} else {
+						xy.y = event.mouse.value;
+					}
+
+					xy.x -= origin_in_view.x;
+					xy.y -= origin_in_view.y;
+
+					NSEvent* nsevent = [NSEvent mouseEventWithType:NSEventTypeMouseMoved
+                       location:xy
+                  modifierFlags:0
+                      timestamp:[NSDate date].timeIntervalSince1970
+                   windowNumber:0
+                        context:nil
+                    eventNumber:0
+                     clickCount:0
+                       pressure:0];
+
+					[input_osx->responder mouseMoved:nsevent];
+					break;
+				}
+
+				case RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X:
+				case RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_Y:
+				{
+					CGWheelCount count_wheels = 2; // range in [1,3] where axes are [Y,X,Z]
+					int32_t dx = 0;
+					int32_t dy = 0;
+					if (event.mouse.button == RJD_INPUT_MOUSE_SCROLLWHEEL_DELTA_X) {
+						dx = event.mouse.value;
+					} else {
+						dy = event.mouse.value;
+					}
+
+					CGEventRef cgevent = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, count_wheels, dy, dx);
+					NSEvent* nsevent = [NSEvent eventWithCGEvent:cgevent];
+					[input_osx->responder scrollWheel:nsevent];
+                    break;
+				}
+
+				case RJD_INPUT_MOUSE_BUTTON_LEFT:
+                {
+					if (event.mouse.value) {
+						[input_osx->responder mouseDown:[[NSEvent alloc] init]];
+					} else {
+						[input_osx->responder mouseUp:[[NSEvent alloc] init]];
+					}
+					break;
+                }
+
+				case RJD_INPUT_MOUSE_BUTTON_RIGHT:
+                {
+					if (event.mouse.value) {
+						[input_osx->responder rightMouseDown:[[NSEvent alloc] init]];
+					} else {
+						[input_osx->responder rightMouseUp:[[NSEvent alloc] init]];
+					}
+					break;
+                }
+
+				default:
+					// The rest of the events are intentionally left unhandled
+					break;
+			}
+			break;
+		}
 	}
-	return NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -10084,16 +10921,16 @@ const char* rjd_input_keyboard_tostring(enum rjd_input_keyboard code)
 
 -(void)keyDown:(NSEvent*)event
 {
-	if (event.keyCode < rjd_countof(RJD_INPUT_KEYCODE_TO_ENUM)) {
-		enum rjd_input_keyboard code = RJD_INPUT_KEYCODE_TO_ENUM[event.keyCode];
+	if (event.keyCode < rjd_countof(RJD_INPUT_OSX_KEYCODE_TO_ENUM)) {
+		enum rjd_input_keyboard code = RJD_INPUT_OSX_KEYCODE_TO_ENUM[event.keyCode];
 		input->keyboard[input->now_index].values[code] = 1;
 	}
 }
 
 -(void)keyUp:(NSEvent*)event
 {
-	if (event.keyCode < rjd_countof(RJD_INPUT_KEYCODE_TO_ENUM)) {
-		enum rjd_input_keyboard code = RJD_INPUT_KEYCODE_TO_ENUM[event.keyCode];
+	if (event.keyCode < rjd_countof(RJD_INPUT_OSX_KEYCODE_TO_ENUM)) {
+		enum rjd_input_keyboard code = RJD_INPUT_OSX_KEYCODE_TO_ENUM[event.keyCode];
 		input->keyboard[input->now_index].values[code] = 0;
 	}
 }
@@ -10167,7 +11004,7 @@ const char* rjd_input_keyboard_tostring(enum rjd_input_keyboard code)
 	struct rjd_window_size size = rjd_window_size_get(input->window);
 	if (x >= 0 && x <= size.width && y >= 0 && y <= size.height) {
 		input->mouse[input->now_index].values[RJD_INPUT_MOUSE_X] = (float)x;
-		input->mouse[input->now_index].values[RJD_INPUT_MOUSE_X] = (float)y;
+		input->mouse[input->now_index].values[RJD_INPUT_MOUSE_Y] = (float)y;
 	}
 }
 
@@ -10322,6 +11159,7 @@ enum rjd_gfx_texture_usage
 
 struct rjd_gfx_texture_desc
 {
+	const char* debug_label;
 	void* data;
     uint32_t data_length;
 	uint32_t pixels_width;
@@ -10329,19 +11167,12 @@ struct rjd_gfx_texture_desc
 	enum rjd_gfx_format format;
 	enum rjd_gfx_texture_access access;
 	enum rjd_gfx_texture_usage usage;
-	const char* debug_label;
 };
 
 struct rjd_gfx_texture
 {
 	struct rjd_slot handle;
 };
-
-//enum rjd_gfx_shader_input_buffer_type_flags
-//{
-//	RJD_GFX_SHADER_INPUT_USAGE_VERTEX = 0x1,
-//	RJD_GFX_SHADER_INPUT_USAGE_FRAGMENT = 0x2,
-//};
 
 // TODO determine if this is a good idea or not
 //struct rjd_gfx_shader_input_slot
@@ -10351,13 +11182,22 @@ struct rjd_gfx_texture
 //	enum rjd_gfx_shader_input_buffer_type_flags type_flags;
 //};
 
-// TODO provide a precompiled path as well, e.g. bool is_compiled
+enum rjd_gfx_shader_type
+{
+	RJD_GFX_SHADER_TYPE_VERTEX,
+	RJD_GFX_SHADER_TYPE_PIXEL,
+};
+
+// TODO provide a precompiled path as well, preferably with a shader_precompiled_desc?
 struct rjd_gfx_shader_desc
 {
+	const char* source_name;
+	const char* function_name;
 	const void* data;
-	//struct rjd_gfx_shader_input_slot* slots;
-
 	uint32_t count_data;
+	enum rjd_gfx_shader_type type;
+
+	//struct rjd_gfx_shader_input_slot* slots;
 	//uint32_t count_slots;
 };
 
@@ -10382,15 +11222,42 @@ enum rjd_gfx_vertex_format_step
 	RJD_GFX_VERTEX_FORMAT_STEP_CONSTANT,
 };
 
+enum rjd_gfx_vertex_semantic
+{
+	RJD_GFX_VERTEX_SEMANTIC_POSITION,
+	RJD_GFX_VERTEX_SEMANTIC_COLOR,
+	RJD_GFX_VERTEX_SEMANTIC_NORMAL,
+	RJD_GFX_VERTEX_SEMANTIC_TEXCOORD,
+	RJD_GFX_VERTEX_SEMANTIC_BINORMAL,
+	RJD_GFX_VERTEX_SEMANTIC_TANGENT,
+	RJD_GFX_VERTEX_SEMANTIC_BLENDINDEX,
+	RJD_GFX_VERTEX_SEMANTIC_BLENDWEIGHT,
+	RJD_GFX_VERTEX_SEMANTIC_COUNT,
+};
+
 struct rjd_gfx_vertex_format_attribute
 {
 	enum rjd_gfx_vertex_format_type type;
 	enum rjd_gfx_vertex_format_step step;
+	enum rjd_gfx_vertex_semantic semantic; // only used for d3d11
 	uint32_t attribute_index;
 	uint32_t buffer_index;
 	uint32_t stride;
     uint32_t step_rate;
 	uint32_t offset;
+};
+
+enum rjd_gfx_winding_order
+{
+	RJD_GFX_WINDING_ORDER_CLOCKWISE,
+	RJD_GFX_WINDING_ORDER_COUNTERCLOCKWISE,
+};
+
+enum rjd_gfx_cull
+{
+	RJD_GFX_CULL_NONE,
+	RJD_GFX_CULL_BACK,
+	RJD_GFX_CULL_FRONT,
 };
 
 enum rjd_gfx_depth_compare
@@ -10409,12 +11276,15 @@ enum rjd_gfx_depth_compare
 struct rjd_gfx_pipeline_state_desc
 {
 	const char* debug_name;
-	struct rjd_gfx_shader shader;
+	struct rjd_gfx_shader shader_vertex;
+	struct rjd_gfx_shader shader_pixel;
 	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_texture depthstencil_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_vertex_format_attribute* vertex_attributes;
 	uint32_t count_vertex_attributes;
 	enum rjd_gfx_depth_compare depth_compare;
+	enum rjd_gfx_cull cull_mode;
+	enum rjd_gfx_winding_order winding_order;
 	// TODO stencil config
 };
 
@@ -10443,7 +11313,7 @@ enum rjd_gfx_mesh_buffer_type
 enum rjd_gfx_mesh_buffer_usage_flags
 {
 	RJD_GFX_MESH_BUFFER_USAGE_VERTEX = 0x1,
-	RJD_GFX_MESH_BUFFER_USAGE_FRAGMENT = 0x2,
+	RJD_GFX_MESH_BUFFER_USAGE_PIXEL = 0x2,
 };
 
 union rjd_gfx_mesh_buffer_common_desc
@@ -10455,23 +11325,19 @@ union rjd_gfx_mesh_buffer_common_desc
 	struct {
 		const void* data;
 		uint32_t length;
+		uint32_t stride;
 	} vertex;
 };
 
-// TODO vertex_buffer isn't a great name, since it can also be inputs to fragment shaders. Maybe just mesh_shader_buffer?
+// TODO vertex_buffer isn't a great name, since it can also be inputs to pixel shaders. Maybe just mesh_buffer?
 struct rjd_gfx_mesh_vertex_buffer_desc
 {
 	enum rjd_gfx_mesh_buffer_type type;
 	union rjd_gfx_mesh_buffer_common_desc common;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
-	uint32_t buffer_index; // TODO maybe this should be name and index? buffer_slot? shader_input_slot?
+	uint32_t buffer_index; // TODO maybe rename to shader_slot?
 };
 
-//struct rjd_gfx_mesh_index_buffer_desc
-//{
-//	union rjd_gfx_mesh_buffer_desc buffer_desc;
-//	enum rjd_gfx_index_type type;
-//};
 // TODO implement the other 2 descs later
 struct rjd_gfx_mesh_vertexed_desc
 {
@@ -10506,31 +11372,19 @@ struct rjd_gfx_mesh
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-// render commands
-
-enum rjd_gfx_winding_order
-{
-	RJD_GFX_WINDING_ORDER_CLOCKWISE,
-	RJD_GFX_WINDING_ORDER_COUNTERCLOCKWISE,
-};
-
-enum rjd_gfx_cull
-{
-	RJD_GFX_CULL_NONE,
-	RJD_GFX_CULL_BACK,
-	RJD_GFX_CULL_FRONT,
-};
+// render command
 
 struct rjd_gfx_pass_begin_desc
 {
+	const char* debug_label;
 	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_format_value clear_color;
 	struct rjd_gfx_format_value clear_depthstencil;
-	const char* debug_label;
 };
 
 struct rjd_gfx_pass_draw_desc
 {
+	const char* debug_label;
 	const struct rjd_gfx_viewport* viewport;
 	const struct rjd_gfx_pipeline_state* pipeline_state;
 	const struct rjd_gfx_mesh* meshes;
@@ -10538,10 +11392,6 @@ struct rjd_gfx_pass_draw_desc
 	const uint32_t* texture_indices; // parallel array with textures
 	uint32_t count_meshes;
 	uint32_t count_textures;
-	enum rjd_gfx_cull cull_mode;
-	enum rjd_gfx_winding_order winding_order;
-
-	const char* debug_label;
 };
 
 struct rjd_gfx_command_buffer
@@ -10552,16 +11402,24 @@ struct rjd_gfx_command_buffer
 ////////////////////////////////////////////////////////////////////////////////
 // gfx context
 
+
+enum RJD_GFX_VSYNC_MODE
+{
+	RJD_GFX_VSYNC_MODE_ON,
+	RJD_GFX_VSYNC_MODE_OFF,
+};
+
 struct rjd_gfx_context_desc
 {
+	struct rjd_mem_allocator* allocator;
 	enum rjd_gfx_format backbuffer_color_format;
 	enum rjd_gfx_format backbuffer_depth_format;
-	struct rjd_mem_allocator* allocator;
-	uint32_t msaa_samples;
+	uint32_t* optional_desired_msaa_samples; // desired samples and fallbacks if unavailable. 1 is the default.
+	uint32_t count_desired_msaa_samples;
 
 	#if RJD_PLATFORM_WINDOWS
 		struct {
-			void* window_handle; // HWND
+			void* hwnd; // HWND
 		} win32;
 	#elif RJD_PLATFORM_OSX
 		struct {
@@ -10572,7 +11430,7 @@ struct rjd_gfx_context_desc
 
 struct rjd_gfx_context
 {
-	char pimpl[128];
+	char pimpl[140];
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -10580,6 +11438,7 @@ struct rjd_gfx_context
 
 // backend
 static inline int32_t rjd_gfx_backend_ismetal(void);
+static inline int32_t rjd_gfx_backend_isd3d11(void);
 
 // context
 // NOTE: all functions that deal with a context are not threadsafe for simplicity. If you are making a multithreaded
@@ -10587,9 +11446,7 @@ static inline int32_t rjd_gfx_backend_ismetal(void);
 struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd_gfx_context_desc desc);
 void rjd_gfx_context_destroy(struct rjd_gfx_context* context);
 
-bool rjd_gfx_msaa_is_count_supported(const struct rjd_gfx_context* context, uint32_t count); // count is usually: 1,2,4, or 8
-void rjd_gfx_msaa_set_count(struct rjd_gfx_context* context, uint32_t count);
-bool rjd_gfx_vsync_try_enable(struct rjd_gfx_context* context);
+struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode);
 struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context);
 struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context);
 
@@ -10606,13 +11463,12 @@ struct rjd_result rjd_gfx_shader_create(struct rjd_gfx_context* context, struct 
 void rjd_gfx_shader_destroy(struct rjd_gfx_context* context, struct rjd_gfx_shader* shader);
 struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context, struct rjd_gfx_pipeline_state* out, struct rjd_gfx_pipeline_state_desc desc);
 void rjd_gfx_pipeline_state_destroy(struct rjd_gfx_context* context, struct rjd_gfx_pipeline_state* pipeline_state);
-struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc, struct rjd_mem_allocator* allocator);
+struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc);
 //struct rjd_result rjd_gfx_mesh_create_indexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_indexed_desc desc);
-struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length);
+struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length);
 void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh);
 
 // format
-struct rjd_gfx_format_value rjd_gfx_format_value_from_u32(enum rjd_gfx_format, uint32_t value);
 uint32_t rjd_gfx_format_bytesize(enum rjd_gfx_format format);
 bool rjd_gfx_format_iscolor(enum rjd_gfx_format format);
 bool rjd_gfx_format_isdepthstencil(enum rjd_gfx_format format);
@@ -10631,6 +11487,11 @@ extern const struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER;
 static inline int32_t rjd_gfx_backend_ismetal(void)
 {
 	return RJD_GFX_BACKEND_METAL;
+}
+
+static inline int32_t rjd_gfx_backend_isd3d11(void)
+{
+	return RJD_GFX_BACKEND_D3D11;
 }
 
 static inline struct rjd_gfx_format_value rjd_gfx_format_make_color_u8_rgba(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
@@ -10671,6 +11532,8 @@ static const struct rjd_logchannel logchannel_error = {
 
 #define RJD_GFX_LOG(...) RJD_LOG_CHANNEL(&logchannel_default, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
 #define RJD_GFX_LOG_ERROR(...) RJD_LOG_CHANNEL(&logchannel_error, RJD_LOG_VERBOSITY_LOW, __VA_ARGS__)
+
+const struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER = {0};
 
 ////////////////////////////////////////////////////////////////////////////////
 // platform-independent format

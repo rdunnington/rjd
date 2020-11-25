@@ -30,20 +30,20 @@ struct rjd_gfx_texture_metal
 struct rjd_gfx_shader_metal
 {
 	id<MTLLibrary> library;
-	id<MTLFunction> vertex;
-	id<MTLFunction> fragment;
+	id<MTLFunction> function;
 };
 
 struct rjd_gfx_pipeline_state_metal
 {
 	id<MTLRenderPipelineState> state_render;
 	id<MTLDepthStencilState> state_depthstencil;
+	enum rjd_gfx_cull cull_mode;
+	enum rjd_gfx_winding_order winding_order;
 };
 
 struct rjd_gfx_mesh_vertex_buffer_metal
 {
 	id<MTLBuffer> buffer;
-	enum rjd_gfx_mesh_buffer_type type;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
 	uint32_t buffer_index;
 	uint32_t offset;
@@ -84,11 +84,11 @@ struct rjd_gfx_context_metal
 	id <MTLCommandQueue> command_queue;
 	MTKMeshBufferAllocator* loader_mesh;
 
+	struct rjd_mem_allocator* allocator;
+
 	dispatch_semaphore_t wait_for_present_counter;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_gfx_context_metal) <= sizeof(struct rjd_gfx_context));
-
-const struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER = {0};
 
 ////////////////////////////////////////////////////////////////////////////////
 // private helpers
@@ -149,6 +149,16 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		view.sampleCount = 1; // users can set this higher later with rjd_gfx_set_msaa_count()
 	}
 
+	NSUInteger count_msaa = 1;
+	for (uint32_t i = 0; desc.optional_desired_msaa_samples && i < desc.count_desired_msaa_samples; ++i) {
+		NSUInteger count = desc.optional_desired_msaa_samples[i];
+		if ([view.device supportsTextureSampleCount:count]) {
+			count_msaa = count;
+			break;
+		}
+	}
+	view.sampleCount = count_msaa;
+
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)out;
     memset(out, 0, sizeof(*out));
 
@@ -162,6 +172,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_metal->device = view.device;
 	context_metal->command_queue = [context_metal->device newCommandQueue];
 	context_metal->loader_mesh = [[MTKMeshBufferAllocator alloc] initWithDevice:context_metal->device];
+    context_metal->allocator = desc.allocator;
 	context_metal->wait_for_present_counter = dispatch_semaphore_create(1);
 
 	return RJD_RESULT_OK();
@@ -245,12 +256,11 @@ void rjd_gfx_msaa_set_count(struct rjd_gfx_context* context, uint32_t count)
 	context_metal->view.sampleCount = count;
 }
 
-bool rjd_gfx_vsync_try_enable(struct rjd_gfx_context* context)
+struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode)
 {
 	RJD_UNUSED_PARAM(context);
-
-	// TODO
-	return false;
+	RJD_UNUSED_PARAM(mode);
+	return RJD_RESULT("unimplemented");
 }
 
 struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out)
@@ -336,8 +346,6 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
     RJD_ASSERT(command->viewport);
     RJD_ASSERT(command->pipeline_state);
     RJD_ASSERT(command->meshes);
-    RJD_ASSERT(command->textures);
-    RJD_ASSERT(command->texture_indices);
 	RJD_ASSERT(rjd_slot_isvalid(cmd_buffer->handle));
 	RJD_ASSERT(rjd_slot_isvalid(command->pipeline_state->handle));
 
@@ -350,8 +358,8 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 
     [encoder pushDebugGroup:[NSString stringWithUTF8String:command->debug_label]];
 
-	const MTLWinding winding_order_metal = rjd_gfx_winding_to_metal(command->winding_order);
-	const MTLCullMode cull_mode_metal = rjd_gfx_cull_to_metal(command->cull_mode);
+	const MTLWinding winding_order_metal = rjd_gfx_winding_to_metal(pipeline_metal->winding_order);
+	const MTLCullMode cull_mode_metal = rjd_gfx_cull_to_metal(pipeline_metal->cull_mode);
 
     [encoder setRenderPipelineState:pipeline_metal->state_render];
     [encoder setDepthStencilState:pipeline_metal->state_depthstencil];
@@ -377,11 +385,12 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 		for (uint32_t i = 0; i < rjd_array_count(mesh_metal->vertex_buffers); ++i) {
 			struct rjd_gfx_mesh_vertex_buffer_metal* buffer = mesh_metal->vertex_buffers + i;
 
-			if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX) {
+			if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX ||
+				buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT) {
 				[encoder setVertexBuffer:buffer->buffer offset:buffer->offset atIndex:buffer->buffer_index];
 			}
 
-			if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_FRAGMENT) {
+			if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
 				[encoder setFragmentBuffer:buffer->buffer offset:buffer->offset atIndex:buffer->buffer_index];
 			}
 		}
@@ -563,21 +572,16 @@ struct rjd_result rjd_gfx_shader_create(struct rjd_gfx_context* context, struct 
 		return RJD_RESULT("Error compiling shaders");
 	}
 
-	id<MTLFunction> vertexFunction = [library newFunctionWithName:@"vertexShader"];
-	id<MTLFunction> fragmentFunction = [library newFunctionWithName:@"fragmentShader"];
+	NSString* function_name = [NSString stringWithUTF8String:desc.function_name];
+	id<MTLFunction> function = [library newFunctionWithName:function_name];
 
-	if (vertexFunction == nil) {
-		return RJD_RESULT("The shader source must have a function named 'vertexShader'");
-	}
-
-	if (fragmentFunction == nil) {
-		return RJD_RESULT("The shader source must have a function named 'fragmentShader'");
+	if (function == nil) {
+		return RJD_RESULT("The shader source did not have the specified function name.");
 	}
 
 	struct rjd_gfx_shader_metal shader_metal = {
 		.library = library,
-		.vertex = vertexFunction,
-		.fragment = fragmentFunction,
+		.function = function,
 	};
     
 	rjd_slotmap_insert(context_metal->slotmap_shaders, shader_metal, &out->handle);
@@ -646,10 +650,14 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
             desc_metal.stencilAttachmentPixelFormat = stencil_format;
         }
 
-		if (rjd_slot_isvalid(desc.shader.handle)) {
-			struct rjd_gfx_shader_metal* shader = rjd_slotmap_get(context_metal->slotmap_shaders, desc.shader.handle);
-    		desc_metal.vertexFunction = shader->vertex;
-    		desc_metal.fragmentFunction = shader->fragment;
+		if (rjd_slot_isvalid(desc.shader_vertex.handle)) {
+			struct rjd_gfx_shader_metal* shader = rjd_slotmap_get(context_metal->slotmap_shaders, desc.shader_vertex.handle);
+    		desc_metal.vertexFunction = shader->function;
+		}
+
+		if (rjd_slot_isvalid(desc.shader_pixel.handle)) {
+			struct rjd_gfx_shader_metal* shader = rjd_slotmap_get(context_metal->slotmap_shaders, desc.shader_pixel.handle);
+    		desc_metal.fragmentFunction = shader->function;
 		}
 
 		// vertex format
@@ -703,6 +711,8 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 	struct rjd_gfx_pipeline_state_metal state = {
 		.state_render = pipeline_state,
 		.state_depthstencil = depth_stencil_state,
+		.cull_mode = desc.cull_mode,
+		.winding_order = desc.winding_order,
 	};
 
 	rjd_slotmap_insert(context_metal->slotmap_pipeline_states, state, &out->handle);
@@ -720,7 +730,7 @@ void rjd_gfx_pipeline_state_destroy(struct rjd_gfx_context* context, struct rjd_
 	rjd_gfx_pipeline_state_destroy_metal(context_metal, pipeline_state->handle);
 }
 
-struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc, struct rjd_mem_allocator* allocator)
+struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc)
 {
 	RJD_ASSERT(out);
 	RJD_ASSERT(context);
@@ -733,24 +743,26 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
 	
-	struct rjd_gfx_mesh_vertex_buffer_metal* mesh_buffers = rjd_array_alloc(struct rjd_gfx_mesh_vertex_buffer_metal, desc.count_buffers, allocator);
+	struct rjd_gfx_mesh_vertex_buffer_metal* mesh_buffers = rjd_array_alloc(struct rjd_gfx_mesh_vertex_buffer_metal, desc.count_buffers, context_metal->allocator);
     rjd_array_resize(mesh_buffers, desc.count_buffers);
 
 	for (uint32_t i = 0; i < desc.count_buffers; ++i) {
 		id<MTLBuffer> buffer = nil;
 		struct rjd_gfx_mesh_vertex_buffer_desc* desc_buffer = desc.buffers + i;
 
-        if (desc_buffer->type == RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS) {
-			NSUInteger length = desc_buffer->common.uniforms.capacity;
+        if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT ||
+			desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
+			NSUInteger length = desc_buffer->common.constant.capacity;
 			buffer = [context_metal->device newBufferWithLength:length options:MTLResourceStorageModeShared];
-		} else if (desc_buffer->type == RJD_GFX_MESH_BUFFER_TYPE_VERTEX) {
+		} else if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX) {
 			const void* bytes = desc_buffer->common.vertex.data;
 			NSUInteger length = desc_buffer->common.vertex.length;
 			buffer = [context_metal->device newBufferWithBytes:bytes length:length options:MTLResourceStorageModeManaged];
             NSRange range = NSMakeRange(0, length);
             [buffer didModifyRange:range];
 		} else {
-			RJD_ASSERTFAIL("Unknown mesh buffer type %d", desc_buffer->type);
+			result = RJD_RESULT("You must specify the usage_flags for each buffer");
+			break;
 		}
 
 	    if (rjd_result_isok(result) && buffer == nil) {
@@ -763,7 +775,6 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
         
         struct rjd_gfx_mesh_vertex_buffer_metal mesh_buffer = {
             .buffer = buffer,
-			.type = desc.buffers[i].type,
             .usage_flags = desc.buffers[i].usage_flags,
             .buffer_index = desc.buffers[i].buffer_index,
             .offset = 0,
@@ -785,11 +796,13 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 	return result;
 }
 
-struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, void* data, uint32_t length)
+struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, const void* data, uint32_t length)
 {
 	RJD_ASSERT(context);
 	RJD_ASSERT(mesh);
 	RJD_ASSERT(rjd_slot_isvalid(mesh->handle));
+
+	RJD_UNUSED_PARAM(cmd_buffer);
 
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
 	struct rjd_gfx_mesh_metal* mesh_metal = rjd_slotmap_get(context_metal->slotmap_meshes, mesh->handle);
@@ -814,12 +827,10 @@ struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rj
 	}
 
 	memcpy((uint8_t*)buffer->buffer.contents + offset, data, length);
-    if (buffer->type == RJD_GFX_MESH_BUFFER_TYPE_VERTEX) {
-        NSRange range = NSMakeRange(offset, length);
-        [buffer->buffer didModifyRange:range];
-    }
+	NSRange range = NSMakeRange(offset, length);
+	[buffer->buffer didModifyRange:range];
 
-	// TODO determine if we should push this responsibility up to the caller when they do draw calls
+	// TODO push this responsibility up to the caller when they do draw calls
 	buffer->offset = offset;
 
 	return RJD_RESULT_OK();
@@ -1076,8 +1087,7 @@ static inline void rjd_gfx_shader_destroy_metal(struct rjd_gfx_context_metal* co
 {
 	struct rjd_gfx_shader_metal* shader_metal = rjd_slotmap_get(context->slotmap_shaders, slot);
 
-	shader_metal->vertex = nil;
-	shader_metal->fragment = nil;
+	shader_metal->function = nil;
 	shader_metal->library = nil;
 
 	rjd_slotmap_erase(context->slotmap_shaders, slot);
