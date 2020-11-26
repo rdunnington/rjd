@@ -1155,9 +1155,12 @@ struct rjd_result rjd_input_hook(struct rjd_input* input, const struct rjd_windo
 		return RJD_RESULT("No window available to hook. Did the window initialize correctly?");
 	}
 
-	MTKView* view = rjd_window_osx_get_mtkview(window);
+	NSView* view = rjd_window_osx_get_mtkview(window);
 	if (view == nil) {
-		return RJD_RESULT("No view available in the window to hook. Did the window initialize correctly?");
+		view = rjd_window_osx_get_basicview(window);
+		if (view == nil) {
+			return RJD_RESULT("No view available in the window to hook. Did the window initialize correctly?");
+		}
 	}
 
 	input_osx->responder = [[InputResponder alloc] initWithInput:input_osx];
@@ -1492,8 +1495,11 @@ void rjd_input_simulate(struct rjd_input* input, struct rjd_input_sim_event even
 
 -(void)mouseMoved:(NSEvent*)event
 {
-	MTKView* mtkview = rjd_window_osx_get_mtkview(input->window);
-	NSPoint locationInView = [mtkview convertPoint:event.locationInWindow fromView:nil];
+	NSView* view = rjd_window_osx_get_mtkview(input->window);
+    if (view == nil) {
+        view = rjd_window_osx_get_basicview(input->window);
+    }
+	NSPoint locationInView = [view convertPoint:event.locationInWindow fromView:nil];
 
 	int x = locationInView.x;
 	int y = locationInView.y;

@@ -44,7 +44,6 @@ struct rjd_gfx_pipeline_state_metal
 struct rjd_gfx_mesh_vertex_buffer_metal
 {
 	id<MTLBuffer> buffer;
-	enum rjd_gfx_mesh_buffer_type type;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
 	uint32_t buffer_index;
 	uint32_t offset;
@@ -386,11 +385,12 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 		for (uint32_t i = 0; i < rjd_array_count(mesh_metal->vertex_buffers); ++i) {
 			struct rjd_gfx_mesh_vertex_buffer_metal* buffer = mesh_metal->vertex_buffers + i;
 
-			if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX) {
+			if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX ||
+				buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT) {
 				[encoder setVertexBuffer:buffer->buffer offset:buffer->offset atIndex:buffer->buffer_index];
 			}
 
-			if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL) {
+			if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
 				[encoder setFragmentBuffer:buffer->buffer offset:buffer->offset atIndex:buffer->buffer_index];
 			}
 		}
@@ -750,17 +750,19 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 		id<MTLBuffer> buffer = nil;
 		struct rjd_gfx_mesh_vertex_buffer_desc* desc_buffer = desc.buffers + i;
 
-        if (desc_buffer->type == RJD_GFX_MESH_BUFFER_TYPE_UNIFORMS) {
-			NSUInteger length = desc_buffer->common.uniforms.capacity;
+        if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT ||
+			desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
+			NSUInteger length = desc_buffer->common.constant.capacity;
 			buffer = [context_metal->device newBufferWithLength:length options:MTLResourceStorageModeShared];
-		} else if (desc_buffer->type == RJD_GFX_MESH_BUFFER_TYPE_VERTEX) {
+		} else if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX) {
 			const void* bytes = desc_buffer->common.vertex.data;
 			NSUInteger length = desc_buffer->common.vertex.length;
 			buffer = [context_metal->device newBufferWithBytes:bytes length:length options:MTLResourceStorageModeManaged];
             NSRange range = NSMakeRange(0, length);
             [buffer didModifyRange:range];
 		} else {
-			RJD_ASSERTFAIL("Unknown mesh buffer type %d", desc_buffer->type);
+			result = RJD_RESULT("You must specify the usage_flags for each buffer");
+			break;
 		}
 
 	    if (rjd_result_isok(result) && buffer == nil) {
@@ -773,7 +775,6 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
         
         struct rjd_gfx_mesh_vertex_buffer_metal mesh_buffer = {
             .buffer = buffer,
-			.type = desc.buffers[i].type,
             .usage_flags = desc.buffers[i].usage_flags,
             .buffer_index = desc.buffers[i].buffer_index,
             .offset = 0,
@@ -826,12 +827,10 @@ struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rj
 	}
 
 	memcpy((uint8_t*)buffer->buffer.contents + offset, data, length);
-    if (buffer->type == RJD_GFX_MESH_BUFFER_TYPE_VERTEX) {
-        NSRange range = NSMakeRange(offset, length);
-        [buffer->buffer didModifyRange:range];
-    }
+	NSRange range = NSMakeRange(offset, length);
+	[buffer->buffer didModifyRange:range];
 
-	// TODO determine if we should push this responsibility up to the caller when they do draw calls
+	// TODO push this responsibility up to the caller when they do draw calls
 	buffer->offset = offset;
 
 	return RJD_RESULT_OK();

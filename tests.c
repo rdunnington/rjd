@@ -1739,6 +1739,7 @@ void test_fio()
 	result = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_REPLACE);
 	expect_fio_ok(true, result);
 	result = rjd_fio_write("test2.txt", expected_contents, sizeof(expected_contents), RJD_FIO_WRITEMODE_APPEND);
+    expect_fio_ok(true, result);
 	char* buffer2;
 	result = rjd_fio_read("test2.txt", &buffer2, &allocator);
 	expect_fio_ok(true, result);
