@@ -351,15 +351,25 @@ struct rjd_gfx_pass_begin_desc
 	struct rjd_gfx_format_value clear_depthstencil;
 };
 
+struct rjd_gfx_pass_draw_constant_buffer_desc
+{
+	uint32_t mesh_index;
+	uint32_t buffer_index;
+	uint32_t offset_bytes;
+	uint32_t range_bytes;
+};
+
 struct rjd_gfx_pass_draw_desc
 {
 	const char* debug_label;
 	const struct rjd_gfx_viewport* viewport;
 	const struct rjd_gfx_pipeline_state* pipeline_state;
 	const struct rjd_gfx_mesh* meshes;
+	const struct rjd_gfx_pass_draw_constant_buffer_desc* constant_buffer_descs;
 	const struct rjd_gfx_texture* textures;
 	const uint32_t* texture_indices; // parallel array with textures
 	uint32_t count_meshes;
+	uint32_t count_constant_descs;
 	uint32_t count_textures;
 };
 

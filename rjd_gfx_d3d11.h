@@ -20,7 +20,7 @@ struct ID3D11ModuleInstance;
 
 #define CINTERFACE
 #define COBJMACROS
-#include <d3d11.h>
+#include <d3d11_1.h>
 #include <dxgi1_6.h>
 #include <dxgidebug.h>
 #include <d3dcompiler.h>
@@ -84,7 +84,7 @@ struct rjd_gfx_mesh_d3d11
 
 struct rjd_gfx_command_buffer_d3d11
 {
-	ID3D11DeviceContext* deferred_context;
+	ID3D11DeviceContext1* deferred_context;
 	ID3D11RenderTargetView* render_target;
 };
 
@@ -92,7 +92,7 @@ struct rjd_gfx_context_d3d11
 {
 	IDXGIFactory4* factory;
 	IDXGIAdapter1* adapter;
-	ID3D11Device* device;
+	ID3D11Device1* device;
 	ID3D11DeviceContext* context;
 	IDXGISwapChain1* swapchain;
 
@@ -102,7 +102,7 @@ struct rjd_gfx_context_d3d11
 	struct rjd_gfx_mesh_d3d11* slotmap_meshes;
 	struct rjd_gfx_command_buffer_d3d11* slotmap_command_buffers;
 
-	ID3D11DeviceContext** free_deferred_contexts;
+	ID3D11DeviceContext1** free_deferred_contexts;
 
 	struct rjd_mem_allocator* allocator;
 	struct rjd_strpool debug_names;
@@ -177,7 +177,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	//	IDXGIAdapter1_QueryInterface(adapter_extended, &IID_IDXGIAdapter, &adapter);
 	//}
 
-	ID3D11Device* device = NULL;
+	ID3D11Device1* device = NULL;
 	ID3D11DeviceContext* context = NULL;
 	{
 		const UINT flags =
@@ -186,12 +186,10 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 			0;
 
 		const D3D_FEATURE_LEVEL feature_levels[] = {
-			// D3D_FEATURE_LEVEL_11_1,
-			D3D_FEATURE_LEVEL_11_0,
-			//D3D_FEATURE_LEVEL_10_1,
-			//D3D_FEATURE_LEVEL_10_0,
+			D3D_FEATURE_LEVEL_11_1,
 		};
 
+		ID3D11Device* device_11_0 = NULL;
 		const HRESULT hr_device = D3D11CreateDevice(
 			//(IDXGIAdapter*)adapter, // TODO verify this cast is legit
 			NULL, // TODO replace this with the specified adapter
@@ -201,7 +199,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 			feature_levels,
 			rjd_countof(feature_levels),
 			D3D11_SDK_VERSION,
-			&device,
+			&device_11_0,
 			NULL,
 			&context);
 
@@ -218,6 +216,12 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 			else {
 				return rjd_gfx_translate_hresult(hr_device);
 			}
+		}
+
+		ID3D11Device_QueryInterface(device_11_0, &IID_ID3D11Device1, &device);
+		ID3D11Device_Release(device_11_0);
+		if (device == NULL) {
+			return RJD_RESULT("Unable to create 11.1 device. 11.0 is not supported.");
 		}
 	}
 
@@ -310,7 +314,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_d3d11->slotmap_meshes			= rjd_slotmap_alloc(struct rjd_gfx_mesh_d3d11, 64, desc.allocator);
 	context_d3d11->slotmap_command_buffers	= rjd_slotmap_alloc(struct rjd_gfx_command_buffer_d3d11, 16, desc.allocator);
 
-	context_d3d11->free_deferred_contexts = rjd_array_alloc(ID3D11DeviceContext*, 1, desc.allocator);
+	context_d3d11->free_deferred_contexts = rjd_array_alloc(ID3D11DeviceContext1*, 1, desc.allocator);
 
 	context_d3d11->factory = factory;
 	context_d3d11->adapter = adapter_extended;
@@ -366,7 +370,7 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 	rjd_strpool_free(&context_d3d11->debug_names);
 
 	for (size_t i = 0; i < rjd_array_count(context_d3d11->free_deferred_contexts); ++i) {
-		ID3D11DeviceContext_Release(context_d3d11->free_deferred_contexts[i]);
+		ID3D11DeviceContext1_Release(context_d3d11->free_deferred_contexts[i]);
 	}
 	rjd_array_free(context_d3d11->free_deferred_contexts);
 
@@ -398,12 +402,9 @@ struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context)
 {
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 
-	// find the primary output and wait for its vblank
 	RECT rect_window = {0};
 	if (GetWindowRect(context_d3d11->hwnd, &rect_window) == FALSE) {
-		//uint32_t err = GetLastError();
-		//RJD_LOG("err: %d", err);
-		return RJD_RESULT("Failed to get window rect. Check GetLastError() for more information"); // TODO make a GetLastError -> result function
+		return RJD_RESULT("Failed to get window rect. Check GetLastError() for more information");
 	}
 
 	IDXGIOutput* output = NULL;
@@ -415,7 +416,6 @@ struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context)
 		if (SUCCEEDED(hr)) {
 			RECT rect_intersect = {0};
 			if (IntersectRect(&rect_intersect, &rect_window, &desc_output.DesktopCoordinates)) {
-				RJD_ASSERT(rect_intersect.bottom >= rect_intersect.top); // TODO remove this when you can test it's supposed to be bot - top
 				uint32_t output_intersect_area = (rect_intersect.right - rect_intersect.left) * (rect_intersect.bottom - rect_intersect.top);
 
 				if (selected_output == NULL || output_intersect_area > selected_intersect_area) {
@@ -477,7 +477,7 @@ struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context,
 	if (rjd_array_count(context_d3d11->free_deferred_contexts) > 0) {
 		cmd_buffer_d3d11.deferred_context = rjd_array_pop(context_d3d11->free_deferred_contexts);
 	} else {
-		HRESULT hr = ID3D11Device_CreateDeferredContext(context_d3d11->device, 0, &cmd_buffer_d3d11.deferred_context);
+		HRESULT hr = ID3D11Device1_CreateDeferredContext1(context_d3d11->device, 0, &cmd_buffer_d3d11.deferred_context);
 		if (FAILED(hr)) {
 			return rjd_gfx_translate_hresult(hr);
 		}
@@ -535,26 +535,26 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 		.MinDepth = 0, 
 		.MaxDepth = 1.0f,
 	};
-	ID3D11DeviceContext_RSSetViewports(cmd_buffer_d3d11->deferred_context, 1, &viewport);
+	ID3D11DeviceContext1_RSSetViewports(cmd_buffer_d3d11->deferred_context, 1, &viewport);
 
 	// pipeline state
 	struct rjd_gfx_pipeline_state_d3d11* pipeline_state_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_pipeline_states, command->pipeline_state->handle);
-	ID3D11DeviceContext_IASetInputLayout(cmd_buffer_d3d11->deferred_context, pipeline_state_d3d11->vertex_layout);
-	ID3D11DeviceContext_RSSetState(cmd_buffer_d3d11->deferred_context, pipeline_state_d3d11->rasterizer_state);
+	ID3D11DeviceContext1_IASetInputLayout(cmd_buffer_d3d11->deferred_context, pipeline_state_d3d11->vertex_layout);
+	ID3D11DeviceContext1_RSSetState(cmd_buffer_d3d11->deferred_context, pipeline_state_d3d11->rasterizer_state);
 
-	ID3D11DeviceContext_OMSetRenderTargets(cmd_buffer_d3d11->deferred_context, 1, &cmd_buffer_d3d11->render_target, NULL); // TODO depthstencil target
+	ID3D11DeviceContext1_OMSetRenderTargets(cmd_buffer_d3d11->deferred_context, 1, &cmd_buffer_d3d11->render_target, NULL); // TODO depthstencil target
 
 	struct rjd_gfx_shader_d3d11* shader_vertex_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, pipeline_state_d3d11->shader_vertex.handle);
 	struct rjd_gfx_shader_d3d11* shader_pixel_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, pipeline_state_d3d11->shader_pixel.handle);
 
 	if (shader_vertex_d3d11->vertex) {
-		ID3D11DeviceContext_VSSetShader(cmd_buffer_d3d11->deferred_context, shader_vertex_d3d11->vertex, NULL, 0);
+		ID3D11DeviceContext1_VSSetShader(cmd_buffer_d3d11->deferred_context, shader_vertex_d3d11->vertex, NULL, 0);
 	} else {
 		return RJD_RESULT("The selected shader did not have a vertex shader.");
 	}
 
 	if (shader_pixel_d3d11->pixel) {
-		ID3D11DeviceContext_PSSetShader(cmd_buffer_d3d11->deferred_context, shader_pixel_d3d11->pixel, NULL, 0);
+		ID3D11DeviceContext1_PSSetShader(cmd_buffer_d3d11->deferred_context, shader_pixel_d3d11->pixel, NULL, 0);
 	} else {
 		return RJD_RESULT("The selected shader did not have a pixel shader.");
 	}
@@ -571,49 +571,69 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 			return RJD_RESULT("Not allowed to bind to slots higher than D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT - 1");
 		}
 
-		ID3D11DeviceContext_PSSetShaderResources(cmd_buffer_d3d11->deferred_context, slot, 1, &texture_d3d11->resource_view);
-		ID3D11DeviceContext_PSSetSamplers(cmd_buffer_d3d11->deferred_context, slot, 1, &texture_d3d11->sampler);
+		ID3D11DeviceContext1_PSSetShaderResources(cmd_buffer_d3d11->deferred_context, slot, 1, &texture_d3d11->resource_view);
+		ID3D11DeviceContext1_PSSetSamplers(cmd_buffer_d3d11->deferred_context, slot, 1, &texture_d3d11->sampler);
 	}
 
 	// draw meshes
-	for (size_t index_mesh = 0; index_mesh < command->count_meshes; ++index_mesh) {
+	for (uint32_t index_mesh = 0; index_mesh < command->count_meshes; ++index_mesh) {
 		RJD_ASSERT(command->meshes);
 
 		const struct rjd_gfx_mesh_d3d11* mesh_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_meshes, command->meshes[index_mesh].handle);
 
 		const D3D_PRIMITIVE_TOPOLOGY primitive = rjd_gfx_primitive_to_d3d11(mesh_d3d11->primitive);
-		ID3D11DeviceContext_IASetPrimitiveTopology(cmd_buffer_d3d11->deferred_context, primitive);
+		ID3D11DeviceContext1_IASetPrimitiveTopology(cmd_buffer_d3d11->deferred_context, primitive);
 
-		for (size_t i = 0; i < mesh_d3d11->count_buffers; ++i) {
-			const struct rjd_gfx_mesh_buffer_d3d11* buffer_d3d11 = mesh_d3d11->buffers + i;
+		for (uint32_t index_buffer = 0; index_buffer < mesh_d3d11->count_buffers; ++index_buffer) {
+			const struct rjd_gfx_mesh_buffer_d3d11* buffer_d3d11 = mesh_d3d11->buffers + index_buffer;
 
 			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX) {
-				ID3D11DeviceContext_IASetVertexBuffers(
+				ID3D11DeviceContext1_IASetVertexBuffers(
 					cmd_buffer_d3d11->deferred_context, 
 					buffer_d3d11->slot, 
 					1, 
-					&buffer_d3d11->buffer, 
-					&buffer_d3d11->stride, 
+					&buffer_d3d11->buffer,
+					&buffer_d3d11->stride,
 					&buffer_d3d11->offset);
 			}
-			// TODO support VSSetConstantBuffers1/PSSetConstantBuffers1
-			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT) {
-				ID3D11DeviceContext_VSSetConstantBuffers(
-					cmd_buffer_d3d11->deferred_context, 
-					buffer_d3d11->slot, 
-					1, 
-					&buffer_d3d11->buffer);
-			}
-			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
-				ID3D11DeviceContext_PSSetConstantBuffers(
-					cmd_buffer_d3d11->deferred_context, 
-					buffer_d3d11->slot, 
-					1, 
-					&buffer_d3d11->buffer);
+
+			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT ||
+				buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
+
+				const struct rjd_gfx_pass_draw_constant_buffer_desc* constant_desc = NULL;
+				for (size_t index_constant_desc = 0; index_constant_desc < command->count_constant_descs; ++index_constant_desc) {
+					if (command->constant_buffer_descs[index_constant_desc].mesh_index == index_mesh &&
+						command->constant_buffer_descs[index_constant_desc].buffer_index == index_buffer) {
+						constant_desc = command->constant_buffer_descs + index_constant_desc;
+					}
+				}
+				RJD_ASSERTMSG(constant_desc, "Unable to find a rjd_gfx_pass_draw_constant_buffer_desc for mesh %u, buffer %u.", index_mesh, index_buffer);
+
+				const UINT first_constant = constant_desc->offset_bytes / 16;
+				const UINT num_constants = constant_desc->range_bytes / 16;
+
+				if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT) {
+					ID3D11DeviceContext1_VSSetConstantBuffers1(
+						cmd_buffer_d3d11->deferred_context, 
+						buffer_d3d11->slot, 
+						1, 
+						&buffer_d3d11->buffer,
+						&first_constant,
+						&num_constants);
+				}
+				if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
+					ID3D11DeviceContext1_PSSetConstantBuffers1(
+							cmd_buffer_d3d11->deferred_context, 
+							buffer_d3d11->slot, 
+							1, 
+							&buffer_d3d11->buffer,
+							&first_constant,
+							&num_constants);
+				}
 			}
 		}
 
-		ID3D11DeviceContext_Draw(cmd_buffer_d3d11->deferred_context, mesh_d3d11->count_vertices, 0);
+		ID3D11DeviceContext1_Draw(cmd_buffer_d3d11->deferred_context, mesh_d3d11->count_vertices, 0);
 	}
 
 	return RJD_RESULT_OK();
@@ -629,7 +649,7 @@ struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context,
 	struct rjd_gfx_command_buffer_d3d11* cmd_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
 
 	ID3D11CommandList* commandlist = NULL;
-	HRESULT hr = ID3D11DeviceContext_FinishCommandList(cmd_buffer_d3d11->deferred_context, FALSE, &commandlist);
+	HRESULT hr = ID3D11DeviceContext1_FinishCommandList(cmd_buffer_d3d11->deferred_context, FALSE, &commandlist);
 	if (FAILED(hr)) {
 		return rjd_gfx_translate_hresult(hr);
 	}
