@@ -576,16 +576,16 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 	}
 
 	// draw meshes
-	for (uint32_t index_mesh = 0; index_mesh < command->count_meshes; ++index_mesh) {
+	for (uint32_t mesh_index = 0; mesh_index < command->count_meshes; ++mesh_index) {
 		RJD_ASSERT(command->meshes);
 
-		const struct rjd_gfx_mesh_d3d11* mesh_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_meshes, command->meshes[index_mesh].handle);
+		const struct rjd_gfx_mesh_d3d11* mesh_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_meshes, command->meshes[mesh_index].handle);
 
 		const D3D_PRIMITIVE_TOPOLOGY primitive = rjd_gfx_primitive_to_d3d11(mesh_d3d11->primitive);
 		ID3D11DeviceContext1_IASetPrimitiveTopology(cmd_buffer_d3d11->deferred_context, primitive);
 
-		for (uint32_t index_buffer = 0; index_buffer < mesh_d3d11->count_buffers; ++index_buffer) {
-			const struct rjd_gfx_mesh_buffer_d3d11* buffer_d3d11 = mesh_d3d11->buffers + index_buffer;
+		for (uint32_t buffer_index = 0; buffer_index < mesh_d3d11->count_buffers; ++buffer_index) {
+			const struct rjd_gfx_mesh_buffer_d3d11* buffer_d3d11 = mesh_d3d11->buffers + buffer_index;
 
 			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX) {
 				ID3D11DeviceContext1_IASetVertexBuffers(
@@ -602,8 +602,8 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 
 				const struct rjd_gfx_pass_draw_buffer_offset_desc* buffer_offset_desc = NULL;
 				for (size_t index_constant_desc = 0; index_constant_desc < command->count_constant_descs; ++index_constant_desc) {
-					if (command->buffer_offset_descs[index_constant_desc].mesh_index == index_mesh &&
-						command->buffer_offset_descs[index_constant_desc].buffer_index == index_buffer) {
+					if (command->buffer_offset_descs[index_constant_desc].mesh_index == mesh_index &&
+						command->buffer_offset_descs[index_constant_desc].buffer_index == buffer_index) {
 						buffer_offset_desc = command->buffer_offset_descs + index_constant_desc;
 					}
 				}
