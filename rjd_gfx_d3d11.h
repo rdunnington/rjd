@@ -108,6 +108,8 @@ struct rjd_gfx_context_d3d11
 	struct rjd_strpool debug_names;
 	HWND hwnd;
 	bool is_occluded;
+	uint8_t num_backbuffers;
+	uint8_t backbuffer_index;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_gfx_context_d3d11) <= sizeof(struct rjd_gfx_context));
 
@@ -234,6 +236,11 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		}
 	}
 
+	if (desc.num_backbuffers > 3) {
+		return RJD_RESULT("You specified more than 3 framebuffers Only 1-3 are supported.");
+	}
+	const UINT num_backbuffers = (desc.num_backbuffers == 0) ? 3 : desc.num_backbuffers;
+
 	IDXGISwapChain1* swapchain = NULL;
 	{
 		DXGI_RATIONAL refresh_rate = {
@@ -276,7 +283,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 			.Stereo = false,
 			.SampleDesc = desc_msaa,
 			.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
-			.BufferCount = 3, // TODO make this configurable. Right now 3 matches the macos metal defaults.
+			.BufferCount = num_backbuffers,
 			.Scaling = DXGI_SCALING_STRETCH, // Don't stretch the backbuffer to fit the window size. We should handle that. // TODO figure out why DXGI_SCALING_NONE fails
 			.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD, // flip model has better perf and discard since we don't care to keep it around
 			.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED,
@@ -326,6 +333,8 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_d3d11->debug_names = rjd_strpool_init(desc.allocator, 128);
 	context_d3d11->hwnd = desc.win32.hwnd;
 	context_d3d11->is_occluded = false;
+	context_d3d11->num_backbuffers = (uint8_t)num_backbuffers;
+	context_d3d11->backbuffer_index = 0;
 
 	return RJD_RESULT_OK();
 }
@@ -464,7 +473,15 @@ struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context)
 		hr = S_OK;
 	}
 
+	context_d3d11->backbuffer_index = (context_d3d11->backbuffer_index + 1) % context_d3d11->num_backbuffers;
+
 	return rjd_gfx_translate_hresult(hr);
+}
+
+uint32_t rjd_gfx_current_backbuffer_index(struct rjd_gfx_context* context)
+{
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+	return context_d3d11->backbuffer_index;
 }
 
 // commands

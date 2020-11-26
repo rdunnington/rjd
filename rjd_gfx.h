@@ -381,7 +381,6 @@ struct rjd_gfx_command_buffer
 ////////////////////////////////////////////////////////////////////////////////
 // gfx context
 
-
 enum RJD_GFX_VSYNC_MODE
 {
 	RJD_GFX_VSYNC_MODE_ON,
@@ -393,6 +392,7 @@ struct rjd_gfx_context_desc
 	struct rjd_mem_allocator* allocator;
 	enum rjd_gfx_format backbuffer_color_format;
 	enum rjd_gfx_format backbuffer_depth_format;
+	uint32_t num_backbuffers; // leave 0 to use platform default
 	uint32_t* optional_desired_msaa_samples; // desired samples and fallbacks if unavailable. 1 is the default.
 	uint32_t count_desired_msaa_samples;
 
@@ -428,6 +428,7 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context);
 struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode);
 struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context);
 struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context);
+uint32_t rjd_gfx_current_backbuffer_index(struct rjd_gfx_context* context);
 
 // commands
 struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out);
