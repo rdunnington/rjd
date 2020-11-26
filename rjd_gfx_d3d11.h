@@ -484,6 +484,11 @@ uint32_t rjd_gfx_current_backbuffer_index(struct rjd_gfx_context* context)
 	return context_d3d11->backbuffer_index;
 }
 
+uint32_t rjd_gfx_constant_buffer_alignment(void)
+{
+	return 256;
+}
+
 // commands
 struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out)
 {

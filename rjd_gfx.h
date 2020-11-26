@@ -429,6 +429,7 @@ struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GF
 struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context);
 struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context);
 uint32_t rjd_gfx_current_backbuffer_index(struct rjd_gfx_context* context);
+uint32_t rjd_gfx_constant_buffer_alignment(void);
 
 // commands
 struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out);
