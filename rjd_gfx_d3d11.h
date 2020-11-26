@@ -600,17 +600,17 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 			if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT ||
 				buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
 
-				const struct rjd_gfx_pass_draw_constant_buffer_desc* constant_desc = NULL;
+				const struct rjd_gfx_pass_draw_buffer_offset_desc* buffer_offset_desc = NULL;
 				for (size_t index_constant_desc = 0; index_constant_desc < command->count_constant_descs; ++index_constant_desc) {
-					if (command->constant_buffer_descs[index_constant_desc].mesh_index == index_mesh &&
-						command->constant_buffer_descs[index_constant_desc].buffer_index == index_buffer) {
-						constant_desc = command->constant_buffer_descs + index_constant_desc;
+					if (command->buffer_offset_descs[index_constant_desc].mesh_index == index_mesh &&
+						command->buffer_offset_descs[index_constant_desc].buffer_index == index_buffer) {
+						buffer_offset_desc = command->buffer_offset_descs + index_constant_desc;
 					}
 				}
-				RJD_ASSERTMSG(constant_desc, "Unable to find a rjd_gfx_pass_draw_constant_buffer_desc for mesh %u, buffer %u.", index_mesh, index_buffer);
+				RJD_ASSERTMSG(buffer_offset_desc, "Unable to find a rjd_gfx_pass_draw_buffer_offset_desc for mesh %u at buffer index %u.", mesh_index, buffer_index);
 
-				const UINT first_constant = constant_desc->offset_bytes / 16;
-				const UINT num_constants = constant_desc->range_bytes / 16;
+				const UINT first_constant = buffer_offset_desc->offset_bytes / 16;
+				const UINT num_constants = buffer_offset_desc->range_bytes / 16;
 
 				if (buffer_d3d11->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT) {
 					ID3D11DeviceContext1_VSSetConstantBuffers1(
