@@ -300,8 +300,7 @@ union rjd_gfx_mesh_buffer_common_desc
 	} vertex;
 };
 
-// TODO vertex_buffer isn't a great name, since it can also be inputs to pixel shaders. Maybe just mesh_buffer?
-struct rjd_gfx_mesh_vertex_buffer_desc
+struct rjd_gfx_mesh_buffer_desc
 {
 	union rjd_gfx_mesh_buffer_common_desc common;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
@@ -313,7 +312,7 @@ struct rjd_gfx_mesh_vertex_buffer_desc
 struct rjd_gfx_mesh_vertexed_desc
 {
 	enum rjd_gfx_primitive_type primitive;
-	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
+	struct rjd_gfx_mesh_buffer_desc* buffers;
 	uint32_t count_buffers;
 	uint32_t count_vertices;
 };
@@ -322,7 +321,7 @@ struct rjd_gfx_mesh_vertexed_desc
 //{
 //	enum rjd_gfx_mesh_type type;
 //	enum rjd_gfx_primitive_type primitive;
-//	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
+//	struct rjd_gfx_mesh_buffer_desc* buffers;
 //	union rjd_gfx_mesh_index_buffer_desc* buffers;
 //	uint32_t count_vertex_buffers;
 //	uint32_t count_index_buffers;
@@ -332,7 +331,7 @@ struct rjd_gfx_mesh_vertexed_desc
 //{
 //	enum rjd_gfx_mesh_type type;
 //	enum rjd_gfx_primitive_type primitive;
-//	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
+//	struct rjd_gfx_mesh_buffer_desc* buffers;
 //	uint32_t count_vertex_buffers;
 //	uint32_t instance_count;
 //};

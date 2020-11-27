@@ -972,7 +972,7 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 	struct rjd_gfx_mesh_buffer_d3d11* buffers = rjd_mem_alloc_array(struct rjd_gfx_mesh_buffer_d3d11, desc.count_buffers, context_d3d11->allocator);
 
 	for (size_t i = 0; i < desc.count_buffers; ++i) {
-		const struct rjd_gfx_mesh_vertex_buffer_desc* desc_buffer = desc.buffers + i;
+		const struct rjd_gfx_mesh_buffer_desc* desc_buffer = desc.buffers + i;
 
 		UINT buffer_size = 0;
 		UINT flags_bind = 0;

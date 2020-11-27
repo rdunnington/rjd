@@ -777,7 +777,7 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 
 	for (uint32_t i = 0; i < desc.count_buffers; ++i) {
 		id<MTLBuffer> buffer = nil;
-		struct rjd_gfx_mesh_vertex_buffer_desc* desc_buffer = desc.buffers + i;
+		struct rjd_gfx_mesh_buffer_desc* desc_buffer = desc.buffers + i;
 
         if (desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX_CONSTANT ||
 			desc_buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_PIXEL_CONSTANT) {
