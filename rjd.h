@@ -11368,7 +11368,8 @@ struct rjd_gfx_vertex_format_attribute
 	enum rjd_gfx_vertex_format_step step;
 	enum rjd_gfx_vertex_semantic semantic; // only used for d3d11
 	uint32_t attribute_index;
-	uint32_t buffer_index;
+	uint32_t shader_slot_metal;
+	uint32_t shader_slot_d3d11;
 	uint32_t stride;
     uint32_t step_rate;
 	uint32_t offset;
@@ -11451,19 +11452,19 @@ union rjd_gfx_mesh_buffer_common_desc
 	} vertex;
 };
 
-// TODO vertex_buffer isn't a great name, since it can also be inputs to pixel shaders. Maybe just mesh_buffer?
-struct rjd_gfx_mesh_vertex_buffer_desc
+struct rjd_gfx_mesh_buffer_desc
 {
 	union rjd_gfx_mesh_buffer_common_desc common;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
-	uint32_t buffer_index; // TODO maybe rename to shader_slot?
+	uint32_t shader_slot_metal; // metal shader slots are shared between all buffer types
+	uint32_t shader_slot_d3d11; // d3d11 vertex/constant buffers have their own lists of slots
 };
 
 // TODO implement the other 2 descs later
 struct rjd_gfx_mesh_vertexed_desc
 {
 	enum rjd_gfx_primitive_type primitive;
-	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
+	struct rjd_gfx_mesh_buffer_desc* buffers;
 	uint32_t count_buffers;
 	uint32_t count_vertices;
 };
@@ -11472,7 +11473,7 @@ struct rjd_gfx_mesh_vertexed_desc
 //{
 //	enum rjd_gfx_mesh_type type;
 //	enum rjd_gfx_primitive_type primitive;
-//	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
+//	struct rjd_gfx_mesh_buffer_desc* buffers;
 //	union rjd_gfx_mesh_index_buffer_desc* buffers;
 //	uint32_t count_vertex_buffers;
 //	uint32_t count_index_buffers;
@@ -11482,7 +11483,7 @@ struct rjd_gfx_mesh_vertexed_desc
 //{
 //	enum rjd_gfx_mesh_type type;
 //	enum rjd_gfx_primitive_type primitive;
-//	struct rjd_gfx_mesh_vertex_buffer_desc* buffers;
+//	struct rjd_gfx_mesh_buffer_desc* buffers;
 //	uint32_t count_vertex_buffers;
 //	uint32_t instance_count;
 //};
@@ -11503,15 +11504,25 @@ struct rjd_gfx_pass_begin_desc
 	struct rjd_gfx_format_value clear_depthstencil;
 };
 
+struct rjd_gfx_pass_draw_buffer_offset_desc
+{
+	uint32_t mesh_index;
+	uint32_t buffer_index;
+	uint32_t offset_bytes;
+	uint32_t range_bytes;
+};
+
 struct rjd_gfx_pass_draw_desc
 {
 	const char* debug_label;
 	const struct rjd_gfx_viewport* viewport;
 	const struct rjd_gfx_pipeline_state* pipeline_state;
 	const struct rjd_gfx_mesh* meshes;
+	const struct rjd_gfx_pass_draw_buffer_offset_desc* buffer_offset_descs;
 	const struct rjd_gfx_texture* textures;
 	const uint32_t* texture_indices; // parallel array with textures
 	uint32_t count_meshes;
+	uint32_t count_constant_descs;
 	uint32_t count_textures;
 };
 
@@ -11523,6 +11534,11 @@ struct rjd_gfx_command_buffer
 ////////////////////////////////////////////////////////////////////////////////
 // gfx context
 
+enum rjd_gfx_num_backbuffers
+{
+	RJD_GFX_NUM_BACKBUFFERS_TRIPLE,
+	RJD_GFX_NUM_BACKBUFFERS_DOUBLE,
+};
 
 enum RJD_GFX_VSYNC_MODE
 {
@@ -11535,6 +11551,7 @@ struct rjd_gfx_context_desc
 	struct rjd_mem_allocator* allocator;
 	enum rjd_gfx_format backbuffer_color_format;
 	enum rjd_gfx_format backbuffer_depth_format;
+	enum rjd_gfx_num_backbuffers num_backbuffers;
 	uint32_t* optional_desired_msaa_samples; // desired samples and fallbacks if unavailable. 1 is the default.
 	uint32_t count_desired_msaa_samples;
 
@@ -11570,6 +11587,7 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context);
 struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode);
 struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context);
 struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context);
+uint32_t rjd_gfx_current_backbuffer_index(struct rjd_gfx_context* context);
 
 // commands
 struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out);
@@ -11588,6 +11606,10 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 //struct rjd_result rjd_gfx_mesh_create_indexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_indexed_desc desc);
 struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, const void* data, uint32_t length);
 void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh);
+
+// constant buffer helpers
+static inline uint32_t rjd_gfx_constant_buffer_alignment(void);
+static inline uint32_t rjd_gfx_calc_constant_buffer_stride(uint32_t constant_size);
 
 // format
 uint32_t rjd_gfx_format_bytesize(enum rjd_gfx_format format);
@@ -11613,6 +11635,22 @@ static inline int32_t rjd_gfx_backend_ismetal(void)
 static inline int32_t rjd_gfx_backend_isd3d11(void)
 {
 	return RJD_GFX_BACKEND_D3D11;
+}
+
+static inline uint32_t rjd_gfx_constant_buffer_alignment(void)
+{
+	#if RJD_GFX_BACKEND_METAL || RJD_GFX_BACKEND_D3D11
+		return 256;
+	#else
+		#error Unknown platform.
+	#endif
+}
+
+static inline uint32_t rjd_gfx_calc_constant_buffer_stride(uint32_t constant_size)
+{
+	uint32_t alignment = rjd_gfx_constant_buffer_alignment();
+	uint32_t aligned_stride = (constant_size % alignment) + constant_size;
+	return aligned_stride;
 }
 
 static inline struct rjd_gfx_format_value rjd_gfx_format_make_color_u8_rgba(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
