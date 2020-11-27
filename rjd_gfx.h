@@ -216,7 +216,8 @@ struct rjd_gfx_vertex_format_attribute
 	enum rjd_gfx_vertex_format_step step;
 	enum rjd_gfx_vertex_semantic semantic; // only used for d3d11
 	uint32_t attribute_index;
-	uint32_t buffer_index;
+	uint32_t shader_slot_metal;
+	uint32_t shader_slot_d3d11;
 	uint32_t stride;
     uint32_t step_rate;
 	uint32_t offset;
@@ -304,7 +305,8 @@ struct rjd_gfx_mesh_vertex_buffer_desc
 {
 	union rjd_gfx_mesh_buffer_common_desc common;
 	enum rjd_gfx_mesh_buffer_usage_flags usage_flags;
-	uint32_t buffer_index; // TODO maybe rename to shader_slot?
+	uint32_t shader_slot_metal; // metal shader slots are shared between all buffer types
+	uint32_t shader_slot_d3d11; // d3d11 vertex/constant buffers have their own lists of slots
 };
 
 // TODO implement the other 2 descs later

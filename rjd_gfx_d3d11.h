@@ -900,7 +900,7 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 			element_descs[i].SemanticName = rjd_gfx_semantic_to_name(semantic);
 			element_descs[i].SemanticIndex = semantic_index[semantic];
 			element_descs[i].Format = format;
-			element_descs[i].InputSlot = desc.vertex_attributes[i].buffer_index;
+			element_descs[i].InputSlot = desc.vertex_attributes[i].shader_slot_d3d11;
 			element_descs[i].AlignedByteOffset = desc.vertex_attributes[i].offset;
 			element_descs[i].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA; // TODO support D3D11_INPUT_PER_INSTANCE_DATA
 			element_descs[i].InstanceDataStepRate = 0;
@@ -990,7 +990,7 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 				data = desc_buffer->common.vertex.data;
 				flags_bind = D3D11_BIND_VERTEX_BUFFER;
 
-				if (desc_buffer->buffer_index >= D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT - 1) {
+				if (desc_buffer->shader_slot_d3d11 >= D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT - 1) {
 					return RJD_RESULT("Vertex buffer index must be < D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT");
 				}
 				if (stride == 0) {
@@ -1009,7 +1009,7 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 				if (D3D11_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 4 * sizeof(float) < buffer_size) {
 					return RJD_RESULT("Uniform buffer exceeded max allowable size");
 				}
-				if (desc_buffer->buffer_index >= D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT - 1) {
+				if (desc_buffer->shader_slot_d3d11 >= D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT - 1) {
 					return RJD_RESULT("Constant buffer index must be < D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT");
 				}	
 
@@ -1050,7 +1050,7 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 			.buffer = buffer_d3d11,
 			.stride = stride,
 			.offset = 0,
-			.slot = desc_buffer->buffer_index,
+			.slot = desc_buffer->shader_slot_d3d11,
 			.usage_flags = desc_buffer->usage_flags,
 		};
 

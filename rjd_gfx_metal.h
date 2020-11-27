@@ -698,17 +698,17 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 				const struct rjd_gfx_vertex_format_attribute* attribute = desc.vertex_attributes + i;
 
 				uint32_t attribute_index = attribute->attribute_index;
-				uint32_t buffer_index = attribute->buffer_index;
+				uint32_t shader_slot = attribute->shader_slot_metal;
 				MTLVertexFormat format = rjd_gfx_vertex_format_type_to_metal(attribute->type);
 				MTLVertexStepFunction step_function = rjd_gfx_vertex_format_step_to_metal(attribute->step);
 
 				vertex_descriptor.attributes[attribute_index].format = format;
 				vertex_descriptor.attributes[attribute_index].offset = attribute->offset;
-				vertex_descriptor.attributes[attribute_index].bufferIndex = attribute->buffer_index;
+				vertex_descriptor.attributes[attribute_index].bufferIndex = attribute->shader_slot_metal;
 
-				vertex_descriptor.layouts[buffer_index].stride = attribute->stride;
-				vertex_descriptor.layouts[buffer_index].stepRate = attribute->step_rate;
-				vertex_descriptor.layouts[buffer_index].stepFunction = step_function;
+				vertex_descriptor.layouts[shader_slot].stride = attribute->stride;
+				vertex_descriptor.layouts[shader_slot].stepRate = attribute->step_rate;
+				vertex_descriptor.layouts[shader_slot].stepFunction = step_function;
             }
 
             desc_metal.vertexDescriptor = vertex_descriptor;
@@ -805,7 +805,7 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
         struct rjd_gfx_mesh_shader_buffer_metal mesh_buffer = {
             .buffer = buffer,
             .usage_flags = desc.buffers[i].usage_flags,
-            .shader_slot = desc.buffers[i].buffer_index,
+            .shader_slot = desc.buffers[i].shader_slot_metal,
         };
         
         shader_buffers[i] = mesh_buffer;
