@@ -86,6 +86,7 @@ struct rjd_gfx_context_metal
 	struct rjd_mem_allocator* allocator;
 
 	dispatch_semaphore_t wait_for_present_counter;
+	uint32_t backbuffer_index;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_gfx_context_metal) <= sizeof(struct rjd_gfx_context));
 
@@ -139,6 +140,10 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		return RJD_RESULT("backbuffer_depth_format must be a depth format. See rjd_gfx_format_isdepthstencil().");
 	}
 
+	if (desc.num_backbuffers != RJD_GFX_NUM_BACKBUFFERS_TRIPLE) {
+		return RJD_RESULT("The Metal backend currently only supports triple buffering. Use RJD_GFX_NUM_BACKBUFFERS_TRIPLE.");
+	}
+
 	{
 		const MTLPixelFormat mtl_color_format = rjd_gfx_format_color_to_metal(desc.backbuffer_color_format);
 		const MTLPixelFormat mtl_depth_format = rjd_gfx_format_color_to_metal(desc.backbuffer_depth_format);
@@ -172,7 +177,8 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_metal->command_queue = [context_metal->device newCommandQueue];
 	context_metal->loader_mesh = [[MTKMeshBufferAllocator alloc] initWithDevice:context_metal->device];
     context_metal->allocator = desc.allocator;
-	context_metal->wait_for_present_counter = dispatch_semaphore_create(1);
+	context_metal->wait_for_present_counter = dispatch_semaphore_create(3);
+	context_metal->backbuffer_index = 0;
 
 	return RJD_RESULT_OK();
 }
@@ -192,6 +198,12 @@ struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context)
 
     RJD_UNUSED_PARAM(context);
 	return RJD_RESULT_OK();
+}
+
+uint32_t rjd_gfx_current_backbuffer_index(struct rjd_gfx_context* context)
+{
+	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
+	return context_metal->backbuffer_index;
 }
 
 void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
@@ -284,11 +296,11 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
 	RJD_ASSERT(context);
 
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
-    struct rjd_gfx_command_buffer_metal* command_buffer_metal = rjd_slotmap_get(context_metal->slotmap_command_buffers, cmd_buffer->handle);
+    struct rjd_gfx_command_buffer_metal* cmd_buffer_metal = rjd_slotmap_get(context_metal->slotmap_command_buffers, cmd_buffer->handle);
 
-	if (command_buffer_metal->encoder != nil) {
-    	[command_buffer_metal->encoder endEncoding];
-		command_buffer_metal->encoder = nil;
+	if (cmd_buffer_metal->encoder != nil) {
+    	[cmd_buffer_metal->encoder endEncoding];
+		cmd_buffer_metal->encoder = nil;
 	}
 
 	MTLRenderPassDescriptor* render_pass = NULL;
@@ -328,11 +340,11 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
         }
     }
 
-	id<MTLRenderCommandEncoder> encoder = [command_buffer_metal->buffer renderCommandEncoderWithDescriptor:render_pass];
+	id<MTLRenderCommandEncoder> encoder = [cmd_buffer_metal->buffer renderCommandEncoderWithDescriptor:render_pass];
 	const char* label = command->debug_label ? command->debug_label : "rjd_gfx_command_pass_begin";
 	encoder.label = [NSString stringWithUTF8String:label];
 
-	command_buffer_metal->encoder = encoder;
+	cmd_buffer_metal->encoder = encoder;
     
     return RJD_RESULT_OK();
 }
@@ -349,11 +361,11 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 	RJD_ASSERT(rjd_slot_isvalid(command->pipeline_state->handle));
 
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
-    struct rjd_gfx_command_buffer_metal* command_buffer_metal = rjd_slotmap_get(context_metal->slotmap_command_buffers, cmd_buffer->handle);
+    struct rjd_gfx_command_buffer_metal* cmd_buffer_metal = rjd_slotmap_get(context_metal->slotmap_command_buffers, cmd_buffer->handle);
 	const struct rjd_gfx_pipeline_state_metal* pipeline_metal = rjd_slotmap_get(context_metal->slotmap_pipeline_states, command->pipeline_state->handle);
 
-	RJD_ASSERTMSG(command_buffer_metal->encoder != nil, "You must call rjd_gfx_command_pass_begin before issuing draw commands.");
-	id<MTLRenderCommandEncoder> encoder = command_buffer_metal->encoder;
+	RJD_ASSERTMSG(cmd_buffer_metal->encoder != nil, "You must call rjd_gfx_command_pass_begin before issuing draw commands.");
+	id<MTLRenderCommandEncoder> encoder = cmd_buffer_metal->encoder;
 
     [encoder pushDebugGroup:[NSString stringWithUTF8String:command->debug_label]];
 
@@ -455,23 +467,25 @@ struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context,
 	RJD_ASSERT(rjd_slot_isvalid(cmd_buffer->handle));
 
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
-	struct rjd_gfx_command_buffer_metal* command_buffer_metal = rjd_slotmap_get(context_metal->slotmap_command_buffers, cmd_buffer->handle);
+	struct rjd_gfx_command_buffer_metal* cmd_buffer_metal = rjd_slotmap_get(context_metal->slotmap_command_buffers, cmd_buffer->handle);
 
-	RJD_ASSERTMSG(command_buffer_metal->encoder != nil, "You must call rjd_gfx_command_pass_begin before issuing draw commands.");
-    [command_buffer_metal->encoder endEncoding];
+	RJD_ASSERTMSG(cmd_buffer_metal->encoder != nil, "You must call rjd_gfx_command_pass_begin before issuing draw commands.");
+    [cmd_buffer_metal->encoder endEncoding];
 
-	[command_buffer_metal->buffer presentDrawable:context_metal->view.currentDrawable];
+	[cmd_buffer_metal->buffer presentDrawable:context_metal->view.currentDrawable];
 	
     __block dispatch_semaphore_t wait_counter = context_metal->wait_for_present_counter;
-    [command_buffer_metal->buffer addCompletedHandler:^(id<MTLCommandBuffer> buffer)
+    [cmd_buffer_metal->buffer addCompletedHandler:^(id<MTLCommandBuffer> buffer)
     {
 		RJD_UNUSED_PARAM(buffer);
     	dispatch_semaphore_signal(wait_counter);
     }];
 
-	[command_buffer_metal->buffer commit];
+	[cmd_buffer_metal->buffer commit];
 	rjd_gfx_command_buffer_destroy_metal(context_metal, cmd_buffer->handle);
     rjd_slot_invalidate(&cmd_buffer->handle);
+
+	context_metal->backbuffer_index = (context_metal->backbuffer_index + 1) % 3; // MTKView has a pool of 3 drawables
 
 	return RJD_RESULT_OK();
 }

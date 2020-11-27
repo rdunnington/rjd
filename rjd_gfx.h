@@ -381,6 +381,12 @@ struct rjd_gfx_command_buffer
 ////////////////////////////////////////////////////////////////////////////////
 // gfx context
 
+enum rjd_gfx_num_backbuffers
+{
+	RJD_GFX_NUM_BACKBUFFERS_TRIPLE,
+	RJD_GFX_NUM_BACKBUFFERS_DOUBLE,
+};
+
 enum RJD_GFX_VSYNC_MODE
 {
 	RJD_GFX_VSYNC_MODE_ON,
@@ -392,7 +398,7 @@ struct rjd_gfx_context_desc
 	struct rjd_mem_allocator* allocator;
 	enum rjd_gfx_format backbuffer_color_format;
 	enum rjd_gfx_format backbuffer_depth_format;
-	uint32_t num_backbuffers; // leave 0 to use platform default
+	enum rjd_gfx_num_backbuffers num_backbuffers;
 	uint32_t* optional_desired_msaa_samples; // desired samples and fallbacks if unavailable. 1 is the default.
 	uint32_t count_desired_msaa_samples;
 
@@ -429,7 +435,6 @@ struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GF
 struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context);
 struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context);
 uint32_t rjd_gfx_current_backbuffer_index(struct rjd_gfx_context* context);
-uint32_t rjd_gfx_constant_buffer_alignment(void);
 
 // commands
 struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out);
@@ -448,6 +453,10 @@ struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, 
 //struct rjd_result rjd_gfx_mesh_create_indexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_indexed_desc desc);
 struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, const void* data, uint32_t length);
 void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh);
+
+// constant buffer helpers
+static inline uint32_t rjd_gfx_constant_buffer_alignment(void);
+static inline uint32_t rjd_gfx_calc_constant_buffer_stride(uint32_t constant_size);
 
 // format
 uint32_t rjd_gfx_format_bytesize(enum rjd_gfx_format format);
@@ -473,6 +482,22 @@ static inline int32_t rjd_gfx_backend_ismetal(void)
 static inline int32_t rjd_gfx_backend_isd3d11(void)
 {
 	return RJD_GFX_BACKEND_D3D11;
+}
+
+static inline uint32_t rjd_gfx_constant_buffer_alignment(void)
+{
+	#if RJD_GFX_BACKEND_METAL || RJD_GFX_BACKEND_D3D11
+		return 256;
+	#else
+		#error Unknown platform.
+	#endif
+}
+
+static inline uint32_t rjd_gfx_calc_constant_buffer_stride(uint32_t constant_size)
+{
+	uint32_t alignment = rjd_gfx_constant_buffer_alignment();
+	uint32_t aligned_stride = (constant_size % alignment) + constant_size;
+	return aligned_stride;
 }
 
 static inline struct rjd_gfx_format_value rjd_gfx_format_make_color_u8_rgba(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
