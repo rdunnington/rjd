@@ -316,14 +316,19 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
 		}
 
 		render_pass = [MTLRenderPassDescriptor renderPassDescriptor];
+		render_pass.colorAttachments[0].texture = texture;
 	}
-
-	#error handle command->depthstencil_target
 
     if (rjd_gfx_format_iscolor(command->clear_color.type)) {
         const MTLClearColor color = rjd_gfx_format_value_to_clearcolor(command->clear_color);
         render_pass.colorAttachments[0].clearColor = color;
     }
+
+	if (rjd_gfx_texture_isbackbuffer(command->depthstencil_target) == false) {
+		struct rjd_gfx_texture_metal* texture_metal = rjd_slotmap_get(context_metal->slotmap_textures, command->depthstencil_target.handle);
+		id<MTLTexture> texture = texture_metal->texture;
+		render_pass.depthAttachment.texture = texture;
+	}
 
 	if (rjd_gfx_format_isdepthstencil(command->clear_depthstencil.type)) {
         if (render_pass.depthAttachment) {
