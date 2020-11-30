@@ -111,7 +111,7 @@ struct rjd_gfx_format_value
 			uint32_t value; 
 			struct { 
 				uint32_t depth:24; 
-				uint32_t stencil:8; 
+				uint32_t stencil:8;
 			} parts; 
 		} depthstencil_u32_d24_s8;
         float depthstencil_f32_d32;
@@ -239,9 +239,8 @@ enum rjd_gfx_cull
 
 enum rjd_gfx_depth_compare
 {
-	RJD_GFX_DEPTH_COMPARE_DISABLED,
-	RJD_GFX_DEPTH_COMPARE_ALWAYS_FAIL,
 	RJD_GFX_DEPTH_COMPARE_ALWAYS_SUCCEED,
+	RJD_GFX_DEPTH_COMPARE_ALWAYS_FAIL,
 	RJD_GFX_DEPTH_COMPARE_LESS,
 	RJD_GFX_DEPTH_COMPARE_LESSEQUAL,
 	RJD_GFX_DEPTH_COMPARE_GREATER,
@@ -260,6 +259,7 @@ struct rjd_gfx_pipeline_state_desc
 	struct rjd_gfx_vertex_format_attribute* vertex_attributes;
 	uint32_t count_vertex_attributes;
 	enum rjd_gfx_depth_compare depth_compare;
+	bool depth_write_enabled;
 	enum rjd_gfx_cull cull_mode;
 	enum rjd_gfx_winding_order winding_order;
 	// TODO stencil config
@@ -329,6 +329,7 @@ struct rjd_gfx_pass_begin_desc
 {
 	const char* debug_label;
 	struct rjd_gfx_texture render_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
+	struct rjd_gfx_texture depthstencil_target; // specify RJD_GFX_TEXTURE_BACKBUFFER to use the backbuffer
 	struct rjd_gfx_format_value clear_color;
 	struct rjd_gfx_format_value clear_depthstencil;
 };
@@ -395,7 +396,7 @@ struct rjd_gfx_context_desc
 
 struct rjd_gfx_context
 {
-	char pimpl[160];
+	char pimpl[176];
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -446,6 +447,8 @@ bool rjd_gfx_format_iscolor(enum rjd_gfx_format format);
 bool rjd_gfx_format_isdepthstencil(enum rjd_gfx_format format);
 bool rjd_gfx_format_isdepth(enum rjd_gfx_format format);
 bool rjd_gfx_format_isstencil(enum rjd_gfx_format format);
+double rjd_gfx_format_value_to_depth(struct rjd_gfx_format_value value);
+uint8_t rjd_gfx_format_value_to_stencil(struct rjd_gfx_format_value value);
 
 static inline struct rjd_gfx_format_value rjd_gfx_format_make_color_u8_rgba(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha);
 static inline struct rjd_gfx_format_value rjd_gfx_format_make_depthstencil_f32_d32(float depth);
@@ -596,6 +599,44 @@ bool rjd_gfx_format_isstencil(enum rjd_gfx_format format)
 
 	RJD_ASSERTFAIL("Invalid value %d", format);
 	return false;
+}
+
+double rjd_gfx_format_value_to_depth(struct rjd_gfx_format_value value)
+{
+	switch (value.type)
+	{
+		case RJD_GFX_FORMAT_COLOR_U8_RGBA:
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM:
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB:
+			RJD_ASSERTFAIL("color values shouldn't be passed to this function");
+			break;
+
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32: return value.depthstencil_f32_d32;
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8: return value.depthstencil_u32_d24_s8.parts.depth;
+		case RJD_GFX_FORMAT_COUNT: break;
+	}
+
+	RJD_ASSERTFAIL("Unhandled format %d.", value.type);
+	return 0;
+}
+
+uint8_t rjd_gfx_format_value_to_stencil(struct rjd_gfx_format_value value)
+{
+	switch (value.type)
+	{
+		case RJD_GFX_FORMAT_COLOR_U8_RGBA:
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM:
+        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB:
+			RJD_ASSERTFAIL("color values shouldn't be passed to this function");
+			break;
+
+        case RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32: return 0;
+		case RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8: return (uint8_t)value.depthstencil_u32_d24_s8.parts.stencil; // stencil is 8 bits so the cast is fine
+        case RJD_GFX_FORMAT_COUNT: break;
+    }
+
+	RJD_ASSERTFAIL("Unhandled format %d.", value.type);
+	return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
