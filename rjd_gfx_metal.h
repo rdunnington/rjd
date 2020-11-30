@@ -150,18 +150,8 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 
         view.colorPixelFormat = mtl_color_format;
         view.depthStencilPixelFormat = mtl_depth_format;
-		view.sampleCount = 1; // users can set this higher later with rjd_gfx_backbuffer_set_msaa_samples()
+		view.sampleCount = 1; // users can set this higher later with rjd_gfx_backbuffer_set_msaa_count()
 	}
-
-	NSUInteger count_msaa = 1;
-	for (uint32_t i = 0; desc.optional_desired_msaa_samples && i < desc.count_desired_msaa_samples; ++i) {
-		NSUInteger count = desc.optional_desired_msaa_samples[i];
-		if ([view.device supportsTextureSampleCount:count]) {
-			count_msaa = count;
-			break;
-		}
-	}
-	view.sampleCount = count_msaa;
 
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)out;
     memset(out, 0, sizeof(*out));
@@ -200,10 +190,33 @@ struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context)
 	return RJD_RESULT_OK();
 }
 
-uint32_t rjd_gfx_current_backbuffer_index(struct rjd_gfx_context* context)
+uint32_t rjd_gfx_backbuffer_current_index(const struct rjd_gfx_context* context)
 {
 	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
 	return context_metal->backbuffer_index;
+}
+
+struct rjd_result rjd_gfx_backbuffer_msaa_is_count_supported(const struct rjd_gfx_context* context, uint32_t sample_count)
+{
+	RJD_ASSERT(context);
+
+	const struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
+    BOOL supported = [context_metal->device supportsTextureSampleCount:(NSUInteger)sample_count];
+	return supported ? RJD_RESULT_OK() : RJD_RESULT("The MSAA count is not supported.");
+}
+
+struct rjd_result rjd_gfx_backbuffer_set_msaa_count(struct rjd_gfx_context* context, uint32_t sample_count)
+{
+	RJD_ASSERT(context);
+
+	struct rjd_result result = rjd_gfx_backbuffer_msaa_is_count_supported(context, sample_count);
+	if (!rjd_result_isok(result)) {
+		return result;
+	}
+
+	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
+	context_metal->view.sampleCount = sample_count;
+	return RJD_RESULT_OK();
 }
 
 void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
@@ -249,22 +262,6 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 	context_metal->slotmap_pipeline_states	= NULL;
 	context_metal->slotmap_meshes			= NULL;
 	context_metal->slotmap_command_buffers	= NULL;
-}
-
-bool rjd_gfx_msaa_is_count_supported(const struct rjd_gfx_context* context, uint32_t count)
-{
-	RJD_ASSERT(context);
-
-	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
-    return [context_metal->device supportsTextureSampleCount:(NSUInteger)count];
-}
-
-void rjd_gfx_msaa_set_count(struct rjd_gfx_context* context, uint32_t count)
-{
-	RJD_ASSERT(context);
-
-	struct rjd_gfx_context_metal* context_metal = (struct rjd_gfx_context_metal*)context;
-	context_metal->view.sampleCount = count;
 }
 
 struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode)
