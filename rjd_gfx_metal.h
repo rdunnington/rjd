@@ -95,8 +95,6 @@ RJD_STATIC_ASSERT(sizeof(struct rjd_gfx_context_metal) <= sizeof(struct rjd_gfx_
 
 static MTLPixelFormat rjd_gfx_format_color_to_metal(enum rjd_gfx_format format);
 static MTLClearColor rjd_gfx_format_value_to_clearcolor(struct rjd_gfx_format_value value);
-static double rjd_gfx_format_value_to_depth(struct rjd_gfx_format_value value);
-static uint32_t rjd_gfx_format_value_to_stencil(struct rjd_gfx_format_value value);
 static bool rjd_gfx_format_isbackbuffercompatible(enum rjd_gfx_format format);
 
 static bool rjd_gfx_mtlformat_is_depth(MTLPixelFormat format);
@@ -318,12 +316,19 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
 		}
 
 		render_pass = [MTLRenderPassDescriptor renderPassDescriptor];
+		render_pass.colorAttachments[0].texture = texture;
 	}
 
     if (rjd_gfx_format_iscolor(command->clear_color.type)) {
         const MTLClearColor color = rjd_gfx_format_value_to_clearcolor(command->clear_color);
         render_pass.colorAttachments[0].clearColor = color;
     }
+
+	if (rjd_gfx_texture_isbackbuffer(command->depthstencil_target) == false) {
+		struct rjd_gfx_texture_metal* texture_metal = rjd_slotmap_get(context_metal->slotmap_textures, command->depthstencil_target.handle);
+		id<MTLTexture> texture = texture_metal->texture;
+		render_pass.depthAttachment.texture = texture;
+	}
 
 	if (rjd_gfx_format_isdepthstencil(command->clear_depthstencil.type)) {
         if (render_pass.depthAttachment) {
@@ -723,10 +728,9 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 	id<MTLDepthStencilState> depth_stencil_state = nil;
     {
         MTLDepthStencilDescriptor *depth_state_desc = [[MTLDepthStencilDescriptor alloc] init];
-        depth_state_desc.depthWriteEnabled = desc.depth_compare != RJD_GFX_DEPTH_COMPARE_DISABLED;
-        if (depth_state_desc.depthWriteEnabled) {
-            depth_state_desc.depthCompareFunction = rjd_gfx_depth_compare_to_metal(desc.depth_compare);
-        }
+
+        depth_state_desc.depthWriteEnabled = desc.depth_write_enabled;
+        depth_state_desc.depthCompareFunction = rjd_gfx_depth_compare_to_metal(desc.depth_compare);
         depth_stencil_state = [context_metal->device newDepthStencilStateWithDescriptor:depth_state_desc];
 
         if (depth_stencil_state == nil) {
@@ -921,44 +925,6 @@ static MTLClearColor rjd_gfx_format_value_to_clearcolor(struct rjd_gfx_format_va
 	return MTLClearColorMake(red, green, blue, alpha);
 }
 
-static double rjd_gfx_format_value_to_depth(struct rjd_gfx_format_value value)
-{
-	switch (value.type)
-	{
-		case RJD_GFX_FORMAT_COLOR_U8_RGBA:
-        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM:
-        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB:
-			RJD_ASSERTFAIL("color values shouldn't be passed to this function");
-			break;
-
-		case RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32: return value.depthstencil_f32_d32;
-		case RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8: return value.depthstencil_u32_d24_s8.parts.depth;
-		case RJD_GFX_FORMAT_COUNT: break;
-	}
-
-	RJD_ASSERTFAIL("Unhandled format %d.", value.type);
-	return MTLPixelFormatInvalid;
-}
-
-static uint32_t rjd_gfx_format_value_to_stencil(struct rjd_gfx_format_value value)
-{
-	switch (value.type)
-	{
-		case RJD_GFX_FORMAT_COLOR_U8_RGBA:
-        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM:
-        case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB:
-			RJD_ASSERTFAIL("color values shouldn't be passed to this function");
-			break;
-
-        case RJD_GFX_FORMAT_DEPTHSTENCIL_F32_D32: return 0.0f;
-		case RJD_GFX_FORMAT_DEPTHSTENCIL_U32_D24_S8: return value.depthstencil_u32_d24_s8.parts.stencil;
-        case RJD_GFX_FORMAT_COUNT: break;
-    }
-
-	RJD_ASSERTFAIL("Unhandled format %d.", value.type);
-	return MTLPixelFormatInvalid;
-}
-
 static bool rjd_gfx_format_isbackbuffercompatible(enum rjd_gfx_format format)
 {
 	switch (format)
@@ -1022,9 +988,8 @@ static MTLCompareFunction rjd_gfx_depth_compare_to_metal(enum rjd_gfx_depth_comp
 {
 	switch (func)
 	{
-		case RJD_GFX_DEPTH_COMPARE_DISABLED: RJD_ASSERTFAIL("unreachable"); break;
-		case RJD_GFX_DEPTH_COMPARE_ALWAYS_FAIL: return MTLCompareFunctionNever;
 		case RJD_GFX_DEPTH_COMPARE_ALWAYS_SUCCEED: return MTLCompareFunctionAlways;
+		case RJD_GFX_DEPTH_COMPARE_ALWAYS_FAIL: return MTLCompareFunctionNever;
 		case RJD_GFX_DEPTH_COMPARE_LESS: return MTLCompareFunctionLess;
 		case RJD_GFX_DEPTH_COMPARE_LESSEQUAL: return MTLCompareFunctionLessEqual;
 		case RJD_GFX_DEPTH_COMPARE_GREATER: return MTLCompareFunctionGreater;

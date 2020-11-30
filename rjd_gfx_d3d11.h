@@ -52,6 +52,7 @@ struct rjd_gfx_pipeline_state_d3d11
 {
 	ID3D11InputLayout* vertex_layout;
 	ID3D11RasterizerState* rasterizer_state;
+	ID3D11DepthStencilState* depthstencil_state;
 	struct rjd_gfx_shader shader_vertex;
 	struct rjd_gfx_shader shader_pixel;
 	struct rjd_gfx_texture render_target;
@@ -80,7 +81,8 @@ struct rjd_gfx_mesh_d3d11
 struct rjd_gfx_command_buffer_d3d11
 {
 	ID3D11DeviceContext1* deferred_context;
-	ID3D11RenderTargetView* render_target;
+	ID3D11RenderTargetView* render_target_view;
+	ID3D11DepthStencilView* depthstencil_view;
 };
 
 struct rjd_gfx_context_d3d11
@@ -98,6 +100,8 @@ struct rjd_gfx_context_d3d11
 	struct rjd_gfx_command_buffer_d3d11* slotmap_command_buffers;
 
 	ID3D11DeviceContext1** free_deferred_contexts;
+	ID3D11Texture2D** depthbuffers;
+	ID3D11Texture2D** msaa_depthbuffers;
 	struct rjd_gfx_texture* msaa_backbuffers;
 
 	struct rjd_mem_allocator* allocator;
@@ -107,6 +111,7 @@ struct rjd_gfx_context_d3d11
 	uint8_t num_backbuffers;
 	uint8_t backbuffer_index;
 	enum rjd_gfx_format backbuffer_color_format;
+	enum rjd_gfx_format backbuffer_depth_format;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_gfx_context_d3d11) <= sizeof(struct rjd_gfx_context));
 
@@ -122,6 +127,7 @@ static DXGI_FORMAT rjd_gfx_format_to_dxgi_strip_srgb(enum rjd_gfx_format format)
 static struct rjd_gfx_rgba rjd_gfx_format_value_to_rgba(struct rjd_gfx_format_value value);
 static D3D_PRIMITIVE_TOPOLOGY rjd_gfx_primitive_to_d3d11(enum rjd_gfx_primitive_type primitive);
 static D3D11_CULL_MODE rjd_gfx_cull_to_d3d(enum rjd_gfx_cull cull_mode);
+static D3D11_COMPARISON_FUNC rjd_gfx_depth_compare_to_d3d11(enum rjd_gfx_depth_compare compare);
 static D3D11_USAGE rjd_gfx_texture_access_to_gpu_access(enum rjd_gfx_texture_access access);
 static D3D11_CPU_ACCESS_FLAG rjd_gfx_texture_access_to_cpu_access(enum rjd_gfx_texture_access access);
 static const char* rjd_gfx_semantic_to_name(enum rjd_gfx_vertex_semantic semantic);
@@ -312,6 +318,39 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		}
 	}
 
+	// Create backing depth buffers
+	ID3D11Texture2D** depthbuffers = rjd_mem_alloc_array(ID3D11Texture2D*, num_backbuffers, desc.allocator);
+	{
+		DXGI_FORMAT depth_format_dxgi = rjd_gfx_format_to_dxgi(desc.backbuffer_depth_format);
+
+		DXGI_SWAP_CHAIN_DESC1 swapchain_desc = {0};
+		HRESULT hr_swap = IDXGISwapChain1_GetDesc1(swapchain, &swapchain_desc);
+		if (FAILED(hr_swap)) {
+			return RJD_RESULT("Failed to get swapchain desc to get auto-detected backbuffer size.");
+		}
+
+		D3D11_TEXTURE2D_DESC desc_depthbuffer = {
+			.Width = swapchain_desc.Width,
+			.Height = swapchain_desc.Height,
+			.MipLevels = 1,
+			.ArraySize = 1,
+			.Format = depth_format_dxgi,
+			.SampleDesc.Count = 1,
+			.SampleDesc.Quality = 0,
+			.Usage = D3D11_USAGE_DEFAULT,
+			.BindFlags = D3D11_BIND_DEPTH_STENCIL,
+			.CPUAccessFlags = 0,
+			.MiscFlags = 0,
+		};
+
+		for (size_t i = 0; i < num_backbuffers; ++i) {
+			HRESULT hr = ID3D11Device_CreateTexture2D(device, &desc_depthbuffer, NULL, depthbuffers + i);
+			if (FAILED(hr)) {
+				return rjd_gfx_translate_hresult(hr);
+			}
+		}
+	}
+
 	memset(out, 0, sizeof(*out));
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)out;
 
@@ -322,6 +361,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_d3d11->slotmap_command_buffers	= rjd_slotmap_alloc(struct rjd_gfx_command_buffer_d3d11, 16, desc.allocator);
 
 	context_d3d11->free_deferred_contexts = rjd_array_alloc(ID3D11DeviceContext1*, 1, desc.allocator);
+	context_d3d11->depthbuffers = depthbuffers;
 	context_d3d11->msaa_backbuffers = NULL;
 
 	context_d3d11->factory = factory;
@@ -337,6 +377,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_d3d11->num_backbuffers = (uint8_t)num_backbuffers;
 	context_d3d11->backbuffer_index = 0;
 	context_d3d11->backbuffer_color_format = desc.backbuffer_color_format;
+	context_d3d11->backbuffer_depth_format = desc.backbuffer_depth_format;
 
 	return RJD_RESULT_OK();
 }
@@ -385,7 +426,16 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 	}
 	rjd_array_free(context_d3d11->free_deferred_contexts);
 
-	// freeing these textures got taken care of in the above reasource cleanup
+	for (size_t i = 0; i < context_d3d11->num_backbuffers; ++i) {
+		ID3D11Texture2D_Release(context_d3d11->depthbuffers[i]);
+		if (context_d3d11->msaa_depthbuffers) {
+			ID3D11Texture2D_Release(context_d3d11->msaa_depthbuffers[i]);
+		}
+	}
+	rjd_mem_free(context_d3d11->depthbuffers);
+	rjd_mem_free(context_d3d11->msaa_depthbuffers);
+
+	// freeing these textures got taken care of in the above resource cleanup
 	rjd_mem_free(context_d3d11->msaa_backbuffers);
 
 	IDXGISwapChain1_Release(context_d3d11->swapchain);
@@ -449,13 +499,17 @@ struct rjd_result rjd_gfx_backbuffer_set_msaa_count(struct rjd_gfx_context* cont
 		if (context_d3d11->msaa_backbuffers) {
 			for (uint32_t i = 0; i < context_d3d11->num_backbuffers; ++i) {
 				rjd_gfx_texture_destroy(context, context_d3d11->msaa_backbuffers + i);
+				ID3D11Texture2D_Release(context_d3d11->msaa_depthbuffers[i]);
 			}
 
 			rjd_mem_free(context_d3d11->msaa_backbuffers);
+			rjd_mem_free(context_d3d11->msaa_depthbuffers);
 			context_d3d11->msaa_backbuffers = NULL;
+			context_d3d11->msaa_depthbuffers = NULL;
 		}
 
 		if (num_msaa_backbuffers > 0) {
+			// color buffers
 			context_d3d11->msaa_backbuffers = rjd_mem_alloc_array(struct rjd_gfx_texture, num_msaa_backbuffers, context_d3d11->allocator);
 			for (size_t i = 0; i < num_msaa_backbuffers; ++i) {
 				struct rjd_gfx_texture_desc desc = {
@@ -469,9 +523,34 @@ struct rjd_result rjd_gfx_backbuffer_set_msaa_count(struct rjd_gfx_context* cont
 					.access = RJD_GFX_TEXTURE_ACCESS_CPU_NONE_GPU_READWRITE,
 					.usage = RJD_GFX_TEXTURE_USAGE_RENDERTARGET,
 				};
+
 				struct rjd_result result = rjd_gfx_texture_create(context, context_d3d11->msaa_backbuffers + i, desc);
 				if (!rjd_result_isok(result)) {
 					return result;
+				}
+			}
+
+			// msaa depthbuffers
+			context_d3d11->msaa_depthbuffers = rjd_mem_alloc_array(ID3D11Texture2D*, num_msaa_backbuffers, context_d3d11->allocator);
+			for (size_t i = 0; i < num_msaa_backbuffers; ++i) {
+				DXGI_FORMAT depth_format_dxgi = rjd_gfx_format_to_dxgi(context_d3d11->backbuffer_depth_format);
+
+				D3D11_TEXTURE2D_DESC desc_depthbuffer = {
+					.Width = swapchain_desc.Width,
+					.Height = swapchain_desc.Height,
+					.MipLevels = 1,
+					.ArraySize = 1,
+					.Format = depth_format_dxgi,
+					.SampleDesc = sample_desc,
+					.Usage = D3D11_USAGE_DEFAULT,
+					.BindFlags = D3D11_BIND_DEPTH_STENCIL,
+					.CPUAccessFlags = 0,
+					.MiscFlags = 0,
+				};
+
+				HRESULT hr = ID3D11Device_CreateTexture2D(context_d3d11->device, &desc_depthbuffer, NULL, context_d3d11->msaa_depthbuffers + i);
+				if (FAILED(hr)) {
+					return rjd_gfx_translate_hresult(hr);
 				}
 			}
 		}
@@ -583,14 +662,14 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 	struct rjd_gfx_command_buffer_d3d11* cmd_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
 
-	if (cmd_buffer_d3d11->render_target) {
+	if (cmd_buffer_d3d11->render_target_view) {
 		return RJD_RESULT("A render pass has already been started with this command buffer.");
 	}
 
-	D3D11_RTV_DIMENSION view_dimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-
+	// Color buffer
 	if (rjd_gfx_texture_isbackbuffer(command->render_target)) {
 		ID3D11Texture2D* texture_backbuffer = NULL;
+		D3D11_RTV_DIMENSION view_dimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 
 		if (context_d3d11->msaa_backbuffers) {
 			struct rjd_gfx_texture* render_target = context_d3d11->msaa_backbuffers + context_d3d11->backbuffer_index;
@@ -612,7 +691,7 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
 			.ViewDimension = view_dimension,
 		};
 
-		HRESULT hr = ID3D11Device_CreateRenderTargetView(context_d3d11->device, (ID3D11Resource*)texture_backbuffer, &desc, &cmd_buffer_d3d11->render_target);
+		HRESULT hr = ID3D11Device_CreateRenderTargetView(context_d3d11->device, (ID3D11Resource*)texture_backbuffer, &desc, &cmd_buffer_d3d11->render_target_view);
 		if (FAILED(hr)) {
 			return rjd_gfx_translate_hresult(hr);
 		}
@@ -626,9 +705,41 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
 	}
 
 	struct rjd_gfx_rgba rgba_backbuffer = rjd_gfx_format_value_to_rgba(command->clear_color);
-	ID3D11DeviceContext_ClearRenderTargetView(cmd_buffer_d3d11->deferred_context, cmd_buffer_d3d11->render_target, rgba_backbuffer.v);
+	ID3D11DeviceContext_ClearRenderTargetView(cmd_buffer_d3d11->deferred_context, cmd_buffer_d3d11->render_target_view, rgba_backbuffer.v);
 
-	//ID3D11DeviceContext_ClearDepthStencilView(cmd_buffer_d3d11->deferred_context, cmd_buffer_d3d11->depth_stencil, color); // TODO
+	// Depthstencil buffer
+	if (rjd_gfx_texture_isbackbuffer(command->depthstencil_target)) {
+		ID3D11Texture2D* texture_depthstencil = NULL;
+
+		if (context_d3d11->msaa_depthbuffers) {
+			texture_depthstencil = context_d3d11->msaa_depthbuffers[context_d3d11->backbuffer_index];
+		} else {
+			texture_depthstencil = context_d3d11->depthbuffers[context_d3d11->backbuffer_index];
+		}
+
+		HRESULT hr = ID3D11Device_CreateDepthStencilView(context_d3d11->device, (ID3D11Resource*)texture_depthstencil, NULL, &cmd_buffer_d3d11->depthstencil_view);
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
+		}
+	} else {
+		RJD_ASSERTFAIL("non-backbuffer depthbuffer targets are unimplemented"); // TODO
+	}
+
+	UINT flags = 0;
+	float depth_color = 0.0f;
+	uint8_t stencil_color = 0;
+
+	if (rjd_gfx_format_isdepth(command->clear_depthstencil.type)) {
+		flags |= D3D11_CLEAR_DEPTH;
+		depth_color = (float)rjd_gfx_format_value_to_depth(command->clear_depthstencil);
+	}
+
+	if (rjd_gfx_format_isstencil(command->clear_depthstencil.type)) {
+		flags |= D3D11_CLEAR_STENCIL;
+		stencil_color = rjd_gfx_format_value_to_stencil(command->clear_depthstencil);
+	}
+
+	ID3D11DeviceContext_ClearDepthStencilView(cmd_buffer_d3d11->deferred_context, cmd_buffer_d3d11->depthstencil_view, flags, depth_color, stencil_color);
 
 	return RJD_RESULT_OK();
 }
@@ -653,7 +764,8 @@ struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, str
 	ID3D11DeviceContext1_IASetInputLayout(cmd_buffer_d3d11->deferred_context, pipeline_state_d3d11->vertex_layout);
 	ID3D11DeviceContext1_RSSetState(cmd_buffer_d3d11->deferred_context, pipeline_state_d3d11->rasterizer_state);
 
-	ID3D11DeviceContext1_OMSetRenderTargets(cmd_buffer_d3d11->deferred_context, 1, &cmd_buffer_d3d11->render_target, NULL); // TODO depthstencil target
+	ID3D11DeviceContext1_OMSetDepthStencilState(cmd_buffer_d3d11->deferred_context, pipeline_state_d3d11->depthstencil_state, 0);
+	ID3D11DeviceContext1_OMSetRenderTargets(cmd_buffer_d3d11->deferred_context, 1, &cmd_buffer_d3d11->render_target_view, cmd_buffer_d3d11->depthstencil_view);
 
 	struct rjd_gfx_shader_d3d11* shader_vertex_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, pipeline_state_d3d11->shader_vertex.handle);
 	struct rjd_gfx_shader_d3d11* shader_pixel_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_shaders, pipeline_state_d3d11->shader_pixel.handle);
@@ -788,12 +900,14 @@ struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context,
 
 	ID3D11DeviceContext_ExecuteCommandList(context_d3d11->context, commandlist, FALSE);
 	ID3D11CommandList_Release(commandlist);
-	ID3D11RenderTargetView_Release(cmd_buffer_d3d11->render_target);
+	ID3D11RenderTargetView_Release(cmd_buffer_d3d11->render_target_view);
+	ID3D11DepthStencilView_Release(cmd_buffer_d3d11->depthstencil_view);
 
 	rjd_array_push(context_d3d11->free_deferred_contexts, cmd_buffer_d3d11->deferred_context);
 
 	cmd_buffer_d3d11->deferred_context = NULL;
-	cmd_buffer_d3d11->render_target = NULL;
+	cmd_buffer_d3d11->render_target_view = NULL;
+	cmd_buffer_d3d11->depthstencil_view = NULL;
 
 	rjd_slotmap_erase(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
 	rjd_slot_invalidate(&cmd_buffer->handle);
@@ -1050,13 +1164,41 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 			.SlopeScaledDepthBias = 1.0f,
 			.DepthClipEnable = TRUE,
 			.ScissorEnable = FALSE, // TODO support stencils
-			.MultisampleEnable = FALSE, // TODO MSAA
+			.MultisampleEnable = TRUE,
 			.AntialiasedLineEnable = FALSE,
 		};
 
 		HRESULT result = ID3D11Device_CreateRasterizerState(context_d3d11->device, &desc_rasterizer, &rasterizer_state);
 		if (FAILED(result)) {
 			return rjd_gfx_translate_hresult(result);
+		}
+	}
+
+	ID3D11DepthStencilState* depthstencil_state = NULL;
+	{
+		D3D11_DEPTH_STENCIL_DESC desc_depthstencil = {
+			.DepthEnable = TRUE,
+			.DepthWriteMask = desc.depth_write_enabled ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO,
+			.DepthFunc = rjd_gfx_depth_compare_to_d3d11(desc.depth_compare),
+
+			.StencilEnable = FALSE,
+			// .StencilReadMask = 0xFF,
+			// .StencilWriteMask = 0xFF,
+
+			// .FrontFace.StencilFailOp = D3D11_STENCIL_OP_KEEP,
+			// .FrontFace.StencilDepthFailOp = D3D11_STENCIL_OP_INCR,
+			// .FrontFace.StencilPassOp = D3D11_STENCIL_OP_KEEP,
+			// .FrontFace.StencilFunc = D3D11_COMPARISON_ALWAYS,
+
+			// .BackFace.StencilFailOp = D3D11_STENCIL_OP_KEEP,
+			// .BackFace.StencilDepthFailOp = D3D11_STENCIL_OP_DECR,
+			// .BackFace.StencilPassOp = D3D11_STENCIL_OP_KEEP,
+			// .BackFace.StencilFunc = D3D11_COMPARISON_ALWAYS,
+		};
+
+		HRESULT hr = ID3D11Device_CreateDepthStencilState(context_d3d11->device, &desc_depthstencil, &depthstencil_state);
+		if (FAILED(hr)) {
+			return rjd_gfx_translate_hresult(hr);
 		}
 	}
 
@@ -1069,7 +1211,7 @@ struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context,
 		.shader_pixel = desc.shader_pixel,
 		.render_target = desc.render_target,
 		.depthstencil_target = desc.depthstencil_target,
-		.depth_compare = desc.depth_compare,
+		.depthstencil_state = depthstencil_state,
 	};
 	
 	rjd_slotmap_insert(context_d3d11->slotmap_pipeline_states, state_d3d11, &out->handle);
@@ -1325,6 +1467,24 @@ static D3D11_CULL_MODE rjd_gfx_cull_to_d3d(enum rjd_gfx_cull cull_mode)
 	return D3D11_CULL_NONE;
 }
 
+static D3D11_COMPARISON_FUNC rjd_gfx_depth_compare_to_d3d11(enum rjd_gfx_depth_compare compare)
+{
+	switch (compare)
+	{
+		case RJD_GFX_DEPTH_COMPARE_ALWAYS_SUCCEED: return D3D11_COMPARISON_ALWAYS;
+		case RJD_GFX_DEPTH_COMPARE_ALWAYS_FAIL: return D3D11_COMPARISON_NEVER;
+		case RJD_GFX_DEPTH_COMPARE_LESS: return D3D11_COMPARISON_LESS;
+		case RJD_GFX_DEPTH_COMPARE_LESSEQUAL: return D3D11_COMPARISON_LESS_EQUAL;
+		case RJD_GFX_DEPTH_COMPARE_GREATER: return D3D11_COMPARISON_GREATER;
+		case RJD_GFX_DEPTH_COMPARE_GREATEREQUAL: return D3D11_COMPARISON_GREATER_EQUAL;
+		case RJD_GFX_DEPTH_COMPARE_EQUAL: return D3D11_COMPARISON_EQUAL;
+		case RJD_GFX_DEPTH_COMPARE_NOTEQUAL: return D3D11_COMPARISON_NOT_EQUAL;
+	}
+
+	RJD_ASSERTFAIL("Unhandled case %d", compare);
+	return D3D11_COMPARISON_ALWAYS;
+}
+
 static D3D11_USAGE rjd_gfx_texture_access_to_gpu_access(enum rjd_gfx_texture_access access)
 {
 	switch (access)
@@ -1444,6 +1604,7 @@ static inline void rjd_gfx_pipeline_state_destroy_d3d11(struct rjd_gfx_context_d
 
 	ID3D11InputLayout_Release(pipeline_state->vertex_layout);
 	ID3D11RasterizerState_Release(pipeline_state->rasterizer_state);
+	ID3D11DepthStencilState_Release(pipeline_state->depthstencil_state);
 	rjd_strref_release(pipeline_state->debug_name);
 
 	rjd_slotmap_erase(context->slotmap_pipeline_states, slot);
@@ -1464,8 +1625,11 @@ static inline void rjd_gfx_mesh_destroy_d3d11(struct rjd_gfx_context_d3d11* cont
 static inline void rjd_gfx_command_buffer_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot)
 {
 	struct rjd_gfx_command_buffer_d3d11* cmd_buffer = rjd_slotmap_get(context->slotmap_command_buffers, slot);
-	if (cmd_buffer->render_target) {
-		ID3D11RenderTargetView_Release(cmd_buffer->render_target);
+	if (cmd_buffer->render_target_view) {
+		ID3D11RenderTargetView_Release(cmd_buffer->render_target_view);
+	}
+	if (cmd_buffer->depthstencil_view) {
+		ID3D11RenderTargetView_Release(cmd_buffer->depthstencil_view);
 	}
 	if (cmd_buffer->deferred_context) {
 		ID3D11DeviceContext_Release(cmd_buffer->deferred_context);
