@@ -31,11 +31,6 @@ struct ID3D11ModuleInstance;
 ////////////////////////////////////////////////////////////////////////////////
 // Local helpers
 
-#if RJD_COMPILER_GCC
-	// The GCC headers have all the correct declarations for these GUIDs, but libdxguid.a are missing the definitions
-	const GUID IID_IDXGIFactory4 = { 0x1bc6ea02, 0xef36, 0x464f, { 0xbf,0x0c,0x21,0xca,0x39,0xe5,0x16,0x8a } };
-#endif
-
 struct rjd_gfx_texture_d3d11
 {
 	ID3D11Texture2D* texture;
@@ -103,6 +98,7 @@ struct rjd_gfx_context_d3d11
 	struct rjd_gfx_command_buffer_d3d11* slotmap_command_buffers;
 
 	ID3D11DeviceContext1** free_deferred_contexts;
+	struct rjd_gfx_texture* msaa_backbuffers;
 
 	struct rjd_mem_allocator* allocator;
 	struct rjd_strpool debug_names;
@@ -110,6 +106,7 @@ struct rjd_gfx_context_d3d11
 	bool is_occluded;
 	uint8_t num_backbuffers;
 	uint8_t backbuffer_index;
+	enum rjd_gfx_format backbuffer_color_format;
 };
 RJD_STATIC_ASSERT(sizeof(struct rjd_gfx_context_d3d11) <= sizeof(struct rjd_gfx_context));
 
@@ -118,10 +115,10 @@ struct rjd_gfx_rgba
 	float v[4];
 };
 
-// Local helpers
 static struct rjd_result rjd_gfx_translate_hresult(HRESULT hr);
 
 static DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format);
+static DXGI_FORMAT rjd_gfx_format_to_dxgi_strip_srgb(enum rjd_gfx_format format);
 static struct rjd_gfx_rgba rjd_gfx_format_value_to_rgba(struct rjd_gfx_format_value value);
 static D3D_PRIMITIVE_TOPOLOGY rjd_gfx_primitive_to_d3d11(enum rjd_gfx_primitive_type primitive);
 static D3D11_CULL_MODE rjd_gfx_cull_to_d3d(enum rjd_gfx_cull cull_mode);
@@ -131,11 +128,21 @@ static const char* rjd_gfx_semantic_to_name(enum rjd_gfx_vertex_semantic semanti
 
 static bool rjd_gfx_texture_isbackbuffer(struct rjd_gfx_texture texture);
 
+static struct rjd_result rjd_gfx_backbuffer_get_msaa_quality_d3d11(const struct rjd_gfx_context_d3d11* context, uint32_t sample_count, DXGI_SAMPLE_DESC* out);
+
 static inline void rjd_gfx_texture_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot);
 static inline void rjd_gfx_shader_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot);
 static inline void rjd_gfx_pipeline_state_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot);
 static inline void rjd_gfx_mesh_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot);
 static inline void rjd_gfx_command_buffer_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot);
+
+////////////////////////////////////////////////////////////////////////////////
+// Local data
+
+#if RJD_COMPILER_GCC
+	// The GCC headers have all the correct declarations for these GUIDs, but libdxguid.a are missing the definitions
+	const GUID IID_IDXGIFactory4 = { 0x1bc6ea02, 0xef36, 0x464f, { 0xbf,0x0c,0x21,0xca,0x39,0xe5,0x16,0x8a } };
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // interface implementation
@@ -227,12 +234,22 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		}
 	}
 
-	const DXGI_FORMAT backbuffer_format = rjd_gfx_format_to_dxgi(desc.backbuffer_color_format);
+	// DXGI doesn't support SRGB formats in the swapchain, but if the user wants one, we can still fake it
+	// by using SRGB views.
+	DXGI_FORMAT backbuffer_format = rjd_gfx_format_to_dxgi(desc.backbuffer_color_format);
 	{
-		UINT support;
-		HRESULT hr = ID3D11Device_CheckFormatSupport(device, backbuffer_format, &support);
-		if (hr == E_FAIL) {
-			return RJD_RESULT("Device does not support specified backbuffer format.");
+		if (backbuffer_format != DXGI_FORMAT_B8G8R8A8_UNORM &&
+			backbuffer_format != DXGI_FORMAT_R8G8B8A8_UNORM &&
+			backbuffer_format != DXGI_FORMAT_R16G16B16A16_FLOAT &&
+			backbuffer_format != DXGI_FORMAT_R10G10B10A2_UNORM) {
+			backbuffer_format = rjd_gfx_format_to_dxgi_strip_srgb(desc.backbuffer_color_format);
+		}
+		if (backbuffer_format != DXGI_FORMAT_B8G8R8A8_UNORM &&
+			backbuffer_format != DXGI_FORMAT_R8G8B8A8_UNORM &&
+			backbuffer_format != DXGI_FORMAT_R16G16B16A16_FLOAT &&
+			backbuffer_format != DXGI_FORMAT_R10G10B10A2_UNORM) {
+			return RJD_RESULT("The backbuffer format must be one of these: "
+								"DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R16G16B16A16_FLOAT, DXGI_FORMAT_R10G10B10A2_UNORM");
 		}
 	}
 
@@ -255,23 +272,6 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 			.Quality = 0,
 		};
 
-		//if (desc.optional_desired_msaa_samples) {
-		//	for (uint32_t i = 0; i < desc.count_desired_msaa_samples; ++i) {
-		//		UINT quality = 0;
-		//		UINT count = desc.optional_desired_msaa_samples[i];
-		//		HRESULT hr = ID3D11Device_CheckMultisampleQualityLevels(device, backbuffer_format, count, &quality);
-		//		if (SUCCEEDED(hr)) {
-		//			desc_msaa.Count = count;
-		//			desc_msaa.Quality = quality;
-		//			break;
-		//		} else if (hr == 0) {
-		//			// unsupported
-		//		} else {
-		//			return RJD_RESULT("Failed to get multisample quality levels.");
-		//		}
-		//	}
-		//}
-
 		uint32_t flags = 0;
 		flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // needed to switch between fullscreen/windowed
 		flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING; // needed to turn off vsync
@@ -279,7 +279,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 		DXGI_SWAP_CHAIN_DESC1 desc_swapchain = {
 			.Width = 0, // auto-detect
 			.Height = 0, // auto-detect
-			.Format = DXGI_FORMAT_R8G8B8A8_UNORM,
+			.Format = backbuffer_format,
 			.Stereo = false,
 			.SampleDesc = desc_msaa,
 			.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT,
@@ -322,6 +322,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_d3d11->slotmap_command_buffers	= rjd_slotmap_alloc(struct rjd_gfx_command_buffer_d3d11, 16, desc.allocator);
 
 	context_d3d11->free_deferred_contexts = rjd_array_alloc(ID3D11DeviceContext1*, 1, desc.allocator);
+	context_d3d11->msaa_backbuffers = NULL;
 
 	context_d3d11->factory = factory;
 	context_d3d11->adapter = adapter_extended;
@@ -335,6 +336,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 	context_d3d11->is_occluded = false;
 	context_d3d11->num_backbuffers = (uint8_t)num_backbuffers;
 	context_d3d11->backbuffer_index = 0;
+	context_d3d11->backbuffer_color_format = desc.backbuffer_color_format;
 
 	return RJD_RESULT_OK();
 }
@@ -383,6 +385,9 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 	}
 	rjd_array_free(context_d3d11->free_deferred_contexts);
 
+	// freeing these textures got taken care of in the above reasource cleanup
+	rjd_mem_free(context_d3d11->msaa_backbuffers);
+
 	IDXGISwapChain1_Release(context_d3d11->swapchain);
 	ID3D11DeviceContext_Release(context_d3d11->context);
 	ID3D11Device_Release(context_d3d11->device);
@@ -398,6 +403,81 @@ void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
 		}
 	}
 #endif
+}
+
+uint32_t rjd_gfx_backbuffer_current_index(const struct rjd_gfx_context* context)
+{
+	RJD_ASSERT(context);
+
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+	return context_d3d11->backbuffer_index;
+}
+
+struct rjd_result rjd_gfx_backbuffer_msaa_is_count_supported(const struct rjd_gfx_context* context, uint32_t sample_count)
+{
+	RJD_ASSERT(context);
+
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+
+	DXGI_SAMPLE_DESC unused = {0};
+	return rjd_gfx_backbuffer_get_msaa_quality_d3d11(context_d3d11, sample_count, &unused);
+}
+
+struct rjd_result rjd_gfx_backbuffer_set_msaa_count(struct rjd_gfx_context* context, uint32_t sample_count)
+{
+	RJD_ASSERT(context);
+
+	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
+
+	DXGI_SAMPLE_DESC sample_desc = {0};
+	{
+		struct rjd_result result = rjd_gfx_backbuffer_get_msaa_quality_d3d11(context_d3d11, sample_count, &sample_desc);
+		if (!rjd_result_isok(result)) {
+			return result;
+		}
+	}
+
+	DXGI_SWAP_CHAIN_DESC1 swapchain_desc = {0};
+	HRESULT hr_swap = IDXGISwapChain1_GetDesc1(context_d3d11->swapchain, &swapchain_desc);
+	if (FAILED(hr_swap)) {
+		return RJD_RESULT("Failed to get swapchain desc to check MSAA compatibility.");
+	}
+
+	if (sample_desc.Count != swapchain_desc.SampleDesc.Count) {
+		const uint32_t num_msaa_backbuffers = (sample_count > 1) ? context_d3d11->num_backbuffers : 0;
+
+		if (context_d3d11->msaa_backbuffers) {
+			for (uint32_t i = 0; i < context_d3d11->num_backbuffers; ++i) {
+				rjd_gfx_texture_destroy(context, context_d3d11->msaa_backbuffers + i);
+			}
+
+			rjd_mem_free(context_d3d11->msaa_backbuffers);
+			context_d3d11->msaa_backbuffers = NULL;
+		}
+
+		if (num_msaa_backbuffers > 0) {
+			context_d3d11->msaa_backbuffers = rjd_mem_alloc_array(struct rjd_gfx_texture, num_msaa_backbuffers, context_d3d11->allocator);
+			for (size_t i = 0; i < num_msaa_backbuffers; ++i) {
+				struct rjd_gfx_texture_desc desc = {
+					.debug_label = "msaa_backbuffer_color",
+					.data = NULL, 
+					.data_length = 0,
+					.pixels_width = swapchain_desc.Width,
+					.pixels_height = swapchain_desc.Height,
+					.msaa_samples = sample_count,
+					.format = context_d3d11->backbuffer_color_format,
+					.access = RJD_GFX_TEXTURE_ACCESS_CPU_NONE_GPU_READWRITE,
+					.usage = RJD_GFX_TEXTURE_USAGE_RENDERTARGET,
+				};
+				struct rjd_result result = rjd_gfx_texture_create(context, context_d3d11->msaa_backbuffers + i, desc);
+				if (!rjd_result_isok(result)) {
+					return result;
+				}
+			}
+		}
+	}
+
+	return RJD_RESULT_OK();
 }
 
 struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode)
@@ -478,12 +558,6 @@ struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context)
 	return rjd_gfx_translate_hresult(hr);
 }
 
-uint32_t rjd_gfx_current_backbuffer_index(struct rjd_gfx_context* context)
-{
-	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
-	return context_d3d11->backbuffer_index;
-}
-
 // commands
 struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out)
 {
@@ -513,20 +587,40 @@ struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, st
 		return RJD_RESULT("A render pass has already been started with this command buffer.");
 	}
 
+	D3D11_RTV_DIMENSION view_dimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+
 	if (rjd_gfx_texture_isbackbuffer(command->render_target)) {
 		ID3D11Texture2D* texture_backbuffer = NULL;
-		HRESULT hr = IDXGISwapChain_GetBuffer(context_d3d11->swapchain, 0, &IID_ID3D11Texture2D, (void**)&texture_backbuffer);
+
+		if (context_d3d11->msaa_backbuffers) {
+			struct rjd_gfx_texture* render_target = context_d3d11->msaa_backbuffers + context_d3d11->backbuffer_index;
+			struct rjd_gfx_texture_d3d11* render_target_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_textures, render_target->handle);
+			texture_backbuffer = render_target_d3d11->texture;
+
+			view_dimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
+		} else {
+			HRESULT hr = IDXGISwapChain_GetBuffer(context_d3d11->swapchain, 0, &IID_ID3D11Texture2D, (void**)&texture_backbuffer);
+			if (FAILED(hr)) {
+				return rjd_gfx_translate_hresult(hr);
+			}
+		}
+
+		// NOTE: Even if the backbuffer is non-sRGB, we can still create a sRGB view for automatic colorspace conversion if that's what the user wanted the
+		// backbuffer to be.
+		D3D11_RENDER_TARGET_VIEW_DESC desc = {
+			.Format = rjd_gfx_format_to_dxgi(context_d3d11->backbuffer_color_format),
+			.ViewDimension = view_dimension,
+		};
+
+		HRESULT hr = ID3D11Device_CreateRenderTargetView(context_d3d11->device, (ID3D11Resource*)texture_backbuffer, &desc, &cmd_buffer_d3d11->render_target);
 		if (FAILED(hr)) {
 			return rjd_gfx_translate_hresult(hr);
 		}
 
-		hr = ID3D11Device_CreateRenderTargetView(context_d3d11->device, (ID3D11Resource*)texture_backbuffer, NULL, &cmd_buffer_d3d11->render_target);
-		if (FAILED(hr)) {
-			return rjd_gfx_translate_hresult(hr);
+		// Fetching the buffer from the swapchain revs the refcount, so release it here. Getting the buffer from the MSAA render target doesn't, so no need to release.
+		if (view_dimension == D3D11_RTV_DIMENSION_TEXTURE2D) {
+			ID3D11Texture2D_Release(texture_backbuffer);
 		}
-
-		ID3D11Texture2D_Release(texture_backbuffer);
-
 	} else {
 		RJD_ASSERTFAIL("non-backbuffer render targets are unimplemented"); // TODO
 	}
@@ -665,6 +759,27 @@ struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context,
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 	struct rjd_gfx_command_buffer_d3d11* cmd_buffer_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_command_buffers, cmd_buffer->handle);
 
+	// copy the MSAA render target to the DXGI backbuffer
+	if (context_d3d11->msaa_backbuffers) {
+		struct rjd_gfx_texture* source_texture = context_d3d11->msaa_backbuffers + context_d3d11->backbuffer_index;
+		struct rjd_gfx_texture_d3d11* source_texture_d3d11 = rjd_slotmap_get(context_d3d11->slotmap_textures, source_texture->handle);
+
+		ID3D11Resource* swapchain_buffer = NULL;
+		{
+			HRESULT hr = IDXGISwapChain_GetBuffer(context_d3d11->swapchain, 0, &IID_ID3D11Texture2D, (void**)&swapchain_buffer);
+			if (FAILED(hr)) {
+				return rjd_gfx_translate_hresult(hr);
+			}
+		}
+
+		ID3D11DeviceContext1_ResolveSubresource(cmd_buffer_d3d11->deferred_context,
+			swapchain_buffer, 0, 
+			(ID3D11Resource*)source_texture_d3d11->texture, 0, 
+			rjd_gfx_format_to_dxgi(context_d3d11->backbuffer_color_format));
+
+		ID3D11Resource_Release(swapchain_buffer);
+	}
+
 	ID3D11CommandList* commandlist = NULL;
 	HRESULT hr = ID3D11DeviceContext1_FinishCommandList(cmd_buffer_d3d11->deferred_context, FALSE, &commandlist);
 	if (FAILED(hr)) {
@@ -690,27 +805,30 @@ struct rjd_result rjd_gfx_texture_create(struct rjd_gfx_context* context, struct
 {
 	struct rjd_gfx_context_d3d11* context_d3d11 = (struct rjd_gfx_context_d3d11*)context;
 
+	DXGI_SAMPLE_DESC sample_desc = {0};
+	struct rjd_result result = rjd_gfx_backbuffer_get_msaa_quality_d3d11(context_d3d11, desc.msaa_samples, &sample_desc);
+	if (!rjd_result_isok(result)) {
+		return result;
+	}
+
 	UINT bind_flags = 0;
 	bind_flags |= D3D11_BIND_SHADER_RESOURCE;
 	bind_flags |= (desc.usage == RJD_GFX_TEXTURE_USAGE_RENDERTARGET) ? D3D11_BIND_RENDER_TARGET : 0;
 
-	D3D11_TEXTURE2D_DESC desc_d3d11 = {
+	const D3D11_TEXTURE2D_DESC desc_d3d11 = {
 		.Width = desc.pixels_width,
 		.Height = desc.pixels_height,
 		.MipLevels = 1, // TODO mipmap support
 		.ArraySize = 1,
 		.Format = rjd_gfx_format_to_dxgi(desc.format),
-		.SampleDesc = { // TODO expose msaa options
-			.Count = 1,
-			.Quality = 0,
-		},
+		.SampleDesc = sample_desc,
 		.Usage = rjd_gfx_texture_access_to_gpu_access(desc.access),
 		.BindFlags = bind_flags,
 		.CPUAccessFlags = rjd_gfx_texture_access_to_cpu_access(desc.access),
 		.MiscFlags = 0,
 	};
 
-	D3D11_SUBRESOURCE_DATA subresource = {
+	const D3D11_SUBRESOURCE_DATA subresource = {
 		.pSysMem = desc.data,
 		.SysMemPitch = desc.pixels_width * rjd_gfx_format_bytesize(desc.format),
 		.SysMemSlicePitch = 0, // only for 3D textures
@@ -718,7 +836,9 @@ struct rjd_result rjd_gfx_texture_create(struct rjd_gfx_context* context, struct
 
 	ID3D11Texture2D* texture = NULL;
 	{
-		HRESULT hr = ID3D11Device_CreateTexture2D(context_d3d11->device, &desc_d3d11, &subresource, &texture);
+		const D3D11_SUBRESOURCE_DATA* initial_data = desc.data ? &subresource : NULL;
+
+		HRESULT hr = ID3D11Device_CreateTexture2D(context_d3d11->device, &desc_d3d11, initial_data, &texture);
 		if (FAILED(hr)) {
 			return rjd_gfx_translate_hresult(hr);
 		}
@@ -729,12 +849,15 @@ struct rjd_result rjd_gfx_texture_create(struct rjd_gfx_context* context, struct
 		D3D11_SHADER_RESOURCE_VIEW_DESC desc_resource_view = 
 		{
 			.Format = desc_d3d11.Format,
-			.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D,
-			.Texture2D = {
-				.MostDetailedMip = 0,
-				.MipLevels = desc_d3d11.MipLevels,
-			},
 		};
+
+		if (sample_desc.Count > 1) {
+			desc_resource_view.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
+		} else {
+			desc_resource_view.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+			desc_resource_view.Texture2D.MostDetailedMip = 0;
+			desc_resource_view.Texture2D.MipLevels = desc_d3d11.MipLevels;
+		}
 
 		HRESULT hr = ID3D11Device_CreateShaderResourceView(context_d3d11->device, (ID3D11Resource*)texture, &desc_resource_view, &resource_view);
 		if (FAILED(hr)) {
@@ -1138,6 +1261,19 @@ static DXGI_FORMAT rjd_gfx_format_to_dxgi(enum rjd_gfx_format format)
 	return DXGI_FORMAT_UNKNOWN;
 }
 
+static DXGI_FORMAT rjd_gfx_format_to_dxgi_strip_srgb(enum rjd_gfx_format format)
+{
+	enum rjd_gfx_format format_no_srgb = format;
+
+	switch (format_no_srgb)
+	{
+		case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB: format_no_srgb = RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM; break;
+		default: break;
+	}
+
+	return rjd_gfx_format_to_dxgi(format_no_srgb);
+}
+
 static struct rjd_gfx_rgba rjd_gfx_format_value_to_rgba(struct rjd_gfx_format_value value)
 {
 	struct rjd_gfx_rgba out = {0};
@@ -1238,6 +1374,39 @@ static bool rjd_gfx_texture_isbackbuffer(struct rjd_gfx_texture texture)
 {
 	return	texture.handle.salt == RJD_GFX_TEXTURE_BACKBUFFER.handle.salt &&
 			texture.handle.index == RJD_GFX_TEXTURE_BACKBUFFER.handle.index;
+}
+
+static struct rjd_result rjd_gfx_backbuffer_get_msaa_quality_d3d11(const struct rjd_gfx_context_d3d11* context, uint32_t sample_count, DXGI_SAMPLE_DESC* out)
+{
+	RJD_ASSERTMSG(sample_count != 0, "You must supply a sample_count greater than 0 that is a power of 2.");
+	// RJD_ASSERTMSG(rjd_math_next_pow2(sample_cont) == sample_count, "sample_count (%u) must be a power of 2.", sample_count); // TODO
+
+	UINT quality = 0;
+
+	if (sample_count > 1) {
+		DXGI_FORMAT format = rjd_gfx_format_to_dxgi(context->backbuffer_color_format);
+
+		HRESULT hr = ID3D11Device_CheckMultisampleQualityLevels(context->device, format, sample_count, &quality);
+		if (FAILED(hr)) {
+			if (hr == 0) {
+				return RJD_RESULT("The MSAA level was unsupported. Try a lower level. It's also possible your backbuffer format doesn't support this level of MSAA.");
+			} else {
+				return RJD_RESULT("Failed to get multisample quality levels.");
+			}
+		}
+
+		if (quality == 0) {
+			return RJD_RESULT("The MSAA level was unsupported.");
+		}
+
+		// CheckMultisampleQualityLevels() returns the "count" of quality levels supported, so the final desc Quality is minus one
+		quality = quality - 1;
+	}
+
+	out->Count = sample_count;
+	out->Quality = quality;
+
+	return RJD_RESULT_OK();
 }
 
 static inline void rjd_gfx_texture_destroy_d3d11(struct rjd_gfx_context_d3d11* context, struct rjd_slot slot)

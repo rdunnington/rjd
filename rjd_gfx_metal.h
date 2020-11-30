@@ -150,7 +150,7 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 
         view.colorPixelFormat = mtl_color_format;
         view.depthStencilPixelFormat = mtl_depth_format;
-		view.sampleCount = 1; // users can set this higher later with rjd_gfx_set_msaa_count()
+		view.sampleCount = 1; // users can set this higher later with rjd_gfx_backbuffer_set_msaa_samples()
 	}
 
 	NSUInteger count_msaa = 1;
@@ -498,8 +498,8 @@ struct rjd_result rjd_gfx_texture_create(struct rjd_gfx_context* context, struct
 	RJD_ASSERT(out);
 	RJD_ASSERT(context);
 
-	RJD_RESULT_CHECK(desc.data != NULL, "Texture data must not be NULL");
-	RJD_RESULT_CHECK(desc.data_length != 0, "Texture data length must not be 0");
+	RJD_RESULT_CHECK(desc.usage == RJD_GFX_TEXTURE_USAGE_RENDERTARGET || desc.data != NULL, "Non-rendertarget texture data must not be NULL");
+	RJD_RESULT_CHECK(desc.usage == RJD_GFX_TEXTURE_USAGE_RENDERTARGET || desc.data_length != 0, "Non-rendertarget texture data length must not be 0");
 	RJD_RESULT_CHECK(desc.pixels_width != 0, "Texture width must not be 0");
 	RJD_RESULT_CHECK(desc.pixels_height != 0, "Texture height must not be 0");
 
@@ -549,6 +549,7 @@ struct rjd_result rjd_gfx_texture_create(struct rjd_gfx_context* context, struct
 				break;
 		}
 
+		// TODO support no bytes for render targets
         id<MTLBuffer> buffer = [context_metal->device newBufferWithBytes:desc.data length:desc.data_length options:buffer_options];
         
         const NSUInteger bytes_per_row = rjd_gfx_format_bytesize(desc.format) * desc.pixels_width;
