@@ -857,8 +857,10 @@ struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rj
 	}
 
 	memcpy((uint8_t*)buffer->buffer.contents + offset, data, length);
-	NSRange range = NSMakeRange(offset, length);
-	[buffer->buffer didModifyRange:range];
+	if (buffer->usage_flags & RJD_GFX_MESH_BUFFER_USAGE_VERTEX) {
+		NSRange range = NSMakeRange(offset, length);
+		[buffer->buffer didModifyRange:range];
+	}
 
 	return RJD_RESULT_OK();
 }
