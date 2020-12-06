@@ -592,6 +592,10 @@ struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context)
 				}
 			}
 		}
+
+		if (selected_output != output) {
+			IDXGIOutput_Release(output);
+		}
 	}
 
 	if (selected_output == NULL) {
