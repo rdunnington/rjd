@@ -1422,10 +1422,10 @@ static struct rjd_gfx_rgba rjd_gfx_format_value_to_rgba(struct rjd_gfx_format_va
 	switch (value.type)
 	{
 		case RJD_GFX_FORMAT_COLOR_U8_RGBA:
-			out.v[0] = value.color_u8_rgba[0];
-			out.v[1] = value.color_u8_rgba[1];
-			out.v[2] = value.color_u8_rgba[2];
-			out.v[3] = value.color_u8_rgba[3];
+			out.v[0] = value.color_u8_rgba[0] / 255.0f;
+			out.v[1] = value.color_u8_rgba[1] / 255.0f;
+			out.v[2] = value.color_u8_rgba[2] / 255.0f;
+			out.v[3] = value.color_u8_rgba[3] / 255.0f;
 			break;
 		case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM:
 		case RJD_GFX_FORMAT_COLOR_U8_BGRA_NORM_SRGB:
