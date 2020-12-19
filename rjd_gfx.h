@@ -17,7 +17,11 @@
 // Supported RJG_GFX_BACKEND_* values:
 // RJD_GFX_BACKEND_METAL (osx only)
 // RJD_GFX_BACKEND_D3D11 (windows only)
+// RJD_GFX_BACKEND_NONE (any platform, stub interface only)
 
+#ifndef RJD_GFX_BACKEND_NONE
+	#define RJD_GFX_BACKEND_NONE 0
+#endif
 #ifndef RJD_GFX_BACKEND_METAL
 	#define RJD_GFX_BACKEND_METAL 0
 #endif
@@ -25,9 +29,13 @@
 	#define RJD_GFX_BACKEND_D3D11 0
 #endif
 
-#if !RJD_GFX_BACKEND_METAL && !RJD_GFX_BACKEND_D3D11
-	#error	"You must #define one of the RJD_GFX_BACKEND_* macros to 1 before including this file. "
-			"See the above comment for a list of supported values."
+#if (RJD_GFX_BACKEND_NONE + RJD_GFX_BACKEND_METAL + RJD_GFX_BACKEND_D3D11) > 1
+	#error "Only one of the RJD_GFX_BACKEND_* macros may be defined."
+#endif
+
+#if !RJD_GFX_BACKEND_NONE && !RJD_GFX_BACKEND_METAL && !RJD_GFX_BACKEND_D3D11
+	#error	"You must #define one of the following to 1 before including this file: "
+			"RJD_GFX_BACKEND_NONE, RJD_GFX_BACKEND_METAL, RJD_GFX_BACKEND_D3D11"
 #endif
 
 #if RJD_GFX_BACKEND_METAL
@@ -399,10 +407,18 @@ struct rjd_gfx_context
 	char pimpl[176];
 };
 
+enum rjd_gfx_backend_impl
+{
+	RJD_GFX_BACKEND_IMPL_NONE,
+	RJD_GFX_BACKEND_IMPL_METAL,
+	RJD_GFX_BACKEND_IMPL_D3D11,
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // interface
 
 // backend
+static inline enum rjd_gfx_backend_impl rjd_gfx_backend(void);
 static inline int32_t rjd_gfx_backend_ismetal(void);
 static inline int32_t rjd_gfx_backend_isd3d11(void);
 
@@ -459,19 +475,30 @@ extern const struct rjd_gfx_texture RJD_GFX_TEXTURE_BACKBUFFER;
 ////////////////////////////////////////////////////////////////////////////////
 // inline implementations
 
+static inline enum rjd_gfx_backend_impl rjd_gfx_backend(void)
+{
+	#if RJD_GFX_BACKEND_NONE
+		return RJD_GFX_BACKEND_IMPL_NONE;
+	#elif RJD_GFX_BACKEND_METAL
+		return RJD_GFX_BACKEND_IMPL_METAL;
+	#elif RJD_GFX_BACKEND_D3D11
+		return RJD_GFX_BACKEND_IMPL_D3D11;
+	#endif
+}
+
 static inline int32_t rjd_gfx_backend_ismetal(void)
 {
-	return RJD_GFX_BACKEND_METAL;
+	return rjd_gfx_backend() == RJD_GFX_BACKEND_IMPL_METAL;
 }
 
 static inline int32_t rjd_gfx_backend_isd3d11(void)
 {
-	return RJD_GFX_BACKEND_D3D11;
+	return rjd_gfx_backend() == RJD_GFX_BACKEND_IMPL_D3D11;
 }
 
 static inline uint32_t rjd_gfx_constant_buffer_alignment(void)
 {
-	#if RJD_GFX_BACKEND_METAL || RJD_GFX_BACKEND_D3D11
+	#if RJD_GFX_BACKEND_METAL || RJD_GFX_BACKEND_D3D11 || RJD_GFX_BACKEND_NONE
 		return 256;
 	#else
 		#error Unknown platform.
@@ -640,18 +667,138 @@ uint8_t rjd_gfx_format_value_to_stencil(struct rjd_gfx_format_value value)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// gfx implementation is in API-specific headers that get included automatically
+// gfx metal and d3d11 implementation is in API-specific headers
 
-#if RJD_GFX_BACKEND_METAL
-	#if !RJD_PLATFORM_OSX
-		#error "Metal backend is only supported on OSX."
-	#endif
-#elif RJD_GFX_BACKEND_D3D11
-	#if !RJD_PLATFORM_WINDOWS
-		#error "Metal backend is only supported on OSX."
-	#endif
-#else
-	#error "Unknown RJD_GFX_BACKEND. Ensure you are #defining to a known rjd_gfx_backend value."
-#endif
+#if RJD_GFX_BACKEND_NONE
 
+struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd_gfx_context_desc desc) 
+{ 
+	RJD_UNUSED_PARAM(out);
+	RJD_UNUSED_PARAM(desc);
+	return RJD_RESULT("Unimplemented"); 
+}
+void rjd_gfx_context_destroy(struct rjd_gfx_context* context)
+{
+	RJD_UNUSED_PARAM(context);
+}
+uint32_t rjd_gfx_backbuffer_current_index(const struct rjd_gfx_context* context) 
+{
+	RJD_UNUSED_PARAM(context);
+	return 0; 
+}
+struct rjd_result rjd_gfx_backbuffer_msaa_is_count_supported(const struct rjd_gfx_context* context, uint32_t sample_count) 
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(sample_count);
+	return RJD_RESULT("Unimplemented"); 
+}
+struct rjd_result rjd_gfx_backbuffer_set_msaa_count(struct rjd_gfx_context* context, uint32_t sample_count)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(sample_count);
+	return RJD_RESULT("Unimplemented"); 
+}
+struct rjd_result rjd_gfx_vsync_set(struct rjd_gfx_context* context, enum RJD_GFX_VSYNC_MODE mode) 
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(mode);
+	return RJD_RESULT("Unimplemented"); 
+}
+struct rjd_result rjd_gfx_wait_for_frame_begin(struct rjd_gfx_context* context) 
+{
+	RJD_UNUSED_PARAM(context);
+	return RJD_RESULT("Unimplemented"); 
+}
+struct rjd_result rjd_gfx_present(struct rjd_gfx_context* context) 
+{
+	RJD_UNUSED_PARAM(context);
+	return RJD_RESULT("Unimplemented"); 
+}
+struct rjd_result rjd_gfx_command_buffer_create(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* out)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(out);
+	return RJD_RESULT("Unimplemented");
+}
+struct rjd_result rjd_gfx_command_pass_begin(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_begin_desc* command)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(cmd_buffer);
+	RJD_UNUSED_PARAM(command);
+	return RJD_RESULT("Unimplemented");
+}
+struct rjd_result rjd_gfx_command_pass_draw(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, const struct rjd_gfx_pass_draw_desc* command)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(cmd_buffer);
+	RJD_UNUSED_PARAM(command);
+	return RJD_RESULT("Unimplemented");
+}
+struct rjd_result rjd_gfx_command_buffer_commit(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(cmd_buffer);
+	return RJD_RESULT("Unimplemented");
+}
+struct rjd_result rjd_gfx_texture_create(struct rjd_gfx_context* context, struct rjd_gfx_texture* out, struct rjd_gfx_texture_desc desc)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(out);
+	RJD_UNUSED_PARAM(desc);
+	return RJD_RESULT("Unimplemented"); 
+}
+void rjd_gfx_texture_destroy(struct rjd_gfx_context* context, struct rjd_gfx_texture* texture)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(texture);
+}
+struct rjd_result rjd_gfx_shader_create(struct rjd_gfx_context* context, struct rjd_gfx_shader* out, struct rjd_gfx_shader_desc desc)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(out);
+	RJD_UNUSED_PARAM(desc);
+	return RJD_RESULT("Unimplemented");
+}
+void rjd_gfx_shader_destroy(struct rjd_gfx_context* context, struct rjd_gfx_shader* shader)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(shader);
+}
+struct rjd_result rjd_gfx_pipeline_state_create(struct rjd_gfx_context* context, struct rjd_gfx_pipeline_state* out, struct rjd_gfx_pipeline_state_desc desc)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(out);
+	RJD_UNUSED_PARAM(desc);
+	return RJD_RESULT("Unimplemented"); 
+}
+void rjd_gfx_pipeline_state_destroy(struct rjd_gfx_context* context, struct rjd_gfx_pipeline_state* pipeline_state)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(pipeline_state);
+}
+struct rjd_result rjd_gfx_mesh_create_vertexed(struct rjd_gfx_context* context, struct rjd_gfx_mesh* out, struct rjd_gfx_mesh_vertexed_desc desc)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(out);
+	RJD_UNUSED_PARAM(desc);
+	return RJD_RESULT("Unimplemented"); 
+}
+struct rjd_result rjd_gfx_mesh_modify(struct rjd_gfx_context* context, struct rjd_gfx_command_buffer* cmd_buffer, struct rjd_gfx_mesh* mesh, uint32_t buffer_index, uint32_t offset, const void* data, uint32_t length)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(cmd_buffer);
+	RJD_UNUSED_PARAM(mesh);
+	RJD_UNUSED_PARAM(buffer_index);
+	RJD_UNUSED_PARAM(offset);
+	RJD_UNUSED_PARAM(data);
+	RJD_UNUSED_PARAM(length);
+	return RJD_RESULT("Unimplemented"); 
+}
+void rjd_gfx_mesh_destroy(struct rjd_gfx_context* context, struct rjd_gfx_mesh* mesh)
+{
+	RJD_UNUSED_PARAM(context);
+	RJD_UNUSED_PARAM(mesh);
+}
+
+#endif // RJD_GFX_BACKEND_NONE
 #endif // RJD_IMPL

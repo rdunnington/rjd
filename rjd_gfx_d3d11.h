@@ -2,7 +2,11 @@
 
 #define RJD_GFX_D3D11_H 1
 
-#if RJD_IMPL && RJD_PLATFORM_WINDOWS
+#if RJD_IMPL && RJD_GFX_BACKEND_D3D11
+
+#if !RJD_PLATFORM_WINDOWS
+	#error "D3D11 backend is only supported on Windows."
+#endif
 
 #if !RJD_GFX_H
 	#error "This header depends on rjd_gfx.h"
