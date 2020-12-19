@@ -78,7 +78,7 @@ for filename in files:
         concat += data;
         concat += "\n"
 
-with open("rjd.h", "w") as file:
+with open("rjd.h", "w", newline='\n') as file:
     file.write(concat)
 
 with open("rjd_all.h", "w") as file:
