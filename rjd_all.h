@@ -45,3 +45,5 @@
 #include "rjd_window.h"
 #include "rjd_input.h"
 #include "rjd_gfx.h"
+#include "rjd_gfx_metal.h"
+#include "rjd_gfx_d3d11.h"

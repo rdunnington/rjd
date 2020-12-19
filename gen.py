@@ -49,6 +49,8 @@ files = [
     "rjd_window.h",
     "rjd_input.h",
     "rjd_gfx.h",
+    "rjd_gfx_metal.h",
+    "rjd_gfx_d3d11.h",
 ]
 
 concat = "#pragma once\n\n"

@@ -640,19 +640,14 @@ uint8_t rjd_gfx_format_value_to_stencil(struct rjd_gfx_format_value value)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// gfx implementation is in API-specific headers
-// TODO merge these headers into this file
+// gfx implementation is in API-specific headers that get included automatically
 
 #if RJD_GFX_BACKEND_METAL
-	#if RJD_PLATFORM_OSX
-		#include "rjd_gfx_metal.h"
-	#else
+	#if !RJD_PLATFORM_OSX
 		#error "Metal backend is only supported on OSX."
 	#endif
 #elif RJD_GFX_BACKEND_D3D11
-	#if RJD_PLATFORM_WINDOWS
-		#include "rjd_gfx_d3d11.h"
-	#else
+	#if !RJD_PLATFORM_WINDOWS
 		#error "Metal backend is only supported on OSX."
 	#endif
 #else
