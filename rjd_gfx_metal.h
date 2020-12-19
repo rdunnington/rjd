@@ -2,16 +2,14 @@
 
 #define RJD_GFX_METAL_H 1
 
-#if !RJD_GFX_H
-	#error "This header should only be included by rjd_gfx.h"
-#endif
-
-#if !RJD_IMPL
-	#error "This should have only been included when RJD_IMPL is on"
-#endif
+#if RJD_IMPL && RJD_GFX_BACKEND_METAL
 
 #if !RJD_PLATFORM_OSX
-	#error "Metal is only supported on OSX"
+	#error "Metal backend is only supported on OSX."
+#endif
+
+#if !RJD_GFX_H
+	#error "This header depends on rjd_gfx.h"
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1114,3 +1112,6 @@ static inline void rjd_gfx_command_buffer_destroy_metal(struct rjd_gfx_context_m
 	buffer_metal->buffer = nil;
 	rjd_slotmap_erase(context->slotmap_command_buffers, slot);
 }
+
+#endif // RJD_IMPL && RJD_PLATFORM_OSX
+

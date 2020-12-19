@@ -49,6 +49,8 @@ files = [
     "rjd_window.h",
     "rjd_input.h",
     "rjd_gfx.h",
+    "rjd_gfx_metal.h",
+    "rjd_gfx_d3d11.h",
 ]
 
 concat = "#pragma once\n\n"
@@ -76,7 +78,7 @@ for filename in files:
         concat += data;
         concat += "\n"
 
-with open("rjd.h", "w") as file:
+with open("rjd.h", "w", newline='\n') as file:
     file.write(concat)
 
 with open("rjd_all.h", "w") as file:

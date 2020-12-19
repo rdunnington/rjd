@@ -2,16 +2,14 @@
 
 #define RJD_GFX_D3D11_H 1
 
-#if !RJD_GFX_H
-	#error "This header should only be included by rjd_gfx.h"
-#endif
-
-#if !RJD_IMPL
-	#error "This should have only been included when RJD_IMPL is on"
-#endif
+#if RJD_IMPL && RJD_GFX_BACKEND_D3D11
 
 #if !RJD_PLATFORM_WINDOWS
-	#error "DirectX11 is only supported on Windows"
+	#error "D3D11 backend is only supported on Windows."
+#endif
+
+#if !RJD_GFX_H
+	#error "This header depends on rjd_gfx.h"
 #endif
 
 // This forward declaration is needed to suppress an order of declarations bug in the d3d headers.
@@ -148,6 +146,7 @@ static inline void rjd_gfx_command_buffer_destroy_d3d11(struct rjd_gfx_context_d
 #if RJD_COMPILER_GCC
 	// The GCC headers have all the correct declarations for these GUIDs, but libdxguid.a are missing the definitions
 	const GUID IID_IDXGIFactory4 = { 0x1bc6ea02, 0xef36, 0x464f, { 0xbf,0x0c,0x21,0xca,0x39,0xe5,0x16,0x8a } };
+	const GUID IID_ID3D11Device1 = { 0xa04bfb29, 0x08ef, 0x43d6, { 0xa4,0x9c,0xa9,0xbd,0xbd,0xcb,0xe6,0x86 } };
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -233,8 +232,8 @@ struct rjd_result rjd_gfx_context_create(struct rjd_gfx_context* out, struct rjd
 			}
 		}
 
-		ID3D11Device_QueryInterface(device_11_0, &IID_ID3D11Device1, &device);
-		ID3D11Device_Release(device_11_0);
+		ID3D11Device1_QueryInterface(device_11_0, &IID_ID3D11Device1, (void**)&device);
+		ID3D11Device1_Release(device_11_0);
 		if (device == NULL) {
 			return RJD_RESULT("Unable to create 11.1 device. 11.0 is not supported.");
 		}
@@ -1641,3 +1640,5 @@ static inline void rjd_gfx_command_buffer_destroy_d3d11(struct rjd_gfx_context_d
 
 	rjd_slotmap_erase(context->slotmap_command_buffers, slot);
 }
+
+#endif // RJD_IMPL && RJD_PLATFORM_WINDOWS
