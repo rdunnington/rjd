@@ -1527,6 +1527,17 @@ void test_strbuf(void)
 	rjd_strbuf_appendl(&builder, "only see this, no comma", (uint32_t)strlen("only see this"));
 	expect_str("only see this", rjd_strbuf_str(&builder));
 
+	// clear
+	rjd_strbuf_clear(&builder);
+	rjd_strbuf_append(&builder, "on the stack");
+	expect_str("on the stack", rjd_strbuf_str(&builder));
+
+	rjd_strbuf_clear(&builder);
+	rjd_strbuf_append(&builder, "012345678901234567890123456789 on the heap");
+	expect_str("012345678901234567890123456789 on the heap", rjd_strbuf_str(&builder));
+
+	rjd_strbuf_free(&builder);
+
 	expect_no_leaks(&allocator);
 }
 
