@@ -1521,6 +1521,12 @@ void test_strbuf(void)
 	rjd_strbuf_append(&builder, "3");
 	expect_str("123456789012345678901234567890123", rjd_strbuf_str(&builder));
 
+	rjd_strbuf_append(&builder, "123456789012345678901234567890");
+	rjd_strbuf_append(&builder, "123456789012345678901234567890");
+	rjd_strbuf_append(&builder, "123456789012345678901234567890");
+	expect_str("12345678901234567890123456789012312345678901234567890123456789012345"
+				"6789012345678901234567890123456789012345678901234567890", rjd_strbuf_str(&builder));
+
 	rjd_strbuf_free(&builder);
 
 	// append substring
