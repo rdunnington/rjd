@@ -4620,9 +4620,8 @@ void rjd_strbuf_appendl(struct rjd_strbuf* buf, const char* format, uint32_t len
 	uint32_t capacity = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
 	uint32_t remaining = capacity - buf->length;
 
-	if (remaining < length) {
+	if (remaining < length + 1) {
 		rjd_strbuf_grow(buf, length);
-		remaining = rjd_array_capacity(buf->heap) - buf->length;
 	}
 
 	char* str = buf->heap ? buf->heap : buf->stack;
@@ -4655,6 +4654,8 @@ static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 		rjd_array_resize(buf->heap, next);
 
 		strcpy(buf->heap, buf->stack);
+	} else {
+		rjd_array_resize(buf->heap, next);
 	}
 }
 
