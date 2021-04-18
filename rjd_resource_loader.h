@@ -130,7 +130,7 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 		for (const char* path = rjd_path_enumerate_next(&path_enumerator); path != NULL; path = rjd_path_enumerate_next(&path_enumerator))
 		{
 			const char* relative_path = path + length_root_path;
-			const char* extension = rjd_path_extension_str(relative_path);
+			const char* extension = rjd_path_str_extension(relative_path);
 			if (extension)
 			{
 				struct rjd_resource_type_id type = {0};
@@ -232,7 +232,7 @@ static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource
             const char* root = rjd_strref_str(impl->root);
             const char* relative_path = rjd_strref_str(impl->manifest_entries[i].path);
             
-            struct rjd_path fullpath = rjd_path_create();
+            struct rjd_path fullpath = rjd_path_init();
             rjd_path_append(&fullpath, root);
             rjd_path_append(&fullpath, relative_path);
 

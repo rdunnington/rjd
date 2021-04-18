@@ -8,7 +8,7 @@
 
 struct rjd_path
 {
-	uint32_t length;
+	int32_t length;
 	char str[RJD_PATH_BUFFER_LENGTH];
 };
 
@@ -23,14 +23,19 @@ enum RJD_PATH_ENUMERATE_MODE
 	RJD_PATH_ENUMERATE_MODE_FLAT,
 };
 
-struct rjd_path rjd_path_create(void);
-struct rjd_path rjd_path_create_with(const char* path);
+struct rjd_path rjd_path_init(void);
+struct rjd_path rjd_path_init_with(const char* path);
 void rjd_path_append(struct rjd_path* path, const char* str);
+void rjd_path_pop(struct rjd_path* path);
 void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2);
 const char* rjd_path_get(struct rjd_path* path);
 void rjd_path_clear(struct rjd_path* path);
+
 const char* rjd_path_extension(const struct rjd_path* path);
-const char* rjd_path_extension_str(const char* path);
+bool rjd_path_endswith(const struct rjd_path* path, const char* str);
+
+const char* rjd_path_str_extension(const char* path);
+bool rjd_path_str_endswith(const char* path, const char* str);
 
 struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode);
 const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state);
@@ -48,13 +53,13 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state);
 
 static uint32_t rjd_path_normalize_slashes(char* path, uint32_t length);
 
-struct rjd_path rjd_path_create()
+struct rjd_path rjd_path_init()
 {
 	struct rjd_path path = {0};
 	return path;
 }
 
-struct rjd_path rjd_path_create_with(const char* initial_contents)
+struct rjd_path rjd_path_init_with(const char* initial_contents)
 {
 	struct rjd_path path;
 	path.length = (uint32_t)strlen(initial_contents);
@@ -90,6 +95,20 @@ void rjd_path_append(struct rjd_path* path, const char* str)
 	path->length = rjd_path_normalize_slashes(path->str, (uint32_t)new_length);
 }
 
+void rjd_path_pop(struct rjd_path* path)
+{
+	RJD_ASSERT(path);
+
+	for (int32_t i = (int32_t)path->length - 1; i >= 0; --i) {
+		if (path->str[i] == RJD_PATH_SLASH && i < path->length - 1) {
+					
+			path->length = i;
+			path->str[i] = 0;
+			break;
+		}
+	}
+}
+
 void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2)
 {
 	rjd_path_append(path1, path2->str);
@@ -102,10 +121,15 @@ const char* rjd_path_get(struct rjd_path* path)
 
 const char* rjd_path_extension(const struct rjd_path* path)
 {
-	return rjd_path_extension_str(path->str);
+	return rjd_path_str_extension(path->str);
 }
 
-const char* rjd_path_extension_str(const char* path)
+bool rjd_path_endswith(const struct rjd_path* path, const char* str)
+{
+	return rjd_path_str_endswith(path->str, str);
+}
+
+const char* rjd_path_str_extension(const char* path)
 {
     if (!path || !*path) {
         return NULL;
@@ -122,6 +146,27 @@ const char* rjd_path_extension_str(const char* path)
 	}
 
 	return extension;
+}
+
+bool rjd_path_str_endswith(const char* path, const char* str)
+{
+	if (path == NULL || str == NULL) {
+		return false;
+	}
+
+	if (*str == 0) {
+		return true;
+	}
+
+	int length_string = strlen(path);
+	int length_end = strlen(str);
+
+	if (length_end > length_string) {
+		return false;
+	}
+
+	const char* path_end = path + (length_string - length_end);
+	return !strcmp(path_end, str);
 }
 
 void rjd_path_clear(struct rjd_path* path)

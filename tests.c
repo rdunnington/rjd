@@ -2342,27 +2342,28 @@ void test_utf8(void)
 void test_path(void)
 {
 	// path operations
-    expect_path("", rjd_path_create());
-    expect_path("/", rjd_path_create_with("/"));
-    expect_path("/", rjd_path_create_with("///"));
-    expect_path("a", rjd_path_create_with("a"));
-    expect_path("a", rjd_path_create_with("a/"));
-    expect_path("/a", rjd_path_create_with("/a"));
-    expect_path("/a", rjd_path_create_with("///a"));
-    expect_path("/a", rjd_path_create_with("///a///"));
-    expect_path("/a/b/c", rjd_path_create_with("/a/b/c/"));
-    expect_path("/a/b/c", rjd_path_create_with("/a/b/c"));
-    expect_path("/a/b/c", rjd_path_create_with("/a//b//c"));
-    expect_path("/a/b/c", rjd_path_create_with("///a//b//c//"));
-    expect_path("/aaa/bb/c", rjd_path_create_with("///aaa//bb//c//"));
-    expect_path("/a/bb/ccc", rjd_path_create_with("///a//bb//ccc//"));
-    expect_path("/a/bbb/c", rjd_path_create_with("///a//bbb//c//"));
-    expect_path("a/bbb/c/ddddd", rjd_path_create_with("a//bbb//c//ddddd"));
-    expect_path("c:", rjd_path_create_with("c:///"));
-    expect_path("c:/abc", rjd_path_create_with("c:///abc/"));
+    expect_path("", rjd_path_init());
+    expect_path("/", rjd_path_init_with("/"));
+    expect_path("/", rjd_path_init_with("///"));
+    expect_path("a", rjd_path_init_with("a"));
+    expect_path("a", rjd_path_init_with("a/"));
+    expect_path("/a", rjd_path_init_with("/a"));
+    expect_path("/a", rjd_path_init_with("///a"));
+    expect_path("/a", rjd_path_init_with("///a///"));
+    expect_path("/a/b/c", rjd_path_init_with("/a/b/c/"));
+    expect_path("/a/b/c", rjd_path_init_with("/a/b/c"));
+    expect_path("/a/b/c", rjd_path_init_with("/a//b//c"));
+    expect_path("/a/b/c", rjd_path_init_with("///a//b//c//"));
+    expect_path("/aaa/bb/c", rjd_path_init_with("///aaa//bb//c//"));
+    expect_path("/a/bb/ccc", rjd_path_init_with("///a//bb//ccc//"));
+    expect_path("/a/bbb/c", rjd_path_init_with("///a//bbb//c//"));
+    expect_path("a/bbb/c/ddddd", rjd_path_init_with("a//bbb//c//ddddd"));
+    expect_path("c:", rjd_path_init_with("c:///"));
+    expect_path("c:/abc", rjd_path_init_with("c:///abc/"));
 
 	{
-		struct rjd_path path = rjd_path_create();
+		struct rjd_path path = rjd_path_init();
+		expect_path("", path);
 		rjd_path_append(&path, "/");
 		expect_path("/", path);
 		rjd_path_append(&path, "/");
@@ -2380,25 +2381,60 @@ void test_path(void)
 		rjd_path_clear(&path);
 		expect_path("", path);
 	}
+	
+	{
+		struct rjd_path path = rjd_path_init_with("/aaaa/bbb/cc/d");
+		expect_path("/aaaa/bbb/cc/d", path);
+		rjd_path_pop(&path);
+		expect_path("/aaaa/bbb/cc", path);
+		rjd_path_pop(&path);
+		expect_path("/aaaa/bbb", path);
+		rjd_path_pop(&path);
+		expect_path("/aaaa", path);
+		rjd_path_pop(&path);
+		expect_path("", path);
+		rjd_path_pop(&path);
+		expect_path("", path);
+	}
 
 	{
-		struct rjd_path path1 = rjd_path_create_with("a/b/c");
-		struct rjd_path path2 = rjd_path_create_with("d/e");
+		struct rjd_path path1 = rjd_path_init_with("a/b/c");
+		struct rjd_path path2 = rjd_path_init_with("d/e");
 
 		rjd_path_join(&path1, &path2);
 		expect_path("a/b/c/d/e", path1);
 	}
 
 	// extension
-	expect_str(NULL,   rjd_path_extension_str(NULL));
-	expect_str(NULL,   rjd_path_extension_str(""));
-	expect_str(NULL,   rjd_path_extension_str("no_extension"));
-	expect_str(NULL,   rjd_path_extension_str("not_even_this_one."));
-	expect_str(".txt", rjd_path_extension_str(".txt"));
-	expect_str(".txt", rjd_path_extension_str("some_file_name.txt"));
-	expect_str(".txt", rjd_path_extension_str("some/path/some_file.txt"));
-	expect_str(".txt", rjd_path_extension_str("some\\path\\some_file.txt"));
-	expect_str(".txt", rjd_path_extension_str("some\\path\\some.long.extension.txt"));
+	{
+		expect_str(NULL,   rjd_path_str_extension(NULL));
+		expect_str(NULL,   rjd_path_str_extension(""));
+		expect_str(NULL,   rjd_path_str_extension("no_extension"));
+		expect_str(NULL,   rjd_path_str_extension("not_even_this_one."));
+		expect_str(".txt", rjd_path_str_extension(".txt"));
+		expect_str(".txt", rjd_path_str_extension("some_file_name.txt"));
+		expect_str(".txt", rjd_path_str_extension("some/path/some_file.txt"));
+		expect_str(".txt", rjd_path_str_extension("some\\path\\some_file.txt"));
+		expect_str(".txt", rjd_path_str_extension("some\\path\\some.long.extension.txt"));
+	}
+
+	// endswith
+	{
+		expect_false(rjd_path_str_endswith(NULL, NULL));
+		expect_false(rjd_path_str_endswith("", NULL));
+		expect_true(rjd_path_str_endswith("", ""));
+		expect_false(rjd_path_str_endswith("no_extension", NULL));
+		expect_true(rjd_path_str_endswith("no_extension", ""));
+		expect_true(rjd_path_str_endswith("not_even_this_one.", ""));
+		expect_false(rjd_path_str_endswith(".txt", "ttt"));
+		expect_true(rjd_path_str_endswith(".txt", "t"));
+		expect_true(rjd_path_str_endswith(".txt", "txt"));
+		expect_true(rjd_path_str_endswith(".txt", ".txt"));
+		expect_true(rjd_path_str_endswith("some_file_name.txt", ".txt"));
+		expect_true(rjd_path_str_endswith("some/path/some_file.txt", ".txt"));
+		expect_true(rjd_path_str_endswith("some\\path\\some_file.txt", ".txt"));
+		expect_true(rjd_path_str_endswith("some\\path\\some.long.extension.txt", ".txt"));
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
