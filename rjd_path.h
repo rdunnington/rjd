@@ -27,6 +27,8 @@ struct rjd_path rjd_path_init(void);
 struct rjd_path rjd_path_init_with(const char* path);
 void rjd_path_append(struct rjd_path* path, const char* str);
 void rjd_path_pop(struct rjd_path* path);
+void rjd_path_pop_extension(struct rjd_path* path);
+void rjd_path_pop_front(struct rjd_path* path);
 void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2);
 const char* rjd_path_get(struct rjd_path* path);
 void rjd_path_clear(struct rjd_path* path);
@@ -107,6 +109,38 @@ void rjd_path_pop(struct rjd_path* path)
 			break;
 		}
 	}
+}
+
+void rjd_path_pop_extension(struct rjd_path* path)
+{
+	for (int32_t i = path->length - 1; i >= 0; --i) {
+		if (path->str[i] == '.') {
+			path->length = i;
+			path->str[i] = 0;
+			break;
+		}
+
+		if (path->str[i] == RJD_PATH_SLASH) {
+			break;
+		}
+	}
+}
+
+void rjd_path_pop_front(struct rjd_path* path)
+{
+	struct rjd_path copy = *path;
+	for (int32_t i = 1; i < path->length; ++i) {
+		if (path->str[i] == RJD_PATH_SLASH) {
+			int32_t new_length = path->length - i;
+			memcpy(path->str, copy.str + i, new_length);
+			path->length = new_length;
+			path->str[new_length] = 0;
+			return;
+		}
+	}
+
+	path->length = 0;
+	path->str[0] = 0;
 }
 
 void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2)
