@@ -2362,26 +2362,63 @@ void test_path(void)
     expect_path("c:/abc", rjd_path_init_with("c:///abc/"));
 
 	{
+		struct rjd_path path1 = rjd_path_init_with("a/b/c");
+		struct rjd_path path2 = rjd_path_init_with("d/e");
+
+		rjd_path_join(&path1, &path2);
+		expect_path("a/b/c/d/e", path1);
+
 		struct rjd_path path = rjd_path_init();
 		expect_path("", path);
-		rjd_path_append(&path, "/");
+		rjd_path_join_str(&path, "/");
 		expect_path("/", path);
-		rjd_path_append(&path, "/");
+		rjd_path_join_str(&path, "/");
         expect_path("/", path);
-		rjd_path_append(&path, "///");
+		rjd_path_join_str(&path, "///");
 		expect_path("/", path);
-		rjd_path_append(&path, "a");
+		rjd_path_join_str(&path, "a");
 		expect_path("/a", path);
-		rjd_path_append(&path, "b");
+		rjd_path_join_str(&path, "b");
 		expect_path("/a/b", path);
-		rjd_path_append(&path, "//c//");
+		rjd_path_join_str(&path, "//c//");
 		expect_path("/a/b/c", path);
-        rjd_path_append(&path, "//d//");
+        rjd_path_join_str(&path, "/d//");
         expect_path("/a/b/c/d", path);
 		rjd_path_clear(&path);
 		expect_path("", path);
 	}
-	
+
+	{
+			// TODO rename "append" to "join" so that tis can just be append
+			// and not append_extension
+		struct rjd_path path = rjd_path_init_with("/a/b/c");
+		rjd_path_append(&path, ".txt");
+		expect_path("/a/b/c.txt", path);
+		rjd_path_append(&path, ".txt");
+		expect_path("/a/b/c.txt.txt", path);
+		path = rjd_path_init_with("");
+		rjd_path_append(&path, ".txt");
+		expect_path(".txt", path);
+		rjd_path_append(&path, "txt");
+		expect_path(".txttxt", path);
+	}
+
+	{
+		struct rjd_path path = rjd_path_init();
+		rjd_path_join_front(&path, "/");
+		expect_path("/", path);
+		rjd_path_join_front(&path, "a");
+		expect_path("a", path);
+		rjd_path_join_front(&path, "b");
+		expect_path("b/a", path);
+		rjd_path_join_front(&path, "//c//");
+		expect_path("/c/b/a", path);
+		rjd_path_join_front(&path, "//dd");
+		expect_path("/dd/c/b/a", path);
+		rjd_path_join_front(&path, "eeee/");
+		expect_path("eeee/dd/c/b/a", path);
+	}
+
 	{
 		struct rjd_path path = rjd_path_init_with("/aaaa/bbb/cc/d");
 		expect_path("/aaaa/bbb/cc/d", path);
@@ -2396,7 +2433,7 @@ void test_path(void)
 		rjd_path_pop(&path);
 		expect_path("", path);
 
-		rjd_path_append(&path, "/some/path.txt");
+		rjd_path_join_str(&path, "/some/path.txt");
 		rjd_path_pop_extension(&path);
 		expect_path("/some/path", path);
 		rjd_path_pop_extension(&path);
@@ -2406,17 +2443,36 @@ void test_path(void)
 		rjd_path_pop_front(&path);
 		expect_path("", path);
 
-		rjd_path_append(&path, "relative/path");
+		rjd_path_join_str(&path, "relative/path");
 		rjd_path_pop_front(&path);
 		expect_path("/path", path);
 	}
 
 	{
-		struct rjd_path path1 = rjd_path_init_with("a/b/c");
-		struct rjd_path path2 = rjd_path_init_with("d/e");
+		struct rjd_path path = rjd_path_init_with("/a/b/c/d/e");
+		rjd_path_pop_front_path_str(&path, "/a");
+		expect_path("/b/c/d/e", path);
+		rjd_path_pop_front_path_str(&path, "/b/");
+		expect_path("c/d/e", path);
+		rjd_path_pop_front_path_str(&path, "c/d");
+		expect_path("/e", path);
+		rjd_path_pop_front_path_str(&path, "e");
+		expect_path("/e", path);
+		rjd_path_pop_front_path_str(&path, "/");
+		expect_path("e", path);
+		rjd_path_pop_front_path_str(&path, "not_in_path");
+		expect_path("e", path);
+		rjd_path_pop_front_path_str(&path, "e");
+		expect_path("", path);
+		rjd_path_pop_front_path_str(&path, "e");
+		expect_path("", path);
 
-		rjd_path_join(&path1, &path2);
-		expect_path("a/b/c/d/e", path1);
+		struct rjd_path path2 = rjd_path_init_with("/a/b/c/d");
+		struct rjd_path path3 = rjd_path_init_with("/a/b/");
+		rjd_path_pop_front_path(&path2, &path3);
+		expect_path("/c/d", path2);
+		rjd_path_pop_front_path(&path2, &path3);
+		expect_path("/c/d", path2);
 	}
 
 	// extension

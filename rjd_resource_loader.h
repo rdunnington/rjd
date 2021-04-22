@@ -233,8 +233,8 @@ static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource
             const char* relative_path = rjd_strref_str(impl->manifest_entries[i].path);
             
             struct rjd_path fullpath = rjd_path_init();
-            rjd_path_append(&fullpath, root);
-            rjd_path_append(&fullpath, relative_path);
+            rjd_path_join_str(&fullpath, root);
+            rjd_path_join_str(&fullpath, relative_path);
 
 			*out = rjd_istream_from_file(rjd_path_get(&fullpath), allocator, 1024 * 512);
 			return out->result;

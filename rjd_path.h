@@ -25,12 +25,16 @@ enum RJD_PATH_ENUMERATE_MODE
 
 struct rjd_path rjd_path_init(void);
 struct rjd_path rjd_path_init_with(const char* path);
+void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2);
+void rjd_path_join_str(struct rjd_path* path, const char* str);
+void rjd_path_join_front(struct rjd_path* path, const char* str);
 void rjd_path_append(struct rjd_path* path, const char* str);
 void rjd_path_pop(struct rjd_path* path);
 void rjd_path_pop_extension(struct rjd_path* path);
 void rjd_path_pop_front(struct rjd_path* path);
-void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2);
-const char* rjd_path_get(struct rjd_path* path);
+void rjd_path_pop_front_path(struct rjd_path* path, const struct rjd_path* ending);
+void rjd_path_pop_front_path_str(struct rjd_path* path, const char* str);
+const char* rjd_path_get(const struct rjd_path* path);
 void rjd_path_clear(struct rjd_path* path);
 
 const char* rjd_path_extension(const struct rjd_path* path);
@@ -75,8 +79,16 @@ struct rjd_path rjd_path_init_with(const char* initial_contents)
 	return path;
 }
 
-void rjd_path_append(struct rjd_path* path, const char* str)
+void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2)
 {
+	rjd_path_join_str(path1, path2->str);
+}
+
+void rjd_path_join_str(struct rjd_path* path, const char* str)
+{
+	RJD_ASSERT(path);
+	RJD_ASSERT(str);
+
     const char slash = RJD_PATH_SLASH;
     
 	uint32_t start = path->length;
@@ -89,12 +101,49 @@ void rjd_path_append(struct rjd_path* path, const char* str)
 
 	size_t append_length = strlen(str);
 	size_t new_length = append_length + path->length;
-	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH, 
-				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u).",
-				RJD_PATH_BUFFER_LENGTH, new_length);
+	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH - 1, 
+				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u). Path: '%s'. Appending: '%s'",
+				RJD_PATH_BUFFER_LENGTH, new_length, path->str, str);
 	strncpy(path->str + path->length, str, append_length);
 	path->str[new_length] = 0;
 	path->length = rjd_path_normalize_slashes(path->str, (uint32_t)new_length);
+}
+
+void rjd_path_join_front(struct rjd_path* path, const char* str)
+{
+	RJD_ASSERT(path);
+	RJD_ASSERT(str);
+
+	struct rjd_path front = rjd_path_init_with(str);
+	int32_t new_length = front.length + path->length + 1; // +1 for joining slash
+
+	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH - 1, 
+				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u). Path: '%s'. Appending: '%s'",
+				RJD_PATH_BUFFER_LENGTH, new_length, path->str, str);
+
+	memmove(path->str + front.length + 1, path->str, path->length);
+	memcpy(path->str, front.str, front.length);
+	path->str[front.length] = RJD_PATH_SLASH;
+	path->str[front.length + path->length + 1] = 0;
+	path->length += front.length + 1;
+	path->length = rjd_path_normalize_slashes(path->str, path->length);
+}
+
+void rjd_path_append(struct rjd_path* path, const char* str)
+{
+	RJD_ASSERT(path);
+	RJD_ASSERT(str);
+
+	size_t length_str = strlen(str);
+	size_t new_length = path->length + length_str;
+
+	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH - 1, 
+				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u). Path: '%s'. Appending: '%s'",
+				RJD_PATH_BUFFER_LENGTH, new_length, path->str, str);
+	
+	strncpy(path->str + path->length, str, length_str);
+	path->length = new_length;
+	path->str[new_length] = 0;
 }
 
 void rjd_path_pop(struct rjd_path* path)
@@ -113,6 +162,8 @@ void rjd_path_pop(struct rjd_path* path)
 
 void rjd_path_pop_extension(struct rjd_path* path)
 {
+	RJD_ASSERT(path);
+
 	for (int32_t i = path->length - 1; i >= 0; --i) {
 		if (path->str[i] == '.') {
 			path->length = i;
@@ -143,12 +194,30 @@ void rjd_path_pop_front(struct rjd_path* path)
 	path->str[0] = 0;
 }
 
-void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2)
+void rjd_path_pop_front_path_str_impl(struct rjd_path* path, const char* front, int32_t front_length)
 {
-	rjd_path_append(path1, path2->str);
+	if (path->length < front_length) {
+		return;
+	}
+
+	if (!strncmp(path->str, front, front_length)) {
+		path->length -= front_length;
+		memmove(path->str, path->str + front_length, path->length);
+		path->str[path->length] = 0;
+	}
 }
 
-const char* rjd_path_get(struct rjd_path* path)
+void rjd_path_pop_front_path(struct rjd_path* path, const struct rjd_path* front)
+{
+	rjd_path_pop_front_path_str_impl(path, front->str, front->length);
+}
+
+void rjd_path_pop_front_path_str(struct rjd_path* path, const char* str)
+{
+	rjd_path_pop_front_path_str_impl(path, str, strlen(str));
+}
+
+const char* rjd_path_get(const struct rjd_path* path)
 {
 	return path->str;
 }
@@ -244,7 +313,8 @@ static uint32_t rjd_path_normalize_slashes(char* path, uint32_t length)
 	}
 
     size_t newlength = end - path;
-    RJD_ASSERT(newlength == strlen(path));
+    RJD_ASSERTMSG(newlength == strlen(path), "newlength (%d) != strlen(path) ('%s')  (%d)",
+					newlength, path, strlen(path));
     return (uint32_t)(end - path);
 }
 
