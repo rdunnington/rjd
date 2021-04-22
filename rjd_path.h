@@ -155,9 +155,12 @@ void rjd_path_pop(struct rjd_path* path)
 					
 			path->length = i;
 			path->str[i] = 0;
-			break;
+			return;
 		}
 	}
+
+	path->length = 0;
+	path->str[0] = 0;
 }
 
 void rjd_path_pop_extension(struct rjd_path* path)

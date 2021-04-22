@@ -2432,6 +2432,9 @@ void test_path(void)
 		expect_path("", path);
 		rjd_path_pop(&path);
 		expect_path("", path);
+		path = rjd_path_init_with("aaa");
+		rjd_path_pop(&path);
+		expect_path("", path);
 
 		rjd_path_join_str(&path, "/some/path.txt");
 		rjd_path_pop_extension(&path);
