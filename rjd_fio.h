@@ -8,10 +8,17 @@ enum rjd_fio_writemode
 	RJD_FIO_WRITEMODE_APPEND,
 };
 
+enum rjd_fio_attributes
+{
+	RJD_FIO_ATTRIBUTES_READONLY		= 0x1,
+	RJD_FIO_ATTRIBUTES_DIRECTORY	= 0x2,
+};
+
 // use rjd_array_free() to free *buffer after use
 struct rjd_result rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* allocator);
 struct rjd_result rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode);
 struct rjd_result rjd_fio_size(const char* path, size_t* out_size);
+struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attributes* attribute_flags);
 struct rjd_result rjd_fio_delete(const char* path);
 struct rjd_result rjd_fio_mkdir(const char* path);
 bool rjd_fio_exists(const char* path);
@@ -158,6 +165,22 @@ static struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* director
 	wchar_t* out_utf16_name = rjd_mem_alloc_stack_array_noclear(wchar_t, length_utf16 + 1);	\
 	mbstowcs(out_utf16_name, utf8, INT_MAX);
 
+struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attributes* attribute_flags)
+{
+	*attribute_flags = 0;
+
+	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
+	DWORD attributes = GetFileAttributes(path_wide);
+	if (attributes == INVALID_FILE_ATTRIBUTES) {
+		return RJD_RESULT("Failed to get file attributes for path");
+	}
+
+	*attribute_flags |= (attributes & FILE_ATTRIBUTE_DIRECTORY)	? RJD_FIO_ATTRIBUTES_DIRECTORY : 0;
+	*attribute_flags |= (attributes & FILE_ATTRIBUTE_READONLY)	? RJD_FIO_ATTRIBUTES_READONLY : 0;
+
+	return RJD_RESULT_OK();
+}
+
 struct rjd_result rjd_fio_delete(const char* path)
 {
 	RJD_ASSERT(path && *path);
@@ -289,6 +312,22 @@ struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path)
 #include <errno.h>
 
 static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf);
+
+struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attributes* attribute_flags)
+{
+	*attribute_flags = 0;
+
+	struct stat s = {0};
+
+	if (stat(path, &s) == 0) {
+		const mode_t write_bits = S_IWUSR | S_IWGRP | S_IWOTH;
+
+		*attribute_flags |= S_ISDIR(s.st_mode) ? RJD_FIO_ATTRIBUTES_DIRECTORY : 0;
+		*attribute_flags |= (s.st_mode & write_bits) ? 0 : RJD_FIO_ATTRIBUTES_READONLY;
+		return RJD_RESULT_OK();
+	}
+	return RJD_RESULT("Failed to get attributes for path");
+}
 
 struct rjd_result rjd_fio_delete(const char* path)
 {
