@@ -1783,9 +1783,13 @@ void test_fio()
 		expect_false(attributes & RJD_FIO_ATTRIBUTES_DIRECTORY);
 		expect_false(attributes & RJD_FIO_ATTRIBUTES_READONLY);
 
+		expect_result_ok(rjd_fio_attributes_set_readonly("test_data/fio/readonly.txt", true));
 		expect_result_ok(rjd_fio_attributes_get("test_data/fio/readonly.txt", &attributes));
-		expect_false(attributes & RJD_FIO_ATTRIBUTES_DIRECTORY);
 		expect_true(attributes & RJD_FIO_ATTRIBUTES_READONLY);
+
+		expect_result_ok(rjd_fio_attributes_set_readonly("test_data/fio/readonly.txt", false));
+		expect_result_ok(rjd_fio_attributes_get("test_data/fio/readonly.txt", &attributes));
+		expect_false(attributes & RJD_FIO_ATTRIBUTES_READONLY);
 	}
 
 	result = rjd_fio_delete("does_not_exist.txt");

@@ -19,6 +19,7 @@ struct rjd_result rjd_fio_read(const char* path, char** buffer, struct rjd_mem_a
 struct rjd_result rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode);
 struct rjd_result rjd_fio_size(const char* path, size_t* out_size);
 struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attributes* attribute_flags);
+struct rjd_result rjd_fio_attributes_set_readonly(const char* path, bool readonly);
 struct rjd_result rjd_fio_delete(const char* path);
 struct rjd_result rjd_fio_mkdir(const char* path);
 bool rjd_fio_exists(const char* path);
@@ -172,11 +173,28 @@ struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attribut
 	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
 	DWORD attributes = GetFileAttributes(path_wide);
 	if (attributes == INVALID_FILE_ATTRIBUTES) {
-		return RJD_RESULT("Failed to get file attributes for path");
+		return RJD_RESULT("Failed to get file attributes");
 	}
 
 	*attribute_flags |= (attributes & FILE_ATTRIBUTE_DIRECTORY)	? RJD_FIO_ATTRIBUTES_DIRECTORY : 0;
 	*attribute_flags |= (attributes & FILE_ATTRIBUTE_READONLY)	? RJD_FIO_ATTRIBUTES_READONLY : 0;
+
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_fio_attributes_set_readonly(const char* path, bool readonly)
+{
+	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
+	DWORD attributes = GetFileAttributes(path_wide);
+	if (attributes == INVALID_FILE_ATTRIBUTES) {
+		return RJD_RESULT("Failed to get file attributes");
+	}
+
+	attributes &= ~FILE_ATTRIBUTE_READONLY;
+
+	if (SetFileAttributes(path_wide, attributes)) {
+		return RJD_RESULT_OK("Failed to set file attributes");
+	}
 
 	return RJD_RESULT_OK();
 }
@@ -327,6 +345,29 @@ struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attribut
 		return RJD_RESULT_OK();
 	}
 	return RJD_RESULT("Failed to get attributes for path");
+}
+
+struct rjd_result rjd_fio_attributes_set_readonly(const char* path, bool readonly)
+{
+	struct stat s = {0};
+
+	if (stat(path, &s) == 0) {
+		const mode_t write_bits = S_IWUSR | S_IWGRP | S_IWOTH;
+		mode_t mode = s.st_mode;
+
+		if (readonly) {
+			mode &= ~write_bits;
+		} else {
+			mode |= write_bits;
+		}
+
+		if (chmod(path, mode) != 0) {
+			return RJD_RESULT("Failed to change access modifier");
+		}
+		return RJD_RESULT_OK();
+	}
+
+	return RJD_RESULT("Failed to get existing access modifiers");
 }
 
 struct rjd_result rjd_fio_delete(const char* path)
