@@ -1770,6 +1770,28 @@ void test_fio()
 	expect_fio_ok(true, result);
 	expect_uint32(sizeof(expected_contents), (uint32_t)filesize);
 
+	{
+		enum rjd_fio_attributes attributes = 0;
+
+		expect_result_ok(rjd_fio_attributes_get("test_data/fio", &attributes));
+		expect_true(attributes & RJD_FIO_ATTRIBUTES_DIRECTORY);
+		expect_false(attributes & RJD_FIO_ATTRIBUTES_READONLY);
+
+		expect_result_notok(rjd_fio_attributes_get("test_data/fio/does_not_exist", &attributes));
+
+		expect_result_ok(rjd_fio_attributes_get("test_data/fio/writeable.txt", &attributes));
+		expect_false(attributes & RJD_FIO_ATTRIBUTES_DIRECTORY);
+		expect_false(attributes & RJD_FIO_ATTRIBUTES_READONLY);
+
+		expect_result_ok(rjd_fio_attributes_set_readonly("test_data/fio/readonly.txt", true));
+		expect_result_ok(rjd_fio_attributes_get("test_data/fio/readonly.txt", &attributes));
+		expect_true(attributes & RJD_FIO_ATTRIBUTES_READONLY);
+
+		expect_result_ok(rjd_fio_attributes_set_readonly("test_data/fio/readonly.txt", false));
+		expect_result_ok(rjd_fio_attributes_get("test_data/fio/readonly.txt", &attributes));
+		expect_false(attributes & RJD_FIO_ATTRIBUTES_READONLY);
+	}
+
 	result = rjd_fio_delete("does_not_exist.txt");
 	expect_fio_ok(false, result);
 	result = rjd_fio_delete("test.txt");
