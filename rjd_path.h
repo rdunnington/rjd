@@ -142,7 +142,7 @@ void rjd_path_append(struct rjd_path* path, const char* str)
 				RJD_PATH_BUFFER_LENGTH, new_length, path->str, str);
 	
 	strncpy(path->str + path->length, str, length_str);
-	path->length = new_length;
+	path->length = (int32_t)new_length;
 	path->str[new_length] = 0;
 }
 
@@ -217,7 +217,7 @@ void rjd_path_pop_front_path(struct rjd_path* path, const struct rjd_path* front
 
 void rjd_path_pop_front_path_str(struct rjd_path* path, const char* str)
 {
-	rjd_path_pop_front_path_str_impl(path, str, strlen(str));
+	rjd_path_pop_front_path_str_impl(path, str, (int32_t)strlen(str));
 }
 
 const char* rjd_path_get(const struct rjd_path* path)
@@ -264,8 +264,8 @@ bool rjd_path_str_endswith(const char* path, const char* str)
 		return true;
 	}
 
-	int length_string = strlen(path);
-	int length_end = strlen(str);
+	size_t length_string = strlen(path);
+	size_t length_end = strlen(str);
 
 	if (length_end > length_string) {
 		return false;

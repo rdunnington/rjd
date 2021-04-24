@@ -171,7 +171,7 @@ struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attribut
 	*attribute_flags = 0;
 
 	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
-	DWORD attributes = GetFileAttributes(path_wide);
+	DWORD attributes = GetFileAttributesW(path_wide);
 	if (attributes == INVALID_FILE_ATTRIBUTES) {
 		return RJD_RESULT("Failed to get file attributes");
 	}
@@ -185,15 +185,19 @@ struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attribut
 struct rjd_result rjd_fio_attributes_set_readonly(const char* path, bool readonly)
 {
 	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
-	DWORD attributes = GetFileAttributes(path_wide);
+	DWORD attributes = GetFileAttributesW(path_wide);
 	if (attributes == INVALID_FILE_ATTRIBUTES) {
 		return RJD_RESULT("Failed to get file attributes");
 	}
 
-	attributes &= ~FILE_ATTRIBUTE_READONLY;
+	if (readonly) {
+		attributes |= FILE_ATTRIBUTE_READONLY;
+	} else {
+		attributes &= ~FILE_ATTRIBUTE_READONLY;
+	}
 
-	if (SetFileAttributes(path_wide, attributes)) {
-		return RJD_RESULT_OK("Failed to set file attributes");
+	if (SetFileAttributesW(path_wide, attributes) == 0) {
+		return RJD_RESULT("Failed to set file attributes");
 	}
 
 	return RJD_RESULT_OK();
