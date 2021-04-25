@@ -142,7 +142,7 @@ static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 
 	uint32_t current = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
 	uint32_t min = current + format_length + 1;
-	uint32_t next = rjd_math_next_pow2(min);
+	uint32_t next = rjd_math_next_pow2_u32(min);
 
 	if (!buf->heap) {
 		buf->heap = rjd_array_alloc(char, next, buf->allocator);

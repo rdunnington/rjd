@@ -169,7 +169,7 @@ struct rjd_result rjd_istream_read(struct rjd_istream* stream, void* buffer, siz
 		}
         RJD_ASSERT(stream->end >= stream->cursor)
 		ptrdiff_t buffersize = stream->end - stream->cursor;
-		size_t readsize = (size_t)rjd_math_minu64((size_t)buffersize, bytes_remaining);
+		size_t readsize = (size_t)rjd_math_min((size_t)buffersize, bytes_remaining);
 
 		memcpy(offset_buffer, stream->cursor, readsize);
         
