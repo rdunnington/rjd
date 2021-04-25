@@ -168,8 +168,8 @@ struct rjd_result rjd_istream_read(struct rjd_istream* stream, void* buffer, siz
 			stream->result = stream->refill(stream);
 		}
         RJD_ASSERT(stream->end >= stream->cursor)
-		ptrdiff_t buffersize = stream->end - stream->cursor;
-		size_t readsize = (size_t)rjd_math_min((size_t)buffersize, bytes_remaining);
+		size_t buffersize = rjd_math_truncate_u64_to_sizet(stream->end - stream->cursor);
+		size_t readsize = rjd_math_min(buffersize, bytes_remaining);
 
 		memcpy(offset_buffer, stream->cursor, readsize);
         
@@ -229,7 +229,7 @@ struct rjd_result rjd_ostream_write(struct rjd_ostream* stream, const void* buff
 		struct rjd_ostream_memory* state = &stream->state.memory;
 		RJD_ASSERT(state->size >= state->cursor);
 
-		const size_t bytes_remaining = state->size - state->cursor;
+		const size_t bytes_remaining = rjd_math_truncate_u64_to_sizet(state->size - state->cursor);
 		if (size > bytes_remaining) {
 			return RJD_RESULT("attempted to write more data than the buffer can hold");
 		}
