@@ -3,10 +3,16 @@
 #include "tests_rjd_wrapped.h"
 
 #if RJD_PLATFORM_WINDOWS
-	#pragma warning(push)
-	#pragma warning(disable:5105) // windows.h triggers warning C5105: macro expansion producing 'defined' has undefined behavior
+	#if RJD_COMPILER_MSVC
+		#pragma warning(push)
+		#pragma warning(disable:5105) // windows.h triggers warning C5105: macro expansion producing 'defined' has undefined behavior
+	#endif
+
 	#include <windows.h> // GetModuleHandle
-	#pragma warning(pop)
+
+	#if RJD_COMPILER_MSVC
+		#pragma warning(pop)
+	#endif
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -102,9 +102,11 @@
 #endif
 
 #if RJD_IMPL 
-#if RJD_PLATFORM_WINDOWS 
-	#pragma warning(push)
-	#pragma warning(disable:5105) // windows.h triggers warning C5105: macro expansion producing 'defined' has undefined behavior
+#if RJD_PLATFORM_WINDOWS
+	#if RJD_COMPILER_MSVC
+		#pragma warning(push)
+		#pragma warning(disable:5105) // windows.h triggers warning C5105: macro expansion producing 'defined' has undefined behavior
+	#endif
 
 	#define WIN32_LEAN_AND_MEAN
 	#define WIN32_EXTRA_LEAN
@@ -112,7 +114,9 @@
 	#include <windows.h>
 	#include <combaseapi.h>
 
-	#pragma warning(pop)
+	#if RJD_COMPILER_MSVC
+		#pragma warning(pop)
+	#endif
 #endif // RJD_PLATFORM_WINDOWS
 #endif // RJD_IMPL
 

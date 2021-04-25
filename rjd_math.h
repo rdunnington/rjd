@@ -100,16 +100,16 @@ RJD_MATH_MAX_FUNCS(RJD_MATH_DECLARE_MAX_FUNC)
 #define RJD_MATH_DECLARE_CLAMP_FUNC(name, type) static inline type name(type v, type minv, type maxv);
 #define RJD_MATH_DEFINE_CLAMP_FUNC(name, type) static inline type name(type v, type minv, type maxv) { return (v < minv) ? (minv) : (v > maxv ? maxv : v); }
 #define RJD_MATH_CLAMP_FUNCS(xmacro)		\
-	xmacro(rjd_math_clamp_i64, int64_t)		\
-	xmacro(rjd_math_clamp_i32, int32_t)		\
-	xmacro(rjd_math_clamp_i16, int16_t)		\
-	xmacro(rjd_math_clamp_i8, int8_t)		\
-	xmacro(rjd_math_clamp_u64, uint64_t)	\
-	xmacro(rjd_math_clamp_u32, uint32_t)	\
-	xmacro(rjd_math_clamp_u16, uint32_t)	\
-	xmacro(rjd_math_clamp_u8, uint32_t)		\
-	xmacro(rjd_math_clamp_f64, double)		\
-	xmacro(rjd_math_clamp_f32, float)
+	xmacro(rjd_math_clamp_i64,	int64_t)	\
+	xmacro(rjd_math_clamp_i32,	int32_t)	\
+	xmacro(rjd_math_clamp_i16,	int16_t)	\
+	xmacro(rjd_math_clamp_i8,	int8_t)		\
+	xmacro(rjd_math_clamp_u64,	uint64_t)	\
+	xmacro(rjd_math_clamp_u32,	uint32_t)	\
+	xmacro(rjd_math_clamp_u16,	uint16_t)	\
+	xmacro(rjd_math_clamp_u8,	uint8_t)	\
+	xmacro(rjd_math_clamp_f64,	double)		\
+	xmacro(rjd_math_clamp_f32,	float)
 RJD_MATH_CLAMP_FUNCS(RJD_MATH_DECLARE_CLAMP_FUNC)
 
 #define rjd_math_clamp(v, min, max) _Generic((v),	\
