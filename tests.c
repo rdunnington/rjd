@@ -585,13 +585,20 @@ void test_array()
 			int c;
 			int d;
 		};
-		struct test* a = rjd_array_alloc(struct test, 32, &allocator);
+
+		struct test* a = rjd_array_alloc(struct test, RJD_ARRAY_DEFAULT_CAPACITY, &allocator);
+		expect_uint32(0, rjd_array_count(a));
+		expect_true(rjd_array_capacity(a) >= 1);
+		rjd_array_free(a);
+
+		a = rjd_array_alloc(struct test, 32, &allocator);
 		expect_uint32(0, rjd_array_count(a));
 		expect_uint32(32, rjd_array_capacity(a));
 		expect_true(rjd_array_empty(a));
 		expect_false(rjd_array_full(a));
 		expect_uint32(0, rjd_array_count(NULL));
 		expect_uint32(0, rjd_array_capacity(NULL));
+
 
 		rjd_array_resize(a, 16);
 		expect_uint32(16, rjd_array_count(a));

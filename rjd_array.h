@@ -6,6 +6,12 @@
 // Note that GCC is awesome and has a warning if buf is a pointer. See -Wsizeof-pointer-div
 #define rjd_countof(buf) (sizeof(buf) / sizeof(*(buf)))
 
+enum 
+{ 
+	RJD_ARRAY_DEFAULT_CAPACITY = 0,
+	RJD_ARRAY_NOT_FOUND = -1,
+};
+
 // dyanmic array
 #define rjd_array_alloc(type, capacity, allocator)	((type*)(rjd_array_alloc_impl((capacity), (allocator), sizeof(type))))
 #define rjd_array_clone(buf, allocator)				rjd_array_clone_impl((buf), allocator, sizeof(*(buf)))
@@ -33,8 +39,6 @@
 // searching/sorting
 typedef int32_t RJD_COMPILER_MSVC_ONLY(__cdecl) rjd_array_compare_func(const void* left, const void* right);
 typedef int32_t RJD_COMPILER_MSVC_ONLY(__cdecl) rjd_array_compare_c_func(void* context, const void* left, const void* right);
-
-enum { RJD_ARRAY_NOT_FOUND = -1 };
 
 #define rjd_array_find(buf, ptr)						rjd_array_find_impl((buf), (ptr), sizeof(*(buf)), RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
 #define rjd_array_contains(buf, ptr)					rjd_array_contains_impl((buf), (ptr), sizeof(*(buf)), RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
@@ -139,9 +143,15 @@ static void* rjd_array_grow(void* array, size_t sizeof_type);
 
 void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocator, size_t sizeof_type)
 {
-	RJD_ASSERT(capacity > 0);
 	RJD_ASSERT(allocator);
 	RJD_ASSERT(sizeof_type > 0);
+
+	if (capacity == 0) {
+		capacity = 128 / sizeof_type;
+		if (capacity < 4) {
+			capacity = 4;
+		}
+	}
 
 	size_t rawsize = sizeof(struct rjd_array_header) + (sizeof_type * capacity);
 	char* raw = rjd_mem_alloc_array(char, rawsize, allocator);
