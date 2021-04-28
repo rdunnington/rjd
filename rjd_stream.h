@@ -269,7 +269,7 @@ void rjd_ostream_close(struct rjd_ostream* stream)
 
 static struct rjd_result rjd_istream_fail(struct rjd_istream* stream, const char* reason)
 {
-	stream->result = RJD_RESULT(reason);
+	stream->result = (struct rjd_result){reason};
 	stream->refill = rjd_istream_refill_zeroes;
 	return stream->refill(stream);
 }
