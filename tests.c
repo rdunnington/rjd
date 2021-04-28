@@ -3,7 +3,16 @@
 #include "tests_rjd_wrapped.h"
 
 #if RJD_PLATFORM_WINDOWS
+	#if RJD_COMPILER_MSVC
+		#pragma warning(push)
+		#pragma warning(disable:5105) // windows.h triggers warning C5105: macro expansion producing 'defined' has undefined behavior
+	#endif
+
 	#include <windows.h> // GetModuleHandle
+
+	#if RJD_COMPILER_MSVC
+		#pragma warning(pop)
+	#endif
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -999,50 +1008,56 @@ void expect_vec3(rjd_math_vec3 expected, rjd_math_vec3 actual)
 void test_math(void)
 {
 	// helper functions
-	expect_uint32(0, rjd_math_next_pow2(0));
-	expect_uint32(1, rjd_math_next_pow2(1));
-	expect_uint32(2, rjd_math_next_pow2(2));
-	expect_uint32(4, rjd_math_next_pow2(3));
-	expect_uint32(4, rjd_math_next_pow2(4));
-	expect_uint32(8, rjd_math_next_pow2(5));
-	expect_uint32(8, rjd_math_next_pow2(6));
-	expect_uint32(8, rjd_math_next_pow2(7));
-	expect_uint32(8, rjd_math_next_pow2(8));
+	expect_uint32(0, rjd_math_next_pow2_u32(0));
+	expect_uint32(1, rjd_math_next_pow2_u32(1));
+	expect_uint32(2, rjd_math_next_pow2_u32(2));
+	expect_uint32(4, rjd_math_next_pow2_u32(3));
+	expect_uint32(4, rjd_math_next_pow2_u32(4));
+	expect_uint32(8, rjd_math_next_pow2_u32(5));
+	expect_uint32(8, rjd_math_next_pow2_u32(6));
+	expect_uint32(8, rjd_math_next_pow2_u32(7));
+	expect_uint32(8, rjd_math_next_pow2_u32(8));
 
-	expect_int32(1,		rjd_math_pow32(2, 0));
-	expect_int32(2,		rjd_math_pow32(2, 1));
-	expect_int32(64,	rjd_math_pow32(2, 6));
-	expect_int32(-32,	rjd_math_pow32(-2, 5));
-	expect_int32(1,		rjd_math_pow32(23987, 0));
-	expect_int32(23987, rjd_math_pow32(23987, 1));
+	expect_int32(1,		rjd_math_pow_u32(2, 0));
+	expect_int32(2,		rjd_math_pow_u32(2, 1));
+	expect_int32(64,	rjd_math_pow_u32(2, 6));
+	expect_int32(-32,	rjd_math_pow_u32(-2, 5));
+	expect_int32(1,		rjd_math_pow_u32(23987, 0));
+	expect_int32(23987, rjd_math_pow_u32(23987, 1));
 
-	expect_int32(1,		rjd_math_sign32(0));
-	expect_int32(1,		rjd_math_sign32(67));
-	expect_int32(-1,	rjd_math_sign32(-231));
+	expect_int32(1,		rjd_math_sign(0));
+	expect_int32(1,		rjd_math_sign(INT_MAX));
+	expect_int32(-1,	rjd_math_sign(INT_MIN));
+	expect_int32(-1,	rjd_math_sign(-231));
 	expect_float(1,		rjd_math_sign(0.0));
 	expect_float(1,		rjd_math_sign(-0.0));
 	expect_float(1,		rjd_math_sign(234.0));
 	expect_float(-1,	rjd_math_sign(-234.0));
-	expect_float(1,		(double)rjd_math_signf(234.0f));
-	expect_float(-1,	(double)rjd_math_signf(-234.0f));
+	expect_float(1,		rjd_math_sign(FLT_MAX));
+	expect_float(1,		rjd_math_sign(FLT_MIN));
+	expect_float(-1,	rjd_math_sign(-FLT_MAX));
+	expect_float(-1,	rjd_math_sign(-FLT_MIN));
+	expect_float(1,		rjd_math_sign(234.0));
+	expect_float(-1,	rjd_math_sign(-234.0));
 
-	expect_true(rjd_math_isequal(0, 0));
-	expect_true(rjd_math_isequal(505, 505));
+	expect_true(rjd_math_isequal(0.0, 0.0));
+	expect_true(rjd_math_isequal(0.0f, 0.0f));
+	expect_true(rjd_math_isequal(505.1f, 505.1f));
 	expect_true(rjd_math_isequal(0.00000001, 0.00000002));
 	expect_true(rjd_math_isequal(0.00000001f, 0.00000002f));
-	expect_false(rjd_math_isequal(1, 2));
+	expect_false(rjd_math_isequal(1.0, 2.0));
 	expect_false(rjd_math_isequal(1/3.0, 1/3.1));
 
-	expect_float(0, rjd_math_remap(0, 0, 1, 0, 2));
+	expect_float(0, rjd_math_remap(0.0f, 0, 1, 0, 2));
 	expect_float(1, rjd_math_remap(.5, 0, 1, 0, 2));
-	expect_float(2, rjd_math_remap(1, 0, 1, 0, 2));
+	expect_float(2, rjd_math_remap(1.0, 0, 1, 0, 2));
 	
-	expect_int32(1,		rjd_math_min32(2, 1));
-	expect_int32(-1,	rjd_math_min32(-1, 1));
-	expect_int32(10,	rjd_math_minu32(10, 1100));
-	expect_int32(1,		rjd_math_max32(-1, 1));
-	expect_int32(2,		rjd_math_max32(2, 1));
-	expect_int32(1100,	rjd_math_maxu32(10, 1100));
+	expect_int32(1,		rjd_math_min(2, 1));
+	expect_int32(-1,	rjd_math_min(-1, 1));
+	expect_int32(10,	rjd_math_min(10, 1100));
+	expect_int32(1,		rjd_math_max(-1, 1));
+	expect_int32(2,		rjd_math_max(2, 1));
+	expect_int32(1100,	rjd_math_max(10, 1100));
 
 	// vec and matrix alignment
 	{

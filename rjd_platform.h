@@ -82,7 +82,6 @@
 #endif
 
 #if RJD_COMPILER_MSVC
-	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer (this is ok in C99)
 	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (gcc and clang support this)
 	#pragma warning(disable:4221) // nonstandard extension used: initializing struct with address of local variable (gcc and clang support this)
 
@@ -103,12 +102,21 @@
 #endif
 
 #if RJD_IMPL 
-#if RJD_PLATFORM_WINDOWS 
+#if RJD_PLATFORM_WINDOWS
+	#if RJD_COMPILER_MSVC
+		#pragma warning(push)
+		#pragma warning(disable:5105) // windows.h triggers warning C5105: macro expansion producing 'defined' has undefined behavior
+	#endif
+
 	#define WIN32_LEAN_AND_MEAN
 	#define WIN32_EXTRA_LEAN
 	#define NOMINMAX
 	#include <windows.h>
 	#include <combaseapi.h>
+
+	#if RJD_COMPILER_MSVC
+		#pragma warning(pop)
+	#endif
 #endif // RJD_PLATFORM_WINDOWS
 #endif // RJD_IMPL
 

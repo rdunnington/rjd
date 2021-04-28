@@ -399,10 +399,6 @@ float rjd_input_mouse_prev_common(const struct rjd_input_common* input, enum rjd
 
 #if RJD_PLATFORM_WINDOWS
 
-#define WIN32_LEAN_AND_MEAN
-#define WIN32_EXTRA_LEAN
-#define NOMINMAX
-#include <windows.h>
 #include <windowsx.h> // GET_X_LPARAM, GET_Y_LPARAM
 
 struct rjd_input_win32

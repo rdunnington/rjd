@@ -144,7 +144,7 @@ bool rjd_geo_box_box(rjd_geo_box a, rjd_geo_box b) {
 bool rjd_geo_ray_point(rjd_geo_ray r, rjd_math_vec3 p, float* t_out) {
 	rjd_math_vec3 to_p = rjd_math_vec3_sub(r.p, p);
 	rjd_math_vec3 to_p_normalized = rjd_math_vec3_normalize(to_p);
-	if (rjd_math_isequalf(rjd_math_vec3_dot(to_p_normalized, r.d), 1)) {
+	if (rjd_math_isequal(rjd_math_vec3_dot(to_p_normalized, r.d), 1)) {
 		return false;
 	}
 
