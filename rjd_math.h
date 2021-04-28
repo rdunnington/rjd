@@ -43,86 +43,171 @@ RJD_MATH_ISEQUAL_FUNCS(RJD_MATH_DECLARE_ISEQUAL_FUNC)
 	double:	rjd_math_isequal_f64,				\
 	float:	rjd_math_isequal_f32)((a), (b))
 
+// size_t versions are needed on OSX due to them being defined as unsigned long, which is different than 
 #define RJD_MATH_DECLARE_MIN_FUNC(name, type) static inline type name(type a, type b);
 #define RJD_MATH_DEFINE_MIN_FUNC(name, type) static inline type name(type a, type b) { return (a < b) ? a : b; }
-#define RJD_MATH_MIN_FUNCS(xmacro)			\
-	xmacro(rjd_math_min_i64,	int64_t)	\
-	xmacro(rjd_math_min_i32,	int32_t)	\
-	xmacro(rjd_math_min_i16,	int16_t)	\
-	xmacro(rjd_math_min_i8,		int8_t)		\
-	xmacro(rjd_math_min_u64,	uint64_t)	\
-	xmacro(rjd_math_min_u32,	uint32_t)	\
-	xmacro(rjd_math_min_u16,	uint16_t)	\
-	xmacro(rjd_math_min_u8,		uint8_t)	\
-	xmacro(rjd_math_min_f32,	float)		\
-	xmacro(rjd_math_min_f64,	double)
-RJD_MATH_MIN_FUNCS(RJD_MATH_DECLARE_MIN_FUNC)
+#if RJD_PLATFORM_OSX
+	#define RJD_MATH_MIN_FUNCS(xmacro)			\
+		xmacro(rjd_math_min_i64,	int64_t)	\
+		xmacro(rjd_math_min_i32,	int32_t)	\
+		xmacro(rjd_math_min_i16,	int16_t)	\
+		xmacro(rjd_math_min_i8,		int8_t)		\
+		xmacro(rjd_math_min_sizet,	size_t)		\
+		xmacro(rjd_math_min_u64,	uint64_t)	\
+		xmacro(rjd_math_min_u32,	uint32_t)	\
+		xmacro(rjd_math_min_u16,	uint16_t)	\
+		xmacro(rjd_math_min_u8,		uint8_t)	\
+		xmacro(rjd_math_min_f32,	float)		\
+		xmacro(rjd_math_min_f64,	double)
 
-#define rjd_math_min(a, b) _Generic((a),	\
-	int64_t:	rjd_math_min_i64,			\
-	int32_t:	rjd_math_min_i32,			\
-	int16_t:	rjd_math_min_i16,			\
-	int8_t:		rjd_math_min_i8,			\
-	uint64_t:	rjd_math_min_u64,			\
-	uint32_t:	rjd_math_min_u32,			\
-	uint16_t:	rjd_math_min_u16,			\
-	uint8_t:	rjd_math_min_u8,			\
-	double:		rjd_math_min_f64,			\
-	float:		rjd_math_min_f32)((a), (b))
+	#define rjd_math_min(a, b) _Generic((a),	\
+		int64_t:	rjd_math_min_i64,			\
+		int32_t:	rjd_math_min_i32,			\
+		int16_t:	rjd_math_min_i16,			\
+		int8_t:		rjd_math_min_i8,			\
+		size_t:		rjd_math_min_sizet,			\
+		uint64_t:	rjd_math_min_u64,			\
+		uint32_t:	rjd_math_min_u32,			\
+		uint16_t:	rjd_math_min_u16,			\
+		uint8_t:	rjd_math_min_u8,			\
+		double:		rjd_math_min_f64,			\
+		float:		rjd_math_min_f32)((a), (b))
+#else
+	#define RJD_MATH_MIN_FUNCS(xmacro)			\
+		xmacro(rjd_math_min_i64,	int64_t)	\
+		xmacro(rjd_math_min_i32,	int32_t)	\
+		xmacro(rjd_math_min_i16,	int16_t)	\
+		xmacro(rjd_math_min_i8,		int8_t)		\
+		xmacro(rjd_math_min_u64,	uint64_t)	\
+		xmacro(rjd_math_min_u32,	uint32_t)	\
+		xmacro(rjd_math_min_u16,	uint16_t)	\
+		xmacro(rjd_math_min_u8,		uint8_t)	\
+		xmacro(rjd_math_min_f32,	float)		\
+		xmacro(rjd_math_min_f64,	double)
+
+	#define rjd_math_min(a, b) _Generic((a),	\
+		int64_t:	rjd_math_min_i64,			\
+		int32_t:	rjd_math_min_i32,			\
+		int16_t:	rjd_math_min_i16,			\
+		int8_t:		rjd_math_min_i8,			\
+		uint64_t:	rjd_math_min_u64,			\
+		uint32_t:	rjd_math_min_u32,			\
+		uint16_t:	rjd_math_min_u16,			\
+		uint8_t:	rjd_math_min_u8,			\
+		double:		rjd_math_min_f64,			\
+		float:		rjd_math_min_f32)((a), (b))
+#endif
+RJD_MATH_MIN_FUNCS(RJD_MATH_DECLARE_MIN_FUNC)
 
 #define RJD_MATH_DECLARE_MAX_FUNC(name, type) static inline type name(type a, type b);
 #define RJD_MATH_DEFINE_MAX_FUNC(name, type) static inline type name(type a, type b) { return (a < b) ? b : a; }
-#define RJD_MATH_MAX_FUNCS(xmacro)		\
-	xmacro(rjd_math_max_i64, int64_t)	\
-	xmacro(rjd_math_max_i32, int32_t)	\
-	xmacro(rjd_math_max_i16, int16_t)	\
-	xmacro(rjd_math_max_i8,  int8_t)	\
-	xmacro(rjd_math_max_u64, uint64_t)	\
-	xmacro(rjd_math_max_u32, uint32_t)	\
-	xmacro(rjd_math_max_u16, uint16_t)	\
-	xmacro(rjd_math_max_u8,  uint8_t)	\
-	xmacro(rjd_math_max_f64, double)	\
-	xmacro(rjd_math_max_f32, float)
-RJD_MATH_MAX_FUNCS(RJD_MATH_DECLARE_MAX_FUNC)
+#if RJD_PLATFORM_OSX
+	#define RJD_MATH_MAX_FUNCS(xmacro)		\
+		xmacro(rjd_math_max_i64, int64_t)	\
+		xmacro(rjd_math_max_i32, int32_t)	\
+		xmacro(rjd_math_max_i16, int16_t)	\
+		xmacro(rjd_math_max_i8,  int8_t)	\
+		xmacro(rjd_math_max_sizet, size_t)	\
+		xmacro(rjd_math_max_u64, uint64_t)	\
+		xmacro(rjd_math_max_u32, uint32_t)	\
+		xmacro(rjd_math_max_u16, uint16_t)	\
+		xmacro(rjd_math_max_u8,  uint8_t)	\
+		xmacro(rjd_math_max_f64, double)	\
+		xmacro(rjd_math_max_f32, float)
 
-#define rjd_math_max(a, b) _Generic((a),	\
-	int64_t:	rjd_math_max_i64,			\
-	int32_t:	rjd_math_max_i32,			\
-	int16_t:	rjd_math_max_i16,			\
-	int8_t:		rjd_math_max_i8,			\
-	uint64_t:	rjd_math_max_u64,			\
-	uint32_t:	rjd_math_max_u32,			\
-	uint16_t:	rjd_math_max_u16,			\
-	uint8_t:	rjd_math_max_u8,			\
-	double:		rjd_math_max_f64,			\
-	float:		rjd_math_max_f32)((a), (b))
+	#define rjd_math_max(a, b) _Generic((a),	\
+		int64_t:	rjd_math_max_i64,			\
+		int32_t:	rjd_math_max_i32,			\
+		int16_t:	rjd_math_max_i16,			\
+		int8_t:		rjd_math_max_i8,			\
+		size_t:		rjd_math_max_sizet,			\
+		uint64_t:	rjd_math_max_u64,			\
+		uint32_t:	rjd_math_max_u32,			\
+		uint16_t:	rjd_math_max_u16,			\
+		uint8_t:	rjd_math_max_u8,			\
+		double:		rjd_math_max_f64,			\
+		float:		rjd_math_max_f32)((a), (b))
+#else
+	#define RJD_MATH_MAX_FUNCS(xmacro)		\
+		xmacro(rjd_math_max_i64, int64_t)	\
+		xmacro(rjd_math_max_i32, int32_t)	\
+		xmacro(rjd_math_max_i16, int16_t)	\
+		xmacro(rjd_math_max_i8,  int8_t)	\
+		xmacro(rjd_math_max_u64, uint64_t)	\
+		xmacro(rjd_math_max_u32, uint32_t)	\
+		xmacro(rjd_math_max_u16, uint16_t)	\
+		xmacro(rjd_math_max_u8,  uint8_t)	\
+		xmacro(rjd_math_max_f64, double)	\
+		xmacro(rjd_math_max_f32, float)
+
+	#define rjd_math_max(a, b) _Generic((a),	\
+		int64_t:	rjd_math_max_i64,			\
+		int32_t:	rjd_math_max_i32,			\
+		int16_t:	rjd_math_max_i16,			\
+		int8_t:		rjd_math_max_i8,			\
+		uint64_t:	rjd_math_max_u64,			\
+		uint32_t:	rjd_math_max_u32,			\
+		uint16_t:	rjd_math_max_u16,			\
+		uint8_t:	rjd_math_max_u8,			\
+		double:		rjd_math_max_f64,			\
+		float:		rjd_math_max_f32)((a), (b))
+#endif
+RJD_MATH_MAX_FUNCS(RJD_MATH_DECLARE_MAX_FUNC)
 
 #define RJD_MATH_DECLARE_CLAMP_FUNC(name, type) static inline type name(type v, type minv, type maxv);
 #define RJD_MATH_DEFINE_CLAMP_FUNC(name, type) static inline type name(type v, type minv, type maxv) { return (v < minv) ? (minv) : (v > maxv ? maxv : v); }
-#define RJD_MATH_CLAMP_FUNCS(xmacro)		\
-	xmacro(rjd_math_clamp_i64,	int64_t)	\
-	xmacro(rjd_math_clamp_i32,	int32_t)	\
-	xmacro(rjd_math_clamp_i16,	int16_t)	\
-	xmacro(rjd_math_clamp_i8,	int8_t)		\
-	xmacro(rjd_math_clamp_u64,	uint64_t)	\
-	xmacro(rjd_math_clamp_u32,	uint32_t)	\
-	xmacro(rjd_math_clamp_u16,	uint16_t)	\
-	xmacro(rjd_math_clamp_u8,	uint8_t)	\
-	xmacro(rjd_math_clamp_f64,	double)		\
-	xmacro(rjd_math_clamp_f32,	float)
-RJD_MATH_CLAMP_FUNCS(RJD_MATH_DECLARE_CLAMP_FUNC)
+#if RJD_PLATFORM_OSX
+	#define RJD_MATH_CLAMP_FUNCS(xmacro)		\
+		xmacro(rjd_math_clamp_i64,	int64_t)	\
+		xmacro(rjd_math_clamp_i32,	int32_t)	\
+		xmacro(rjd_math_clamp_i16,	int16_t)	\
+		xmacro(rjd_math_clamp_i8,	int8_t)		\
+		xmacro(rjd_math_clamp_sizet,size_t)		\
+		xmacro(rjd_math_clamp_u64,	uint64_t)	\
+		xmacro(rjd_math_clamp_u32,	uint32_t)	\
+		xmacro(rjd_math_clamp_u16,	uint16_t)	\
+		xmacro(rjd_math_clamp_u8,	uint8_t)	\
+		xmacro(rjd_math_clamp_f64,	double)		\
+		xmacro(rjd_math_clamp_f32,	float)
 
-#define rjd_math_clamp(v, min, max) _Generic((v),	\
-	int64_t:	rjd_math_clamp_i64,					\
-	int32_t:	rjd_math_clamp_i32,					\
-	int16_t:	rjd_math_clamp_i16,					\
-	int8_t:		rjd_math_clamp_i8,					\
-	uint64_t:	rjd_math_clamp_u64,					\
-	uint32_t:	rjd_math_clamp_u32,					\
-	uint16_t:	rjd_math_clamp_u16,					\
-	uint8_t:	rjd_math_clamp_u8,					\
-	double:		rjd_math_clamp_f64,					\
-	float:		rjd_math_clamp_f32)((v), (min), (max))
+	#define rjd_math_clamp(v, min, max) _Generic((v),	\
+		int64_t:	rjd_math_clamp_i64,					\
+		int32_t:	rjd_math_clamp_i32,					\
+		int16_t:	rjd_math_clamp_i16,					\
+		int8_t:		rjd_math_clamp_i8,					\
+		size_t:		rjd_math_clamp_sizet,				\
+		uint64_t:	rjd_math_clamp_u64,					\
+		uint32_t:	rjd_math_clamp_u32,					\
+		uint16_t:	rjd_math_clamp_u16,					\
+		uint8_t:	rjd_math_clamp_u8,					\
+		double:		rjd_math_clamp_f64,					\
+		float:		rjd_math_clamp_f32)((v), (min), (max))
+#else
+	#define RJD_MATH_CLAMP_FUNCS(xmacro)		\
+		xmacro(rjd_math_clamp_i64,	int64_t)	\
+		xmacro(rjd_math_clamp_i32,	int32_t)	\
+		xmacro(rjd_math_clamp_i16,	int16_t)	\
+		xmacro(rjd_math_clamp_i8,	int8_t)		\
+		xmacro(rjd_math_clamp_u64,	uint64_t)	\
+		xmacro(rjd_math_clamp_u32,	uint32_t)	\
+		xmacro(rjd_math_clamp_u16,	uint16_t)	\
+		xmacro(rjd_math_clamp_u8,	uint8_t)	\
+		xmacro(rjd_math_clamp_f64,	double)		\
+		xmacro(rjd_math_clamp_f32,	float)
+
+	#define rjd_math_clamp(v, min, max) _Generic((v),	\
+		int64_t:	rjd_math_clamp_i64,					\
+		int32_t:	rjd_math_clamp_i32,					\
+		int16_t:	rjd_math_clamp_i16,					\
+		int8_t:		rjd_math_clamp_i8,					\
+		uint64_t:	rjd_math_clamp_u64,					\
+		uint32_t:	rjd_math_clamp_u32,					\
+		uint16_t:	rjd_math_clamp_u16,					\
+		uint8_t:	rjd_math_clamp_u8,					\
+		double:		rjd_math_clamp_f64,					\
+		float:		rjd_math_clamp_f32)((v), (min), (max))
+#endif
+RJD_MATH_CLAMP_FUNCS(RJD_MATH_DECLARE_CLAMP_FUNC)
 
 #define RJD_MATH_DECLARE_TRUNCATE_FUNC(name, bigtype, smalltype) static inline smalltype name(bigtype v);
 #define RJD_MATH_DEFINE_TRUNCATE_FUNC(name, bigtype, smalltype) static inline smalltype name(bigtype v) { RJD_ASSERT(v <= (smalltype)-1); return (smalltype)v; }
