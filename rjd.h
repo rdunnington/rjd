@@ -108,7 +108,6 @@
 #endif
 
 #if RJD_COMPILER_MSVC
-	#pragma warning(disable:4204) // nonstandard extension used: non-constant aggregate initializer (this is ok in C99)
 	#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union (gcc and clang support this)
 	#pragma warning(disable:4221) // nonstandard extension used: initializing struct with address of local variable (gcc and clang support this)
 
@@ -129,12 +128,21 @@
 #endif
 
 #if RJD_IMPL 
-#if RJD_PLATFORM_WINDOWS 
+#if RJD_PLATFORM_WINDOWS
+	#if RJD_COMPILER_MSVC
+		#pragma warning(push)
+		#pragma warning(disable:5105) // windows.h triggers warning C5105: macro expansion producing 'defined' has undefined behavior
+	#endif
+
 	#define WIN32_LEAN_AND_MEAN
 	#define WIN32_EXTRA_LEAN
 	#define NOMINMAX
 	#include <windows.h>
 	#include <combaseapi.h>
+
+	#if RJD_COMPILER_MSVC
+		#pragma warning(pop)
+	#endif
 #endif // RJD_PLATFORM_WINDOWS
 #endif // RJD_IMPL
 
@@ -292,9 +300,8 @@ static inline bool rjd_result_isok(struct rjd_result result) {
 	return result.error == NULL;
 }
 
-// TODO static assert that message is a compile-time string
-#define RJD_RESULT(message) ((struct rjd_result){message})
-#define RJD_RESULT_OK() RJD_RESULT(NULL)
+#define RJD_RESULT(message) ((struct rjd_result){"" message})
+#define RJD_RESULT_OK() ((struct rjd_result){NULL})
 #define RJD_RESULT_CHECK(validation_condition, message) if (!(validation_condition)) { return RJD_RESULT(message); }
 #define RJD_RESULT_PROMOTE(result) if (!rjd_result_isok(result)) { return result; }
 
@@ -2077,6 +2084,12 @@ int32_t rjd_rng_range32(struct rjd_rng* rng, int32_t min_inclusive, int32_t max_
 // Note that GCC is awesome and has a warning if buf is a pointer. See -Wsizeof-pointer-div
 #define rjd_countof(buf) (sizeof(buf) / sizeof(*(buf)))
 
+enum 
+{ 
+	RJD_ARRAY_DEFAULT_CAPACITY = 0,
+	RJD_ARRAY_NOT_FOUND = -1,
+};
+
 // dyanmic array
 #define rjd_array_alloc(type, capacity, allocator)	((type*)(rjd_array_alloc_impl((capacity), (allocator), sizeof(type))))
 #define rjd_array_clone(buf, allocator)				rjd_array_clone_impl((buf), allocator, sizeof(*(buf)))
@@ -2104,8 +2117,6 @@ int32_t rjd_rng_range32(struct rjd_rng* rng, int32_t min_inclusive, int32_t max_
 // searching/sorting
 typedef int32_t RJD_COMPILER_MSVC_ONLY(__cdecl) rjd_array_compare_func(const void* left, const void* right);
 typedef int32_t RJD_COMPILER_MSVC_ONLY(__cdecl) rjd_array_compare_c_func(void* context, const void* left, const void* right);
-
-enum { RJD_ARRAY_NOT_FOUND = -1 };
 
 #define rjd_array_find(buf, ptr)						rjd_array_find_impl((buf), (ptr), sizeof(*(buf)), RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
 #define rjd_array_contains(buf, ptr)					rjd_array_contains_impl((buf), (ptr), sizeof(*(buf)), RJD_MUST_BE_SAME_TYPE_TEST((buf), (ptr)))
@@ -2210,9 +2221,15 @@ static void* rjd_array_grow(void* array, size_t sizeof_type);
 
 void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocator, size_t sizeof_type)
 {
-	RJD_ASSERT(capacity > 0);
 	RJD_ASSERT(allocator);
 	RJD_ASSERT(sizeof_type > 0);
+
+	if (capacity == 0) {
+		capacity = 128 / sizeof_type;
+		if (capacity < 4) {
+			capacity = 4;
+		}
+	}
 
 	size_t rawsize = sizeof(struct rjd_array_header) + (sizeof_type * capacity);
 	char* raw = rjd_mem_alloc_array(char, rawsize, allocator);
@@ -2669,70 +2686,227 @@ static void* rjd_array_grow(void* array, size_t sizeof_type)
 ////////////////////////////////////////////////////////////////////////////////
 // utils
 
-static inline uint32_t rjd_math_next_pow2(uint32_t v);
-static inline int32_t rjd_math_pow32(int32_t v, uint32_t power);
+static inline uint32_t rjd_math_next_pow2_u32(uint32_t v);
+static inline int32_t rjd_math_pow_u32(int32_t v, uint32_t power);
 
 #define RJD_MATH_DECLARE_SIGN_FUNC(name, type) static inline type name(type v);
-#define RJD_MATH_DEFINE_SIGN_FUNC(name, type) static inline type name(type v) { return (v < 0) ? (type)-1 : (type)1; }
-#define RJD_MATH_SIGN_FUNCS(xmacro)		\
-	xmacro(rjd_math_sign32, int32_t)	\
-	xmacro(rjd_math_sign, double)		\
-	xmacro(rjd_math_signf, float)
+#define RJD_MATH_DEFINE_SIGN_FUNC(name, type) static inline type name(type v) { return (v < (type)0) ? (type)-1 : (type)1; }
+#define RJD_MATH_SIGN_FUNCS(xmacro)			\
+	xmacro(rjd_math_sign_i64,	int64_t)	\
+	xmacro(rjd_math_sign_i32,	int32_t)	\
+	xmacro(rjd_math_sign_i16,	int16_t)	\
+	xmacro(rjd_math_sign_i8,	int8_t)		\
+	xmacro(rjd_math_sign_f64,	double)		\
+	xmacro(rjd_math_sign_f32,	float)
 RJD_MATH_SIGN_FUNCS(RJD_MATH_DECLARE_SIGN_FUNC)
+
+#define rjd_math_sign(v) _Generic((v),	\
+	int64_t:	rjd_math_sign_i64, 		\
+	int32_t:	rjd_math_sign_i32,		\
+	int16_t:	rjd_math_sign_i16, 		\
+	int8_t:		rjd_math_sign_i8,		\
+	double:		rjd_math_sign_f64, 		\
+	float:		rjd_math_sign_f32)(v)
 
 #define RJD_MATH_DECLARE_ISEQUAL_FUNC(name, type) static inline bool name(type a, type b);
 #define RJD_MATH_DEFINE_ISEQUAL_FUNC(name, type) static inline bool name(type a, type b) { return (type)fabs(a - b) < RJD_MATH_EPSILON; }
-#define RJD_MATH_ISEQUAL_FUNCS(xmacro)	\
-	xmacro(rjd_math_isequal, double)	\
-	xmacro(rjd_math_isequalf, float)
+#define RJD_MATH_ISEQUAL_FUNCS(xmacro)		\
+	xmacro(rjd_math_isequal_f64, double)	\
+	xmacro(rjd_math_isequal_f32, float)
 RJD_MATH_ISEQUAL_FUNCS(RJD_MATH_DECLARE_ISEQUAL_FUNC)
 
+#define rjd_math_isequal(a, b) _Generic((a),	\
+	double:	rjd_math_isequal_f64,				\
+	float:	rjd_math_isequal_f32)((a), (b))
+
+// size_t versions are needed on OSX due to them being defined as unsigned long, which is different than 
 #define RJD_MATH_DECLARE_MIN_FUNC(name, type) static inline type name(type a, type b);
 #define RJD_MATH_DEFINE_MIN_FUNC(name, type) static inline type name(type a, type b) { return (a < b) ? a : b; }
-#define RJD_MATH_MIN_FUNCS(xmacro)		\
-	xmacro(rjd_math_min32, int32_t)		\
-	xmacro(rjd_math_min64, int64_t)		\
-	xmacro(rjd_math_minu32, uint32_t)	\
-	xmacro(rjd_math_minu64, uint64_t)
+#if RJD_PLATFORM_OSX
+	#define RJD_MATH_MIN_FUNCS(xmacro)			\
+		xmacro(rjd_math_min_i64,	int64_t)	\
+		xmacro(rjd_math_min_i32,	int32_t)	\
+		xmacro(rjd_math_min_i16,	int16_t)	\
+		xmacro(rjd_math_min_i8,		int8_t)		\
+		xmacro(rjd_math_min_sizet,	size_t)		\
+		xmacro(rjd_math_min_u64,	uint64_t)	\
+		xmacro(rjd_math_min_u32,	uint32_t)	\
+		xmacro(rjd_math_min_u16,	uint16_t)	\
+		xmacro(rjd_math_min_u8,		uint8_t)	\
+		xmacro(rjd_math_min_f32,	float)		\
+		xmacro(rjd_math_min_f64,	double)
+
+	#define rjd_math_min(a, b) _Generic((a),	\
+		int64_t:	rjd_math_min_i64,			\
+		int32_t:	rjd_math_min_i32,			\
+		int16_t:	rjd_math_min_i16,			\
+		int8_t:		rjd_math_min_i8,			\
+		size_t:		rjd_math_min_sizet,			\
+		uint64_t:	rjd_math_min_u64,			\
+		uint32_t:	rjd_math_min_u32,			\
+		uint16_t:	rjd_math_min_u16,			\
+		uint8_t:	rjd_math_min_u8,			\
+		double:		rjd_math_min_f64,			\
+		float:		rjd_math_min_f32)((a), (b))
+#else
+	#define RJD_MATH_MIN_FUNCS(xmacro)			\
+		xmacro(rjd_math_min_i64,	int64_t)	\
+		xmacro(rjd_math_min_i32,	int32_t)	\
+		xmacro(rjd_math_min_i16,	int16_t)	\
+		xmacro(rjd_math_min_i8,		int8_t)		\
+		xmacro(rjd_math_min_u64,	uint64_t)	\
+		xmacro(rjd_math_min_u32,	uint32_t)	\
+		xmacro(rjd_math_min_u16,	uint16_t)	\
+		xmacro(rjd_math_min_u8,		uint8_t)	\
+		xmacro(rjd_math_min_f32,	float)		\
+		xmacro(rjd_math_min_f64,	double)
+
+	#define rjd_math_min(a, b) _Generic((a),	\
+		int64_t:	rjd_math_min_i64,			\
+		int32_t:	rjd_math_min_i32,			\
+		int16_t:	rjd_math_min_i16,			\
+		int8_t:		rjd_math_min_i8,			\
+		uint64_t:	rjd_math_min_u64,			\
+		uint32_t:	rjd_math_min_u32,			\
+		uint16_t:	rjd_math_min_u16,			\
+		uint8_t:	rjd_math_min_u8,			\
+		double:		rjd_math_min_f64,			\
+		float:		rjd_math_min_f32)((a), (b))
+#endif
 RJD_MATH_MIN_FUNCS(RJD_MATH_DECLARE_MIN_FUNC)
 
 #define RJD_MATH_DECLARE_MAX_FUNC(name, type) static inline type name(type a, type b);
 #define RJD_MATH_DEFINE_MAX_FUNC(name, type) static inline type name(type a, type b) { return (a < b) ? b : a; }
-#define RJD_MATH_MAX_FUNCS(xmacro)		\
-	xmacro(rjd_math_max32, int32_t)		\
-	xmacro(rjd_math_max64, int64_t)		\
-	xmacro(rjd_math_maxu64, uint64_t)	\
-	xmacro(rjd_math_maxu32, uint32_t)
+#if RJD_PLATFORM_OSX
+	#define RJD_MATH_MAX_FUNCS(xmacro)		\
+		xmacro(rjd_math_max_i64, int64_t)	\
+		xmacro(rjd_math_max_i32, int32_t)	\
+		xmacro(rjd_math_max_i16, int16_t)	\
+		xmacro(rjd_math_max_i8,  int8_t)	\
+		xmacro(rjd_math_max_sizet, size_t)	\
+		xmacro(rjd_math_max_u64, uint64_t)	\
+		xmacro(rjd_math_max_u32, uint32_t)	\
+		xmacro(rjd_math_max_u16, uint16_t)	\
+		xmacro(rjd_math_max_u8,  uint8_t)	\
+		xmacro(rjd_math_max_f64, double)	\
+		xmacro(rjd_math_max_f32, float)
+
+	#define rjd_math_max(a, b) _Generic((a),	\
+		int64_t:	rjd_math_max_i64,			\
+		int32_t:	rjd_math_max_i32,			\
+		int16_t:	rjd_math_max_i16,			\
+		int8_t:		rjd_math_max_i8,			\
+		size_t:		rjd_math_max_sizet,			\
+		uint64_t:	rjd_math_max_u64,			\
+		uint32_t:	rjd_math_max_u32,			\
+		uint16_t:	rjd_math_max_u16,			\
+		uint8_t:	rjd_math_max_u8,			\
+		double:		rjd_math_max_f64,			\
+		float:		rjd_math_max_f32)((a), (b))
+#else
+	#define RJD_MATH_MAX_FUNCS(xmacro)		\
+		xmacro(rjd_math_max_i64, int64_t)	\
+		xmacro(rjd_math_max_i32, int32_t)	\
+		xmacro(rjd_math_max_i16, int16_t)	\
+		xmacro(rjd_math_max_i8,  int8_t)	\
+		xmacro(rjd_math_max_u64, uint64_t)	\
+		xmacro(rjd_math_max_u32, uint32_t)	\
+		xmacro(rjd_math_max_u16, uint16_t)	\
+		xmacro(rjd_math_max_u8,  uint8_t)	\
+		xmacro(rjd_math_max_f64, double)	\
+		xmacro(rjd_math_max_f32, float)
+
+	#define rjd_math_max(a, b) _Generic((a),	\
+		int64_t:	rjd_math_max_i64,			\
+		int32_t:	rjd_math_max_i32,			\
+		int16_t:	rjd_math_max_i16,			\
+		int8_t:		rjd_math_max_i8,			\
+		uint64_t:	rjd_math_max_u64,			\
+		uint32_t:	rjd_math_max_u32,			\
+		uint16_t:	rjd_math_max_u16,			\
+		uint8_t:	rjd_math_max_u8,			\
+		double:		rjd_math_max_f64,			\
+		float:		rjd_math_max_f32)((a), (b))
+#endif
 RJD_MATH_MAX_FUNCS(RJD_MATH_DECLARE_MAX_FUNC)
 
 #define RJD_MATH_DECLARE_CLAMP_FUNC(name, type) static inline type name(type v, type minv, type maxv);
 #define RJD_MATH_DEFINE_CLAMP_FUNC(name, type) static inline type name(type v, type minv, type maxv) { return (v < minv) ? (minv) : (v > maxv ? maxv : v); }
-#define RJD_MATH_CLAMP_FUNCS(xmacro)	\
-	xmacro(rjd_math_clamp, double)		\
-	xmacro(rjd_math_clampf, float)		\
-	xmacro(rjd_math_clamp32, int32_t)	\
-	xmacro(rjd_math_clamp64, int64_t)	\
-	xmacro(rjd_math_clampu32, uint32_t)	\
-	xmacro(rjd_math_clampu64, uint64_t)
+#if RJD_PLATFORM_OSX
+	#define RJD_MATH_CLAMP_FUNCS(xmacro)		\
+		xmacro(rjd_math_clamp_i64,	int64_t)	\
+		xmacro(rjd_math_clamp_i32,	int32_t)	\
+		xmacro(rjd_math_clamp_i16,	int16_t)	\
+		xmacro(rjd_math_clamp_i8,	int8_t)		\
+		xmacro(rjd_math_clamp_sizet,size_t)		\
+		xmacro(rjd_math_clamp_u64,	uint64_t)	\
+		xmacro(rjd_math_clamp_u32,	uint32_t)	\
+		xmacro(rjd_math_clamp_u16,	uint16_t)	\
+		xmacro(rjd_math_clamp_u8,	uint8_t)	\
+		xmacro(rjd_math_clamp_f64,	double)		\
+		xmacro(rjd_math_clamp_f32,	float)
+
+	#define rjd_math_clamp(v, min, max) _Generic((v),	\
+		int64_t:	rjd_math_clamp_i64,					\
+		int32_t:	rjd_math_clamp_i32,					\
+		int16_t:	rjd_math_clamp_i16,					\
+		int8_t:		rjd_math_clamp_i8,					\
+		size_t:		rjd_math_clamp_sizet,				\
+		uint64_t:	rjd_math_clamp_u64,					\
+		uint32_t:	rjd_math_clamp_u32,					\
+		uint16_t:	rjd_math_clamp_u16,					\
+		uint8_t:	rjd_math_clamp_u8,					\
+		double:		rjd_math_clamp_f64,					\
+		float:		rjd_math_clamp_f32)((v), (min), (max))
+#else
+	#define RJD_MATH_CLAMP_FUNCS(xmacro)		\
+		xmacro(rjd_math_clamp_i64,	int64_t)	\
+		xmacro(rjd_math_clamp_i32,	int32_t)	\
+		xmacro(rjd_math_clamp_i16,	int16_t)	\
+		xmacro(rjd_math_clamp_i8,	int8_t)		\
+		xmacro(rjd_math_clamp_u64,	uint64_t)	\
+		xmacro(rjd_math_clamp_u32,	uint32_t)	\
+		xmacro(rjd_math_clamp_u16,	uint16_t)	\
+		xmacro(rjd_math_clamp_u8,	uint8_t)	\
+		xmacro(rjd_math_clamp_f64,	double)		\
+		xmacro(rjd_math_clamp_f32,	float)
+
+	#define rjd_math_clamp(v, min, max) _Generic((v),	\
+		int64_t:	rjd_math_clamp_i64,					\
+		int32_t:	rjd_math_clamp_i32,					\
+		int16_t:	rjd_math_clamp_i16,					\
+		int8_t:		rjd_math_clamp_i8,					\
+		uint64_t:	rjd_math_clamp_u64,					\
+		uint32_t:	rjd_math_clamp_u32,					\
+		uint16_t:	rjd_math_clamp_u16,					\
+		uint8_t:	rjd_math_clamp_u8,					\
+		double:		rjd_math_clamp_f64,					\
+		float:		rjd_math_clamp_f32)((v), (min), (max))
+#endif
 RJD_MATH_CLAMP_FUNCS(RJD_MATH_DECLARE_CLAMP_FUNC)
 
 #define RJD_MATH_DECLARE_TRUNCATE_FUNC(name, bigtype, smalltype) static inline smalltype name(bigtype v);
 #define RJD_MATH_DEFINE_TRUNCATE_FUNC(name, bigtype, smalltype) static inline smalltype name(bigtype v) { RJD_ASSERT(v <= (smalltype)-1); return (smalltype)v; }
 #define RJD_MATH_TRUNCATE_FUNCS(xmacro) 						\
-	xmacro(rjd_math_truncate_u64_to_u32, uint64_t, uint32_t)	\
-	xmacro(rjd_math_truncate_u64_to_u16, uint64_t, uint16_t)	\
-	xmacro(rjd_math_truncate_u64_to_u8,  uint64_t, uint8_t)		\
-	xmacro(rjd_math_truncate_u32_to_u16, uint32_t, uint16_t)	\
-	xmacro(rjd_math_truncate_u32_to_u8,  uint32_t, uint8_t)		\
-	xmacro(rjd_math_truncate_u16_to_u8,  uint16_t, uint8_t)
+	xmacro(rjd_math_truncate_u64_to_u32, 	uint64_t, uint32_t)	\
+	xmacro(rjd_math_truncate_u64_to_u16, 	uint64_t, uint16_t)	\
+	xmacro(rjd_math_truncate_u64_to_u8,  	uint64_t, uint8_t)	\
+	xmacro(rjd_math_truncate_u64_to_sizet,	uint64_t, size_t)	\
+	xmacro(rjd_math_truncate_u32_to_u16, 	uint32_t, uint16_t)	\
+	xmacro(rjd_math_truncate_u32_to_u8,  	uint32_t, uint8_t)	\
+	xmacro(rjd_math_truncate_u16_to_u8,  	uint16_t, uint8_t)
 RJD_MATH_TRUNCATE_FUNCS(RJD_MATH_DECLARE_TRUNCATE_FUNC)
 
 #define RJD_MATH_DECLARE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax);
 #define RJD_MATH_DEFINE_REMAP_FUNC(name, type) static inline type name(type v, type oldmin, type oldmax, type newmin, type newmax) { type oldrange = oldmax - oldmin; type newrange = newmax - newmin; return ((v - oldmin) * newrange) / oldrange + newmin; }
-#define RJD_MATH_REMAP_FUNCS(xmacro)	\
-	xmacro(rjd_math_remap, double)		\
-	xmacro(rjd_math_remapf, float)
+#define RJD_MATH_REMAP_FUNCS(xmacro)		\
+	xmacro(rjd_math_remap_f64, double)		\
+	xmacro(rjd_math_remap_f32, float)
 RJD_MATH_REMAP_FUNCS(RJD_MATH_DECLARE_REMAP_FUNC)
+
+#define rjd_math_remap(v, oldmin, oldmax, newmin, newmax)	_Generic((v),	\
+	double:	rjd_math_remap_f64,												\
+	float:	rjd_math_remap_f32)(v, oldmin, oldmax, newmin, newmax)
 
 // vector structs
 
@@ -2881,7 +3055,7 @@ RJD_MATH_CLAMP_FUNCS(RJD_MATH_DEFINE_CLAMP_FUNC)
 RJD_MATH_TRUNCATE_FUNCS(RJD_MATH_DEFINE_TRUNCATE_FUNC)
 RJD_MATH_REMAP_FUNCS(RJD_MATH_DEFINE_REMAP_FUNC)
 
-static inline uint32_t rjd_math_next_pow2(uint32_t v) 
+static inline uint32_t rjd_math_next_pow2_u32(uint32_t v) 
 {
 	--v;
 	v |= v >> 1;
@@ -2894,7 +3068,7 @@ static inline uint32_t rjd_math_next_pow2(uint32_t v)
 	return v;
 }
 
-static inline int32_t rjd_math_pow32(int32_t v, uint32_t power)
+static inline int32_t rjd_math_pow_u32(int32_t v, uint32_t power)
 {
 	int32_t r = 1;
 	while (power) {
@@ -3519,7 +3693,7 @@ static inline rjd_math_mat4 rjd_math_mat4_inv(rjd_math_mat4 m) {
 	det.v = _mm_hadd_ps(det.v, det.v);
 	det = rjd_math_vec4_shuffle(det,0,0,0,0);
 
-	RJD_ASSERTMSG(!rjd_math_isequalf(rjd_math_vec4_x(det), 0), "Matrix is not invertible - if you're not sure, check rjd_math_mat4_det() == 0 beforehand");
+	RJD_ASSERTMSG(!rjd_math_isequal(rjd_math_vec4_x(det), 0), "Matrix is not invertible - if you're not sure, check rjd_math_mat4_det() == 0 beforehand");
 
 	rjd_math_vec4 det_reciprocal = {_mm_rcp_ps(det.v)};
 
@@ -3765,7 +3939,7 @@ bool rjd_geo_box_box(rjd_geo_box a, rjd_geo_box b) {
 bool rjd_geo_ray_point(rjd_geo_ray r, rjd_math_vec3 p, float* t_out) {
 	rjd_math_vec3 to_p = rjd_math_vec3_sub(r.p, p);
 	rjd_math_vec3 to_p_normalized = rjd_math_vec3_normalize(to_p);
-	if (rjd_math_isequalf(rjd_math_vec3_dot(to_p_normalized, r.d), 1)) {
+	if (rjd_math_isequal(rjd_math_vec3_dot(to_p_normalized, r.d), 1)) {
 		return false;
 	}
 
@@ -4249,10 +4423,10 @@ enum rjd_ease_dir
 	RJD_EASE_DIR_MAX,
 };
 
-typedef float (*rjd_ease_func)(float t);
+typedef float (rjd_ease_func)(float t);
 
 static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir dir);
-static inline float rjd_ease_between(float t, float min, float max, rjd_ease_func f);
+static inline float rjd_ease_between(float t, float min, float max, rjd_ease_func* f);
 static inline float rjd_ease_line(float t);
 static inline float rjd_ease_in_sine(float t);
 static inline float rjd_ease_in_quad(float t);
@@ -4310,16 +4484,16 @@ static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir
 		case RJD_EASE_DIR_OUT: {
 			switch(type) {
 				case RJD_EASE_TYPE_LINE: return rjd_ease_line(t);
-				case RJD_EASE_TYPE_SINE: return rjd_ease_inout_sine(t);
-				case RJD_EASE_TYPE_CUBE: return rjd_ease_inout_cube(t);
-				case RJD_EASE_TYPE_QUAD: return rjd_ease_inout_quad(t);
-				case RJD_EASE_TYPE_QUAR: return rjd_ease_inout_quar(t);
-				case RJD_EASE_TYPE_QUIN: return rjd_ease_inout_quin(t);
-				case RJD_EASE_TYPE_EXPO: return rjd_ease_inout_expo(t);
-				case RJD_EASE_TYPE_CIRC: return rjd_ease_inout_circ(t);
-				case RJD_EASE_TYPE_BACK: return rjd_ease_inout_back(t);
-				case RJD_EASE_TYPE_ELAS: return rjd_ease_inout_elas(t);
-				case RJD_EASE_TYPE_BOUN: return rjd_ease_inout_boun(t);
+				case RJD_EASE_TYPE_SINE: return rjd_ease_out_sine(t);
+				case RJD_EASE_TYPE_CUBE: return rjd_ease_out_cube(t);
+				case RJD_EASE_TYPE_QUAD: return rjd_ease_out_quad(t);
+				case RJD_EASE_TYPE_QUAR: return rjd_ease_out_quar(t);
+				case RJD_EASE_TYPE_QUIN: return rjd_ease_out_quin(t);
+				case RJD_EASE_TYPE_EXPO: return rjd_ease_out_expo(t);
+				case RJD_EASE_TYPE_CIRC: return rjd_ease_out_circ(t);
+				case RJD_EASE_TYPE_BACK: return rjd_ease_out_back(t);
+				case RJD_EASE_TYPE_ELAS: return rjd_ease_out_elas(t);
+				case RJD_EASE_TYPE_BOUN: return rjd_ease_out_boun(t);
 				case RJD_EASE_TYPE_MAX:  break;
 			}
 		}
@@ -4348,7 +4522,7 @@ static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir
 	return 0;
 }
 
-static inline float rjd_ease_between(float t, float min, float max, rjd_ease_func f) {
+static inline float rjd_ease_between(float t, float min, float max, rjd_ease_func* f) {
 	return f(t) * (max - min) + min;
 }
 
@@ -4647,7 +4821,7 @@ static void rjd_strbuf_grow(struct rjd_strbuf* buf, uint32_t format_length)
 
 	uint32_t current = buf->heap ? rjd_array_capacity(buf->heap) : RJD_STRBUF_STATIC_SIZE;
 	uint32_t min = current + format_length + 1;
-	uint32_t next = rjd_math_next_pow2(min);
+	uint32_t next = rjd_math_next_pow2_u32(min);
 
 	if (!buf->heap) {
 		buf->heap = rjd_array_alloc(char, next, buf->allocator);
@@ -5297,10 +5471,18 @@ enum rjd_fio_writemode
 	RJD_FIO_WRITEMODE_APPEND,
 };
 
+enum rjd_fio_attributes
+{
+	RJD_FIO_ATTRIBUTES_READONLY		= 0x1,
+	RJD_FIO_ATTRIBUTES_DIRECTORY	= 0x2,
+};
+
 // use rjd_array_free() to free *buffer after use
 struct rjd_result rjd_fio_read(const char* path, char** buffer, struct rjd_mem_allocator* allocator);
 struct rjd_result rjd_fio_write(const char* path, const char* data, size_t length, enum rjd_fio_writemode mode);
 struct rjd_result rjd_fio_size(const char* path, size_t* out_size);
+struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attributes* attribute_flags);
+struct rjd_result rjd_fio_attributes_set_readonly(const char* path, bool readonly);
 struct rjd_result rjd_fio_delete(const char* path);
 struct rjd_result rjd_fio_mkdir(const char* path);
 bool rjd_fio_exists(const char* path);
@@ -5447,6 +5629,43 @@ static struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* director
 	wchar_t* out_utf16_name = rjd_mem_alloc_stack_array_noclear(wchar_t, length_utf16 + 1);	\
 	mbstowcs(out_utf16_name, utf8, INT_MAX);
 
+struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attributes* attribute_flags)
+{
+	*attribute_flags = 0;
+
+	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
+	DWORD attributes = GetFileAttributesW(path_wide);
+	if (attributes == INVALID_FILE_ATTRIBUTES) {
+		return RJD_RESULT("Failed to get file attributes");
+	}
+
+	*attribute_flags |= (attributes & FILE_ATTRIBUTE_DIRECTORY)	? RJD_FIO_ATTRIBUTES_DIRECTORY : 0;
+	*attribute_flags |= (attributes & FILE_ATTRIBUTE_READONLY)	? RJD_FIO_ATTRIBUTES_READONLY : 0;
+
+	return RJD_RESULT_OK();
+}
+
+struct rjd_result rjd_fio_attributes_set_readonly(const char* path, bool readonly)
+{
+	RJD_FIO_UTF8_TO_UTF16(path, path_wide);
+	DWORD attributes = GetFileAttributesW(path_wide);
+	if (attributes == INVALID_FILE_ATTRIBUTES) {
+		return RJD_RESULT("Failed to get file attributes");
+	}
+
+	if (readonly) {
+		attributes |= FILE_ATTRIBUTE_READONLY;
+	} else {
+		attributes &= ~FILE_ATTRIBUTE_READONLY;
+	}
+
+	if (SetFileAttributesW(path_wide, attributes) == 0) {
+		return RJD_RESULT("Failed to set file attributes");
+	}
+
+	return RJD_RESULT_OK();
+}
+
 struct rjd_result rjd_fio_delete(const char* path)
 {
 	RJD_ASSERT(path && *path);
@@ -5578,6 +5797,45 @@ struct rjd_result rjd_fio_delete_folder_recursive(const wchar_t* directory_path)
 #include <errno.h>
 
 static int rjd_delete_nftw_func(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf);
+
+struct rjd_result rjd_fio_attributes_get(const char* path, enum rjd_fio_attributes* attribute_flags)
+{
+	*attribute_flags = 0;
+
+	struct stat s = {0};
+
+	if (stat(path, &s) == 0) {
+		const mode_t write_bits = S_IWUSR | S_IWGRP | S_IWOTH;
+
+		*attribute_flags |= S_ISDIR(s.st_mode) ? RJD_FIO_ATTRIBUTES_DIRECTORY : 0;
+		*attribute_flags |= (s.st_mode & write_bits) ? 0 : RJD_FIO_ATTRIBUTES_READONLY;
+		return RJD_RESULT_OK();
+	}
+	return RJD_RESULT("Failed to get attributes for path");
+}
+
+struct rjd_result rjd_fio_attributes_set_readonly(const char* path, bool readonly)
+{
+	struct stat s = {0};
+
+	if (stat(path, &s) == 0) {
+		const mode_t write_bits = S_IWUSR | S_IWGRP | S_IWOTH;
+		mode_t mode = s.st_mode;
+
+		if (readonly) {
+			mode &= ~write_bits;
+		} else {
+			mode |= write_bits;
+		}
+
+		if (chmod(path, mode) != 0) {
+			return RJD_RESULT("Failed to change access modifier");
+		}
+		return RJD_RESULT_OK();
+	}
+
+	return RJD_RESULT("Failed to get existing access modifiers");
+}
 
 struct rjd_result rjd_fio_delete(const char* path)
 {
@@ -7109,7 +7367,7 @@ const char* rjd_utf8_next(const char* string)
 
 struct rjd_path
 {
-	uint32_t length;
+	int32_t length;
 	char str[RJD_PATH_BUFFER_LENGTH];
 };
 
@@ -7124,14 +7382,25 @@ enum RJD_PATH_ENUMERATE_MODE
 	RJD_PATH_ENUMERATE_MODE_FLAT,
 };
 
-struct rjd_path rjd_path_create(void);
-struct rjd_path rjd_path_create_with(const char* path);
-void rjd_path_append(struct rjd_path* path, const char* str);
+struct rjd_path rjd_path_init(void);
+struct rjd_path rjd_path_init_with(const char* path);
 void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2);
-const char* rjd_path_get(struct rjd_path* path);
+void rjd_path_join_str(struct rjd_path* path, const char* str);
+void rjd_path_join_front(struct rjd_path* path, const char* str);
+void rjd_path_append(struct rjd_path* path, const char* str);
+void rjd_path_pop(struct rjd_path* path);
+void rjd_path_pop_extension(struct rjd_path* path);
+void rjd_path_pop_front(struct rjd_path* path);
+void rjd_path_pop_front_path(struct rjd_path* path, const struct rjd_path* ending);
+void rjd_path_pop_front_path_str(struct rjd_path* path, const char* str);
+const char* rjd_path_get(const struct rjd_path* path);
 void rjd_path_clear(struct rjd_path* path);
+
 const char* rjd_path_extension(const struct rjd_path* path);
-const char* rjd_path_extension_str(const char* path);
+bool rjd_path_endswith(const struct rjd_path* path, const char* str);
+
+const char* rjd_path_str_extension(const char* path);
+bool rjd_path_str_endswith(const char* path, const char* str);
 
 struct rjd_path_enumerator_state rjd_path_enumerate_create(const char* path, struct rjd_mem_allocator* allocator, enum RJD_PATH_ENUMERATE_MODE mode);
 const char* rjd_path_enumerate_next(struct rjd_path_enumerator_state* state);
@@ -7149,13 +7418,13 @@ void rjd_path_enumerate_destroy(struct rjd_path_enumerator_state* state);
 
 static uint32_t rjd_path_normalize_slashes(char* path, uint32_t length);
 
-struct rjd_path rjd_path_create()
+struct rjd_path rjd_path_init()
 {
 	struct rjd_path path = {0};
 	return path;
 }
 
-struct rjd_path rjd_path_create_with(const char* initial_contents)
+struct rjd_path rjd_path_init_with(const char* initial_contents)
 {
 	struct rjd_path path;
 	path.length = (uint32_t)strlen(initial_contents);
@@ -7169,8 +7438,16 @@ struct rjd_path rjd_path_create_with(const char* initial_contents)
 	return path;
 }
 
-void rjd_path_append(struct rjd_path* path, const char* str)
+void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2)
 {
+	rjd_path_join_str(path1, path2->str);
+}
+
+void rjd_path_join_str(struct rjd_path* path, const char* str)
+{
+	RJD_ASSERT(path);
+	RJD_ASSERT(str);
+
     const char slash = RJD_PATH_SLASH;
     
 	uint32_t start = path->length;
@@ -7183,30 +7460,141 @@ void rjd_path_append(struct rjd_path* path, const char* str)
 
 	size_t append_length = strlen(str);
 	size_t new_length = append_length + path->length;
-	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH, 
-				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u).",
-				RJD_PATH_BUFFER_LENGTH, new_length);
+	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH - 1, 
+				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u). Path: '%s'. Appending: '%s'",
+				RJD_PATH_BUFFER_LENGTH, new_length, path->str, str);
 	strncpy(path->str + path->length, str, append_length);
 	path->str[new_length] = 0;
 	path->length = rjd_path_normalize_slashes(path->str, (uint32_t)new_length);
 }
 
-void rjd_path_join(struct rjd_path* path1, const struct rjd_path* path2)
+void rjd_path_join_front(struct rjd_path* path, const char* str)
 {
-	rjd_path_append(path1, path2->str);
+	RJD_ASSERT(path);
+	RJD_ASSERT(str);
+
+	struct rjd_path front = rjd_path_init_with(str);
+	int32_t new_length = front.length + path->length + 1; // +1 for joining slash
+
+	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH - 1, 
+				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u). Path: '%s'. Appending: '%s'",
+				RJD_PATH_BUFFER_LENGTH, new_length, path->str, str);
+
+	memmove(path->str + front.length + 1, path->str, path->length);
+	memcpy(path->str, front.str, front.length);
+	path->str[front.length] = RJD_PATH_SLASH;
+	path->str[front.length + path->length + 1] = 0;
+	path->length += front.length + 1;
+	path->length = rjd_path_normalize_slashes(path->str, path->length);
 }
 
-const char* rjd_path_get(struct rjd_path* path)
+void rjd_path_append(struct rjd_path* path, const char* str)
+{
+	RJD_ASSERT(path);
+	RJD_ASSERT(str);
+
+	size_t length_str = strlen(str);
+	size_t new_length = path->length + length_str;
+
+	RJD_ASSERTMSG(new_length < RJD_PATH_BUFFER_LENGTH - 1, 
+				"The static size of RJD_PATH_BUFFER_LENGTH (%u) is smaller than the concatenated length (%u). Path: '%s'. Appending: '%s'",
+				RJD_PATH_BUFFER_LENGTH, new_length, path->str, str);
+	
+	strncpy(path->str + path->length, str, length_str);
+	path->length = (int32_t)new_length;
+	path->str[new_length] = 0;
+}
+
+void rjd_path_pop(struct rjd_path* path)
+{
+	RJD_ASSERT(path);
+
+	for (int32_t i = (int32_t)path->length - 1; i >= 0; --i) {
+		if (path->str[i] == RJD_PATH_SLASH && i < path->length - 1) {
+					
+			path->length = i;
+			path->str[i] = 0;
+			return;
+		}
+	}
+
+	path->length = 0;
+	path->str[0] = 0;
+}
+
+void rjd_path_pop_extension(struct rjd_path* path)
+{
+	RJD_ASSERT(path);
+
+	for (int32_t i = path->length - 1; i >= 0; --i) {
+		if (path->str[i] == '.') {
+			path->length = i;
+			path->str[i] = 0;
+			break;
+		}
+
+		if (path->str[i] == RJD_PATH_SLASH) {
+			break;
+		}
+	}
+}
+
+void rjd_path_pop_front(struct rjd_path* path)
+{
+	struct rjd_path copy = *path;
+	for (int32_t i = 1; i < path->length; ++i) {
+		if (path->str[i] == RJD_PATH_SLASH) {
+			int32_t new_length = path->length - i;
+			memcpy(path->str, copy.str + i, new_length);
+			path->length = new_length;
+			path->str[new_length] = 0;
+			return;
+		}
+	}
+
+	path->length = 0;
+	path->str[0] = 0;
+}
+
+void rjd_path_pop_front_path_str_impl(struct rjd_path* path, const char* front, int32_t front_length)
+{
+	if (path->length < front_length) {
+		return;
+	}
+
+	if (!strncmp(path->str, front, front_length)) {
+		path->length -= front_length;
+		memmove(path->str, path->str + front_length, path->length);
+		path->str[path->length] = 0;
+	}
+}
+
+void rjd_path_pop_front_path(struct rjd_path* path, const struct rjd_path* front)
+{
+	rjd_path_pop_front_path_str_impl(path, front->str, front->length);
+}
+
+void rjd_path_pop_front_path_str(struct rjd_path* path, const char* str)
+{
+	rjd_path_pop_front_path_str_impl(path, str, (int32_t)strlen(str));
+}
+
+const char* rjd_path_get(const struct rjd_path* path)
 {
 	return path->str;
 }
 
 const char* rjd_path_extension(const struct rjd_path* path)
 {
-	return rjd_path_extension_str(path->str);
+	return rjd_path_str_extension(path->str);
 }
 
-const char* rjd_path_extension_str(const char* path)
+bool rjd_path_endswith(const struct rjd_path* path, const char* str)
+{
+	return rjd_path_str_endswith(path->str, str);
+}
+
+const char* rjd_path_str_extension(const char* path)
 {
     if (!path || !*path) {
         return NULL;
@@ -7223,6 +7611,27 @@ const char* rjd_path_extension_str(const char* path)
 	}
 
 	return extension;
+}
+
+bool rjd_path_str_endswith(const char* path, const char* str)
+{
+	if (path == NULL || str == NULL) {
+		return false;
+	}
+
+	if (*str == 0) {
+		return true;
+	}
+
+	size_t length_string = strlen(path);
+	size_t length_end = strlen(str);
+
+	if (length_end > length_string) {
+		return false;
+	}
+
+	const char* path_end = path + (length_string - length_end);
+	return !strcmp(path_end, str);
 }
 
 void rjd_path_clear(struct rjd_path* path)
@@ -7266,7 +7675,8 @@ static uint32_t rjd_path_normalize_slashes(char* path, uint32_t length)
 	}
 
     size_t newlength = end - path;
-    RJD_ASSERT(newlength == strlen(path));
+    RJD_ASSERTMSG(newlength == strlen(path), "newlength (%d) != strlen(path) ('%s')  (%d)",
+					newlength, path, strlen(path));
     return (uint32_t)(end - path);
 }
 
@@ -7676,8 +8086,8 @@ struct rjd_result rjd_istream_read(struct rjd_istream* stream, void* buffer, siz
 			stream->result = stream->refill(stream);
 		}
         RJD_ASSERT(stream->end >= stream->cursor)
-		ptrdiff_t buffersize = stream->end - stream->cursor;
-		size_t readsize = (size_t)rjd_math_minu64((size_t)buffersize, bytes_remaining);
+		size_t buffersize = rjd_math_truncate_u64_to_sizet(stream->end - stream->cursor);
+		size_t readsize = rjd_math_min(buffersize, bytes_remaining);
 
 		memcpy(offset_buffer, stream->cursor, readsize);
         
@@ -7737,7 +8147,7 @@ struct rjd_result rjd_ostream_write(struct rjd_ostream* stream, const void* buff
 		struct rjd_ostream_memory* state = &stream->state.memory;
 		RJD_ASSERT(state->size >= state->cursor);
 
-		const size_t bytes_remaining = state->size - state->cursor;
+		const size_t bytes_remaining = rjd_math_truncate_u64_to_sizet(state->size - state->cursor);
 		if (size > bytes_remaining) {
 			return RJD_RESULT("attempted to write more data than the buffer can hold");
 		}
@@ -7777,7 +8187,7 @@ void rjd_ostream_close(struct rjd_ostream* stream)
 
 static struct rjd_result rjd_istream_fail(struct rjd_istream* stream, const char* reason)
 {
-	stream->result = RJD_RESULT(reason);
+	stream->result = (struct rjd_result){reason};
 	stream->refill = rjd_istream_refill_zeroes;
 	return stream->refill(stream);
 }
@@ -8262,7 +8672,7 @@ struct rjd_result rjd_resource_loader_create(struct rjd_resource_loader* out, st
 		for (const char* path = rjd_path_enumerate_next(&path_enumerator); path != NULL; path = rjd_path_enumerate_next(&path_enumerator))
 		{
 			const char* relative_path = path + length_root_path;
-			const char* extension = rjd_path_extension_str(relative_path);
+			const char* extension = rjd_path_str_extension(relative_path);
 			if (extension)
 			{
 				struct rjd_resource_type_id type = {0};
@@ -8364,9 +8774,9 @@ static struct rjd_result rjd_resource_loader_filesystem_load(struct rjd_resource
             const char* root = rjd_strref_str(impl->root);
             const char* relative_path = rjd_strref_str(impl->manifest_entries[i].path);
             
-            struct rjd_path fullpath = rjd_path_create();
-            rjd_path_append(&fullpath, root);
-            rjd_path_append(&fullpath, relative_path);
+            struct rjd_path fullpath = rjd_path_init();
+            rjd_path_join_str(&fullpath, root);
+            rjd_path_join_str(&fullpath, relative_path);
 
 			*out = rjd_istream_from_file(rjd_path_get(&fullpath), allocator, 1024 * 512);
 			return out->result;
@@ -10031,10 +10441,6 @@ float rjd_input_mouse_prev_common(const struct rjd_input_common* input, enum rjd
 
 #if RJD_PLATFORM_WINDOWS
 
-#define WIN32_LEAN_AND_MEAN
-#define WIN32_EXTRA_LEAN
-#define NOMINMAX
-#include <windows.h>
 #include <windowsx.h> // GET_X_LPARAM, GET_Y_LPARAM
 
 struct rjd_input_win32
