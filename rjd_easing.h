@@ -26,10 +26,10 @@ enum rjd_ease_dir
 	RJD_EASE_DIR_MAX,
 };
 
-typedef float (*rjd_ease_func)(float t);
+typedef float (rjd_ease_func)(float t);
 
 static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir dir);
-static inline float rjd_ease_between(float t, float min, float max, rjd_ease_func f);
+static inline float rjd_ease_between(float t, float min, float max, rjd_ease_func* f);
 static inline float rjd_ease_line(float t);
 static inline float rjd_ease_in_sine(float t);
 static inline float rjd_ease_in_quad(float t);
@@ -87,16 +87,16 @@ static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir
 		case RJD_EASE_DIR_OUT: {
 			switch(type) {
 				case RJD_EASE_TYPE_LINE: return rjd_ease_line(t);
-				case RJD_EASE_TYPE_SINE: return rjd_ease_inout_sine(t);
-				case RJD_EASE_TYPE_CUBE: return rjd_ease_inout_cube(t);
-				case RJD_EASE_TYPE_QUAD: return rjd_ease_inout_quad(t);
-				case RJD_EASE_TYPE_QUAR: return rjd_ease_inout_quar(t);
-				case RJD_EASE_TYPE_QUIN: return rjd_ease_inout_quin(t);
-				case RJD_EASE_TYPE_EXPO: return rjd_ease_inout_expo(t);
-				case RJD_EASE_TYPE_CIRC: return rjd_ease_inout_circ(t);
-				case RJD_EASE_TYPE_BACK: return rjd_ease_inout_back(t);
-				case RJD_EASE_TYPE_ELAS: return rjd_ease_inout_elas(t);
-				case RJD_EASE_TYPE_BOUN: return rjd_ease_inout_boun(t);
+				case RJD_EASE_TYPE_SINE: return rjd_ease_out_sine(t);
+				case RJD_EASE_TYPE_CUBE: return rjd_ease_out_cube(t);
+				case RJD_EASE_TYPE_QUAD: return rjd_ease_out_quad(t);
+				case RJD_EASE_TYPE_QUAR: return rjd_ease_out_quar(t);
+				case RJD_EASE_TYPE_QUIN: return rjd_ease_out_quin(t);
+				case RJD_EASE_TYPE_EXPO: return rjd_ease_out_expo(t);
+				case RJD_EASE_TYPE_CIRC: return rjd_ease_out_circ(t);
+				case RJD_EASE_TYPE_BACK: return rjd_ease_out_back(t);
+				case RJD_EASE_TYPE_ELAS: return rjd_ease_out_elas(t);
+				case RJD_EASE_TYPE_BOUN: return rjd_ease_out_boun(t);
 				case RJD_EASE_TYPE_MAX:  break;
 			}
 		}
@@ -125,7 +125,7 @@ static inline float rjd_ease(float t, enum rjd_ease_type type, enum rjd_ease_dir
 	return 0;
 }
 
-static inline float rjd_ease_between(float t, float min, float max, rjd_ease_func f) {
+static inline float rjd_ease_between(float t, float min, float max, rjd_ease_func* f) {
 	return f(t) * (max - min) + min;
 }
 

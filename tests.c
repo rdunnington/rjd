@@ -1465,7 +1465,7 @@ void test_geo()
 ////////////////////////////////////////////////////////////////////////////////
 // rjd_easing
 
-void expect_ease(rjd_ease_func f, float f1, float f2, float f3)
+void expect_ease(rjd_ease_func* f, float f1, float f2, float f3)
 {
 	expect_float(f1, f(0.25f));
 	expect_float(f2, f(0.5f));
@@ -1474,37 +1474,65 @@ void expect_ease(rjd_ease_func f, float f1, float f2, float f3)
 
 void test_easing()
 {
-	expect_ease(rjd_ease_line,        0.250000f,  0.500000f,  0.750000f);
-	expect_ease(rjd_ease_in_sine,     0.076120f,  0.292893f,  0.617317f);
-	expect_ease(rjd_ease_in_quad,     0.062500f,  0.250000f,  0.562500f);
-	expect_ease(rjd_ease_in_cube,     0.015625f,  0.125000f,  0.421875f);
-	expect_ease(rjd_ease_in_quar,     0.003906f,  0.062500f,  0.316406f);
-	expect_ease(rjd_ease_in_quin,     0.000977f,  0.031250f,  0.237305f);
-	expect_ease(rjd_ease_in_expo,     0.005524f,  0.031250f,  0.176777f);
-	expect_ease(rjd_ease_in_circ,     0.031754f,  0.133975f,  0.338562f);
-	expect_ease(rjd_ease_in_back,    -0.161152f, -0.375000f, -0.108455f);
-	expect_ease(rjd_ease_in_elas,    -0.005104f, -0.022097f,  0.067650f);
-	expect_ease(rjd_ease_in_boun,     0.041136f,  0.281250f,  0.527344f);
-	expect_ease(rjd_ease_out_sine,    0.382683f,  0.707107f,  0.923880f);
-	expect_ease(rjd_ease_out_quad,    0.437500f,  0.750000f,  0.937500f);
-	expect_ease(rjd_ease_out_cube,    0.578125f,  0.875000f,  0.984375f);
-	expect_ease(rjd_ease_out_quar,    0.683594f,  0.937500f,  0.996094f);
-	expect_ease(rjd_ease_out_quin,    0.762695f,  0.968750f,  0.999023f);
-	expect_ease(rjd_ease_out_expo,    0.823223f,  0.968750f,  0.994476f);
-	expect_ease(rjd_ease_out_circ,    0.661438f,  0.866025f,  0.968246f);
-	expect_ease(rjd_ease_out_back,    1.108455f,  1.375000f,  1.161152f);
-	expect_ease(rjd_ease_out_elas,    0.932351f,  1.022097f,  1.005104f);
-	expect_ease(rjd_ease_out_boun,    0.472656f,  0.718750f,  0.958864f);
-	expect_ease(rjd_ease_inout_sine,  0.146447f,  0.500000f,  0.853553f);
-	expect_ease(rjd_ease_inout_quad,  0.125000f,  0.500000f,  0.875000f);
-	expect_ease(rjd_ease_inout_cube,  0.062500f,  0.500000f,  0.937500f);
-	expect_ease(rjd_ease_inout_quar,  0.031250f,  0.500000f,  0.968750f);
-	expect_ease(rjd_ease_inout_quin,  0.015625f,  0.500000f,  0.984375f);
-	expect_ease(rjd_ease_inout_expo,  0.015625f,  0.500000f,  0.984375f);
-	expect_ease(rjd_ease_inout_circ,  0.066987f,  0.500000f,  0.933013f);
-	expect_ease(rjd_ease_inout_back, -0.187500f,  0.500000f,  1.187500f);
-	expect_ease(rjd_ease_inout_elas, -0.011049f,  0.500000f,  1.011049f);
-	expect_ease(rjd_ease_inout_boun,  0.140625f,  0.500000f,  0.859375f);
+	struct easing_test_data
+	{
+		rjd_ease_func* func;
+		enum rjd_ease_type type;
+		enum rjd_ease_dir dir;
+		float f1;
+		float f2;
+		float f3;
+	};
+
+	const struct easing_test_data test_data[] =
+	{
+		{ rjd_ease_line,       RJD_EASE_TYPE_LINE, RJD_EASE_DIR_IN,     0.250000f,  0.500000f,  0.750000f, },
+		{ rjd_ease_in_sine,    RJD_EASE_TYPE_SINE, RJD_EASE_DIR_IN,     0.076120f,  0.292893f,  0.617317f, },
+		{ rjd_ease_in_quad,    RJD_EASE_TYPE_QUAD, RJD_EASE_DIR_IN,     0.062500f,  0.250000f,  0.562500f, },
+		{ rjd_ease_in_cube,    RJD_EASE_TYPE_CUBE, RJD_EASE_DIR_IN,     0.015625f,  0.125000f,  0.421875f, },
+		{ rjd_ease_in_quar,    RJD_EASE_TYPE_QUAR, RJD_EASE_DIR_IN,     0.003906f,  0.062500f,  0.316406f, },
+		{ rjd_ease_in_quin,    RJD_EASE_TYPE_QUIN, RJD_EASE_DIR_IN,     0.000977f,  0.031250f,  0.237305f, },
+		{ rjd_ease_in_expo,    RJD_EASE_TYPE_EXPO, RJD_EASE_DIR_IN,     0.005524f,  0.031250f,  0.176777f, },
+		{ rjd_ease_in_circ,    RJD_EASE_TYPE_CIRC, RJD_EASE_DIR_IN,     0.031754f,  0.133975f,  0.338562f, },
+		{ rjd_ease_in_back,    RJD_EASE_TYPE_BACK, RJD_EASE_DIR_IN,    -0.161152f, -0.375000f, -0.108455f, },
+		{ rjd_ease_in_elas,    RJD_EASE_TYPE_ELAS, RJD_EASE_DIR_IN,    -0.005104f, -0.022097f,  0.067650f, },
+		{ rjd_ease_in_boun,    RJD_EASE_TYPE_BOUN, RJD_EASE_DIR_IN,     0.041136f,  0.281250f,  0.527344f, },
+		{ rjd_ease_line,       RJD_EASE_TYPE_LINE, RJD_EASE_DIR_OUT,    0.250000f,  0.500000f,  0.750000f, },
+		{ rjd_ease_out_sine,   RJD_EASE_TYPE_SINE, RJD_EASE_DIR_OUT,    0.382683f,  0.707107f,  0.923880f, },
+		{ rjd_ease_out_quad,   RJD_EASE_TYPE_QUAD, RJD_EASE_DIR_OUT,    0.437500f,  0.750000f,  0.937500f, },
+		{ rjd_ease_out_cube,   RJD_EASE_TYPE_CUBE, RJD_EASE_DIR_OUT,    0.578125f,  0.875000f,  0.984375f, },
+		{ rjd_ease_out_quar,   RJD_EASE_TYPE_QUAR, RJD_EASE_DIR_OUT,    0.683594f,  0.937500f,  0.996094f, },
+		{ rjd_ease_out_quin,   RJD_EASE_TYPE_QUIN, RJD_EASE_DIR_OUT,    0.762695f,  0.968750f,  0.999023f, },
+		{ rjd_ease_out_expo,   RJD_EASE_TYPE_EXPO, RJD_EASE_DIR_OUT,    0.823223f,  0.968750f,  0.994476f, },
+		{ rjd_ease_out_circ,   RJD_EASE_TYPE_CIRC, RJD_EASE_DIR_OUT,    0.661438f,  0.866025f,  0.968246f, },
+		{ rjd_ease_out_back,   RJD_EASE_TYPE_BACK, RJD_EASE_DIR_OUT,    1.108455f,  1.375000f,  1.161152f, },
+		{ rjd_ease_out_elas,   RJD_EASE_TYPE_ELAS, RJD_EASE_DIR_OUT,    0.932351f,  1.022097f,  1.005104f, },
+		{ rjd_ease_out_boun,   RJD_EASE_TYPE_BOUN, RJD_EASE_DIR_OUT,    0.472656f,  0.718750f,  0.958864f, },
+		{ rjd_ease_line,       RJD_EASE_TYPE_LINE, RJD_EASE_DIR_INOUT,  0.250000f,  0.500000f,  0.750000f, },
+		{ rjd_ease_inout_sine, RJD_EASE_TYPE_SINE, RJD_EASE_DIR_INOUT,  0.146447f,  0.500000f,  0.853553f, },
+		{ rjd_ease_inout_quad, RJD_EASE_TYPE_QUAD, RJD_EASE_DIR_INOUT,  0.125000f,  0.500000f,  0.875000f, },
+		{ rjd_ease_inout_cube, RJD_EASE_TYPE_CUBE, RJD_EASE_DIR_INOUT,  0.062500f,  0.500000f,  0.937500f, },
+		{ rjd_ease_inout_quar, RJD_EASE_TYPE_QUAR, RJD_EASE_DIR_INOUT,  0.031250f,  0.500000f,  0.968750f, },
+		{ rjd_ease_inout_quin, RJD_EASE_TYPE_QUIN, RJD_EASE_DIR_INOUT,  0.015625f,  0.500000f,  0.984375f, },
+		{ rjd_ease_inout_expo, RJD_EASE_TYPE_EXPO, RJD_EASE_DIR_INOUT,  0.015625f,  0.500000f,  0.984375f, },
+		{ rjd_ease_inout_circ, RJD_EASE_TYPE_CIRC, RJD_EASE_DIR_INOUT,  0.066987f,  0.500000f,  0.933013f, },
+		{ rjd_ease_inout_back, RJD_EASE_TYPE_BACK, RJD_EASE_DIR_INOUT, -0.187500f,  0.500000f,  1.187500f, },
+		{ rjd_ease_inout_elas, RJD_EASE_TYPE_ELAS, RJD_EASE_DIR_INOUT, -0.011049f,  0.500000f,  1.011049f, },
+		{ rjd_ease_inout_boun, RJD_EASE_TYPE_BOUN, RJD_EASE_DIR_INOUT,  0.140625f,  0.500000f,  0.859375f, },
+	};
+
+	for (size_t i = 0; i < rjd_countof(test_data); ++i)
+	{
+		const struct easing_test_data* data = test_data + i;
+
+		expect_float(data->f1, data->func(0.25f));
+		expect_float(data->f2, data->func(0.50f));
+		expect_float(data->f3, data->func(0.75f));
+
+		expect_float(data->f1, rjd_ease(0.25f, data->type, data->dir));
+		expect_float(data->f2, rjd_ease(0.50f, data->type, data->dir));
+		expect_float(data->f3, rjd_ease(0.75f, data->type, data->dir));
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
