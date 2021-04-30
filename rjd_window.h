@@ -19,7 +19,7 @@ struct rjd_window_data_win32
 #if RJD_PLATFORM_WINDOWS
 	void* hinstance; // HINSTANCE
 #else
-	char unused;
+	uint64_t unused;
 #endif
 };
 
@@ -363,9 +363,9 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
     }
     
     NSRect rect = {0};
-    rect.size.height = 320;
-    rect.size.width = 480;
-    
+    rect.size.height = desc.requested_size.height;
+    rect.size.width = desc.requested_size.width;
+
     NSWindowStyleMask style =   NSWindowStyleMaskResizable |
                                 NSWindowStyleMaskTitled    |
                                 NSWindowStyleMaskClosable  |
@@ -378,7 +378,11 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 
     CustomViewController* viewController = [[CustomViewController alloc]
                                           initWithWidth:size.width height:size.height window:out env:desc.env];
-    MTKView* view = [[MTKView alloc] initWithFrame:rect device:MTLCreateSystemDefaultDevice()];
+	#if RJD_GFX_BACKEND_METAL
+		MTKView* view = [[MTKView alloc] initWithFrame:rect device:MTLCreateSystemDefaultDevice()];
+	#else
+		BasicView* view = [[BasicView alloc] initWithFrame:rect];
+	#endif
 
     viewController.view = view;
     [viewController loadView];
@@ -395,8 +399,13 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
     window_osx->init_func = desc.init_func;
     window_osx->update_func = desc.update_func;
     window_osx->close_func = desc.close_func;
-    window_osx->view_metal = view.device != nil ? view : NULL;
-	window_osx->view_basic = view.device == nil ? (BasicView*)viewController.view : NULL;
+#if RJD_GFX_BACKEND_METAL
+    window_osx->view_metal = (view != nil && view.device != nil) ? view : NULL;
+	window_osx->view_basic = (window_osx->view_metal == NULL) ? (BasicView*)viewController.view : NULL;
+#else
+    window_osx->view_metal = NULL;
+	window_osx->view_basic = (BasicView*)viewController.view;
+#endif
 
     if (window_osx->init_func) {
         window_osx->init_func((struct rjd_window*)window_osx, &desc.env);
@@ -532,20 +541,24 @@ NSWindow* rjd_window_osx_get_nswindow(const struct rjd_window* window)
 
 -(void)loadView
 {
-    MTKView* view = (MTKView*)self.view;
-    if(view.device) {
-	    // We need to hold a strong reference to the Renderer or it will go out of scope
-	    // after this function and be destroyed. MTKView.delegate is a weak reference.
-	    self->renderer = [[Renderer alloc] initWithWindow:self->window env:self->env];
-	    [self->renderer mtkView:view drawableSizeWillChange:view.bounds.size];
-	    view.delegate = self->renderer;
-	    self.view = view;
-	} else {
-        NSLog(@"Metal is not supported on this device. Falling back to basic NSView with timer updates.");
+	#if RJD_GFX_BACKEND_METAL
+    	MTKView* view = (MTKView*)self.view;
+    	if(view.device) {
+		    // We need to hold a strong reference to the Renderer or it will go out of scope
+		    // after this function and be destroyed. MTKView.delegate is a weak reference.
+		    self->renderer = [[Renderer alloc] initWithWindow:self->window env:self->env];
+		    [self->renderer mtkView:view drawableSizeWillChange:view.bounds.size];
+		    view.delegate = self->renderer;
+		    self.view = view;
+		} else {
+    	    NSLog(@"Metal is not supported on this device. Falling back to basic NSView with timer updates.");
+			self->basic_delegate = [[BasicWindowDelegate alloc] initWithWindow:window env:self->env];
+    	   	BasicView* view = [[BasicView alloc] initWithFrame:self.view.frame];
+			self.view = view;
+    	}
+	#else
 		self->basic_delegate = [[BasicWindowDelegate alloc] initWithWindow:window env:self->env];
-       	BasicView* view = [[BasicView alloc] initWithFrame:self.view.frame];
-		self.view = view;
-    }
+	#endif
 }
 @end
 
