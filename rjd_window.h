@@ -378,11 +378,10 @@ struct rjd_result rjd_window_create(struct rjd_window* out, struct rjd_window_de
 
     CustomViewController* viewController = [[CustomViewController alloc]
                                           initWithWidth:size.width height:size.height window:out env:desc.env];
-	NSView* view = nil;
 	#if RJD_GFX_BACKEND_METAL
-		view = [[MTKView alloc] initWithFrame:rect device:MTLCreateSystemDefaultDevice()];
+		MTKView* view = [[MTKView alloc] initWithFrame:rect device:MTLCreateSystemDefaultDevice()];
 	#else
-		view = [[BasicView alloc] initWithFrame:rect];
+		BasicView* view = [[BasicView alloc] initWithFrame:rect];
 	#endif
 
     viewController.view = view;
