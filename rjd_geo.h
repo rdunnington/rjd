@@ -192,7 +192,7 @@ bool rjd_geo_ray_boxfast(rjd_math_vec3 ray_pos, rjd_math_vec3 ray_inv_dir, rjd_g
 	rjd_math_vec3 max = rjd_math_vec3_max(v0, v1);
 
 	float tmin = rjd_math_vec3_hmax(min);
-	float tmax = rjd_math_vec3_hmax(max);
+	float tmax = rjd_math_vec3_hmin(max);
 
 	bool colliding = (tmax >= 0) && (tmax >= tmin) && (tmin <= *t_out);
 	if (colliding) {

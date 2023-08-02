@@ -147,7 +147,7 @@ void* rjd_array_alloc_impl(uint32_t capacity, struct rjd_mem_allocator* allocato
 	RJD_ASSERT(sizeof_type > 0);
 
 	if (capacity == 0) {
-		capacity = 128 / sizeof_type;
+		capacity = 128 / (uint32_t)sizeof_type;
 		if (capacity < 4) {
 			capacity = 4;
 		}
